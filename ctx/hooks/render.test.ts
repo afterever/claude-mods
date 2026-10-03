@@ -36,9 +36,24 @@ const breakdown: SessionContextBreakdown = {
 }
 
 // The world beneath the plugin: a clock, a store, the count, the pane's open and close
-function world(on: On, counted: string[], modes: string[][] = [], ran: string[][] = [], toasts: string[] = []) {
+function world(on: On, counted: string[], modes: string[][] = [], ran: string[][] = [], toasts: string[] = [], stored: Record<string, unknown> = {}) {
   const clock = mock.clock(on, { now: 100_000 })
-  mock.store(on)
+  // the plugin's store, kept in `stored` so a test can read what was written
+  on('store.get', async (_$, e) => ({ value: stored[e.key] }) as any)
+  on('store.set', async (_$, e) => {
+    stored[e.key] = e.value
+    return { value: undefined } as any
+  })
+  on('session.cwd', async () => ({ value: 'C:/bats' }) as any)
+  on('session.start', async () => ({ cwd: 'C:/bats' }))
+  on('command.register', async () => ({ value: {} }) as any)
+  on('session.id', async () => ({ value: 'now' }) as any)
+  on('session.turns', async () => ({ value: 3 }) as any)
+  // a tool's result: as many characters as the call's `size` asks
+  on('tool.call', async (_$, e) => {
+    const size = Number((e as unknown as { size?: number }).size ?? 10)
+    return { result: {}, text: 'x'.repeat(size) } as any
+  })
   mock.env(on, { OS: 'Windows_NT' })
   on('process.run', async (_$, e) => {
     ran.push([...e.argv])
@@ -177,4 +192,57 @@ test('a memory file opens with its default app', async ($, on) => {
   await ui.press({ key: 'mem-0' })
   expect(ran).toEqual([['powershell', '-NoProfile', '-NonInteractive', '-Command', "Start-Process -FilePath 'C:/bats/CLAUDE.md'"]])
   expect(toasts).toEqual(['Opened …/bats/CLAUDE.md'])
+})
+
+const call = (tool: string, args: Record<string, unknown>) => ({ tool, ...args }) as any
+
+test('a heavy result is toasted, listed, and forgotten after a compaction', async ($, on) => {
+  const toasts: string[] = []
+  const clock = world(on, [], [], [], toasts)
+  await $.session.measure(measure(30_000))
+  await clock.settle()
+  await $.tool.call(call('Read', { file_path: 'C:/x/y/big.ts', size: 80_000 }))
+  await $.tool.call(call('Grep', { pattern: 'atom', size: 8_000 }))
+  // small ones never make the list
+  await $.tool.call(call('Bash', { command: 'ls', size: 300 }))
+  expect(toasts).toEqual(['Read …/y/big.ts added ~20k tokens'])
+
+  const ui = await $.ui.mount({ plugin: 'ctx', surface: 'terminal', component: 'Pane', requestId: 'ctx', props: paneProps(48) })
+  await ui.press({ key: 'sec-eaters' })
+  expect(await ui.find({ text: '    Read …/y/big.ts' })).toBeDefined()
+  expect(await ui.find({ text: '  ~20k' })).toBeDefined()
+  expect(await ui.find({ text: '    Grep "atom"' })).toBeDefined()
+  expect(await ui.find({ text: '    Bash ls' })).toBeUndefined()
+
+  // the window fell from 30k to 5k: what was eaten is gone
+  await $.session.measure(measure(5_000))
+  await clock.settle()
+  expect(await ui.find({ text: '    Read …/y/big.ts' })).toBeUndefined()
+})
+
+test('unused servers carry their idle streak across sessions', async ($, on) => {
+  const log = {
+    sessions: [1, 2, 3, 4, 5].map(i => ({ id: 'old' + i, loaded: { notion: 700 }, used: [] as string[] })),
+  }
+  const stored: Record<string, unknown> = { 'project:C:/bats': log }
+  const clock = world(on, [], [], [], [], stored)
+  await $.session.start({ cwd: 'C:/bats', surface: 'terminal', isInteractive: true })
+  await $.session.measure(measure(30_000))
+  await clock.settle()
+  const ui = await $.ui.mount({ plugin: 'ctx', surface: 'terminal', component: 'Pane', requestId: 'ctx', props: paneProps(60) })
+  await ui.press({ key: 'sec-dead' })
+  expect(await ui.find({ text: '    notion' })).toBeDefined()
+  expect(await ui.find({ text: 'idle 6 sessions' })).toBeDefined()
+  expect(await ui.find({ text: '    skills  0 of 15 used' })).toBeDefined()
+  // this session's line went into the project's log
+  const saved = stored['project:C:/bats'] as typeof log
+  expect(saved.sessions[saved.sessions.length - 1]).toEqual({ id: 'now', loaded: { notion: 700 }, used: [] })
+
+  // a call clears it, and the skill and agent counts follow theirs
+  await $.tool.call(call('mcp__notion__search', {}))
+  await $.tool.call(call('Skill', { skill: 'skill-3' }))
+  await $.tool.call(call('Agent', { subagent_type: 'Explore', description: 'look' }))
+  expect(await ui.find({ text: '    notion' })).toBeUndefined()
+  expect(await ui.find({ text: '    skills  1 of 15 used' })).toBeDefined()
+  expect(await ui.find({ text: '    agents  1 of 1 used' })).toBeDefined()
 })

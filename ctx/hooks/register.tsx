@@ -1,8 +1,9 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, SessionContextBreakdown, Timer } from 'claude-code'
 
-import type { CtxDetail, CtxServer, CtxSnapshot } from '../types'
+import type { CtxDetail, CtxProjectLog, CtxServer, CtxSnapshot } from '../types'
 import type { BarRun } from './fmt'
+import { addEater, addUsage, calibrate, DEFAULT_CPT, EMPTY_USAGE, estimateTokens, idleStreak, logSession, toolLabel, usageOf } from './usage'
 import {
   ago,
   barRuns,
@@ -40,6 +41,37 @@ const tick = atom({ plugin: 'ctx', key: 'tick' } as const, 0)
 // The window's fill after each turn, oldest first, as the API reported it
 const history = atom({ plugin: 'ctx', key: 'history' } as const, [])
 const HISTORY_LIMIT = 48
+const eaters = atom({ plugin: 'ctx', key: 'eaters' } as const, [])
+const cptAtom = atom({ plugin: 'ctx', key: 'cpt' } as const, DEFAULT_CPT)
+const usage = atom({ plugin: 'ctx', key: 'usage' } as const, EMPTY_USAGE)
+const project = atom({ plugin: 'ctx', key: 'project' } as const, null)
+// A single result past this many tokens gets a toast as it lands
+const TOAST_TOKENS = 15000
+// Results smaller than this never make the heaviest list
+const EATER_MIN_CHARS = 2000
+// A fall this steep between turns is a compaction or a /clear: what was eaten is gone
+const DROP_RATIO = 0.7
+
+// Characters of tool results the main conversation took in since the last measurement
+let turnChars = 0
+
+const projectKey = async ($: EngineInterface) => 'project:' + (await $.session.cwd())
+
+// Writes this session's line in the project's log: the servers it has loaded, the ones it called
+async function logProject($: EngineInterface) {
+  try {
+    const s = await read($, snap)
+    if (!s) return
+    const loaded: Record<string, number> = {}
+    for (const v of s.servers) if (v.tokens > 0) loaded[v.key] = v.tokens
+    const used = Object.keys((await read($, usage)).mcp)
+    const key = await projectKey($)
+    const log = (await $.store.get(key)) as CtxProjectLog | undefined
+    await $.store.set(key, logSession(log, await $.session.id(), loaded, used))
+  } catch {
+    // the log is a convenience: the pane still counts this session
+  }
+}
 
 async function record($: EngineInterface, tokens: number) {
   await update($, history, list => (list[list.length - 1] === tokens ? list : [...list, tokens].slice(-HISTORY_LIMIT)))
@@ -67,7 +99,8 @@ async function openFile($: EngineInterface, path: string) {
 function toSnapshot(b: SessionContextBreakdown, detail: CtxDetail, at: number): CtxSnapshot {
   const byServer = new Map<string, CtxServer>()
   for (const t of b.mcpTools) {
-    const s = byServer.get(t.serverName) ?? { name: t.serverName, tokens: 0, count: 0, deferredTokens: 0, deferredCount: 0 }
+    const key = /^mcp__(.+?)__/.exec(t.name)?.[1] ?? t.serverName
+    const s = byServer.get(t.serverName) ?? { name: t.serverName, key, tokens: 0, count: 0, deferredTokens: 0, deferredCount: 0 }
     if (t.isLoaded) {
       s.tokens += t.tokens
       s.count += 1
@@ -256,6 +289,15 @@ export const register: Register = on => {
     }
     await refresh($)
     try {
+      // the project's log as it stood before this session (a hot reload
+      // runs this again: this session's own line is left out either way)
+      const log = (await $.store.get(await projectKey($))) as CtxProjectLog | undefined
+      const id = await $.session.id()
+      await update($, project, () => (log ? { sessions: log.sessions.filter(x => x.id !== id) } : null))
+    } catch {
+      // no history: every streak starts at this session
+    }
+    try {
       // reopen where the person left it; unasked, it waits below 144 columns
       const saved = await $.store.get('visible')
       await update($, isVisible, () => saved === true)
@@ -275,8 +317,46 @@ export const register: Register = on => {
     const r = await next(e)
     if (e.changed.includes('context')) {
       // the API's own figure, so switching between exact and quick adds no jumps
-      if (e.context.tokens !== undefined) await record($, e.context.tokens)
-      void refresh($)
+      const tokens = e.context.tokens
+      if (tokens !== undefined) {
+        const past = await read($, history)
+        const prev = past[past.length - 1]
+        if (prev !== undefined && tokens < prev * DROP_RATIO) {
+          await update($, eaters, () => [])
+        } else if (prev !== undefined) {
+          const chars = turnChars
+          await update($, cptAtom, cpt => calibrate(cpt, chars, tokens - prev))
+        }
+        turnChars = 0
+        await record($, tokens)
+      }
+      void refresh($).then(() => logProject($))
+    }
+    return r
+  })
+
+  // Every tool call: which server, skill or agent it used, and, in the main
+  // conversation, how much its result added to the window
+  on('tool.call', async ($, e, next) => {
+    const r = await next(e)
+    try {
+      const args = e as unknown as Record<string, unknown>
+      const hit = usageOf(e.tool, args)
+      if (hit) await update($, usage, u => addUsage(u, hit))
+      // a subagent's results stay in its own window
+      const text = 'text' in r && typeof r.text === 'string' ? r.text : ''
+      if (!e.agentId && text.length > 0) {
+        turnChars += text.length
+        if (text.length >= EATER_MIN_CHARS) {
+          const label = toolLabel(e.tool, args)
+          const turn = (await $.session.turns()) + 1
+          await update($, eaters, list => addEater(list, { tool: e.tool, label, chars: text.length, turn }))
+          const tokens = estimateTokens(text.length, await read($, cptAtom))
+          if (tokens >= TOAST_TOKENS) $.ui.toast(`${label} added ~${fmtTokens(tokens)} tokens`)
+        }
+      }
+    } catch {
+      // counting never gets in the way of the call
     }
     return r
   })
@@ -373,6 +453,10 @@ export const register: Register = on => {
     const want = await read($, mode)
     const old = await read($, stale)
     const past = await read($, history)
+    const eaten = await read($, eaters)
+    const cpt = await read($, cptAtom)
+    const calls = await read($, usage)
+    const log = await read($, project)
     await read($, tick)
     const now = await $.clock.now()
     // the body as the surface measured it: the person may drag the dock narrower
@@ -398,6 +482,18 @@ export const register: Register = on => {
     }
     const marker = compactMarker(s, width)
     const pace = trend(past, s.compactAt)
+
+    // What this session has paid for and not used: loaded MCP servers it never
+    // called, skills and agent types listed for the model and never invoked
+    const idleServers = s.servers
+      .filter(v => v.tokens > 0 && !calls.mcp[v.key])
+      .map(v => ({ ...v, streak: idleStreak(log ?? undefined, v.key) + 1 }))
+    const idleSkills = s.skills.filter(k => !calls.skills[k.name])
+    const idleAgents = s.agents.filter(a => !calls.agents[a.name])
+    const sumOf = (xs: { tokens: number }[]) => xs.reduce((a, x) => a + x.tokens, 0)
+    const deadTokens = sumOf(idleServers) + sumOf(idleSkills) + sumOf(idleAgents)
+    const eatenTokens = eaten.reduce((a, x) => a + estimateTokens(x.chars, cpt), 0)
+    const heat = (t: number) => (t >= TOAST_TOKENS ? 'error' : t >= 5000 ? 'warning' : 'inactive')
     const status = want !== s.detail ? 'counting…' : s.detail === 'full' ? 'exact count' : 'estimated'
 
     return (
@@ -488,6 +584,50 @@ export const register: Register = on => {
             <Text dimColor>{fmtTokens(s.commandTokens).padStart(6)}</Text>
             <Text bold>{fmtCount(s.commandIncluded, s.commandCount).padStart(6)}</Text>
           </Box>
+        )}
+        <Text color="inactive" dimColor>{'╌'.repeat(width)}</Text>
+        {section('eaters', 'h', 'Heaviest results', eatenTokens, String(eaten.length))}
+        {open.includes('eaters') && eaten.length === 0 && (
+          <Text color="inactive" dimColor>
+            {'    nothing over ' + fmtTokens(estimateTokens(EATER_MIN_CHARS, cpt)) + ' yet'}
+          </Text>
+        )}
+        {open.includes('eaters') &&
+          eaten.map(x => {
+            const t = estimateTokens(x.chars, cpt)
+            return (
+              <Box flexDirection="row" width="100%" columnGap={2}>
+                <Box flexGrow={1} flexShrink={1}>
+                  <Text dimColor wrap="truncate-end">{'    ' + x.label}</Text>
+                </Box>
+                <Text color="inactive" dimColor>{'t' + x.turn}</Text>
+                <Text color={heat(t)} dimColor={t < 5000} bold={t >= 5000}>{('~' + fmtTokens(t)).padStart(6)}</Text>
+              </Box>
+            )
+          })}
+        {section('dead', 'd', 'Unused so far', deadTokens, String(idleServers.length + idleSkills.length + idleAgents.length))}
+        {open.includes('dead') &&
+          idleServers.map(v => (
+            <Box flexDirection="row" width="100%" columnGap={2}>
+              <Box flexGrow={1} flexShrink={1}>
+                <Text dimColor wrap="truncate-end">{'    ' + v.name}</Text>
+              </Box>
+              {v.streak >= 2 ? (
+                <Text color={v.streak >= 5 ? 'warning' : 'inactive'} dimColor={v.streak < 5}>{`idle ${v.streak} sessions`}</Text>
+              ) : (
+                <Text color="inactive" dimColor>no calls</Text>
+              )}
+              <Text dimColor>{fmtTokens(v.tokens).padStart(6)}</Text>
+            </Box>
+          ))}
+        {open.includes('dead') && s.skills.length > 0 &&
+          Item({ el, name: `skills  ${s.skills.length - idleSkills.length} of ${s.skills.length} used`, right: fmtTokens(sumOf(idleSkills)) })}
+        {open.includes('dead') && s.agents.length > 0 &&
+          Item({ el, name: `agents  ${s.agents.length - idleAgents.length} of ${s.agents.length} used`, right: fmtTokens(sumOf(idleAgents)) })}
+        {open.includes('dead') && idleServers.some(v => v.streak >= 5) && (
+          <Text color="inactive" dimColor wrap="wrap">
+            {'    servers idle 5+ sessions here: consider turning them off for this project in /mcp'}
+          </Text>
         )}
         <Text> </Text>
         <Box flexDirection="row" columnGap={2} flexWrap="wrap">

@@ -1,6 +1,6 @@
 {
   "name": "ctx",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Context window details like the Desktop app's panel: /ctx opens a pane that docks beside the transcript, and a 📊 button above the prompt toggles it.",
   "author": {
     "name": "afterever"
