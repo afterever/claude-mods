@@ -136,3 +136,67 @@ export function shareBar(part: number, whole: number, width: number): { fill: st
   const fill = '█'.repeat(full) + EIGHTHS[n % 8]
   return { fill, rest: FREE_GLYPH.repeat(width - full - (n % 8 ? 1 : 0)) }
 }
+
+const SPARK = '▁▂▃▄▅▆▇█'
+
+// The last `width` readings as one glyph each, scaled between their own low
+// and high so a slow climb still shows; a flat run sits mid-height
+export function sparkline(values: readonly number[], width: number): string {
+  const v = values.slice(-Math.max(1, width))
+  if (v.length === 0) return ''
+  const lo = Math.min(...v)
+  const hi = Math.max(...v)
+  if (hi === lo) return (SPARK[3] ?? '▄').repeat(v.length)
+  return v.map(x => SPARK[Math.round(((x - lo) / (hi - lo)) * 7)] ?? '▄').join('')
+}
+
+export type Trend = {
+  /** What the last turn added (negative after a compaction or /clear). */
+  delta?: number
+  /** Average growth per turn since the last drop, over the last few turns. */
+  perTurn?: number
+  /** Turns until auto-compaction at that pace. */
+  turnsLeft?: number
+}
+
+const PACE_TURNS = 6
+
+// How the window grows: the last step, the pace since the last drop (a
+// compaction resets the pace rather than dragging it negative), and how many
+// turns that pace leaves before auto-compaction
+export function trend(values: readonly number[], compactAt?: number): Trend {
+  const n = values.length
+  if (n < 2) return {}
+  const last = values[n - 1]!
+  const delta = last - values[n - 2]!
+  let from = n - 1
+  while (from > 0 && n - 1 - from < PACE_TURNS && values[from - 1]! <= values[from]!) from--
+  if (from === n - 1) return { delta }
+  const perTurn = (last - values[from]!) / (n - 1 - from)
+  if (perTurn <= 0) return { delta, perTurn: 0 }
+  const turnsLeft = compactAt && compactAt > last ? Math.ceil((compactAt - last) / perTurn) : undefined
+  return { delta, perTurn, ...(turnsLeft !== undefined ? { turnsLeft } : {}) }
+}
+
+// "+3.2k", "−41k", "±0"
+export function fmtDelta(n: number): string {
+  if (n === 0) return '±0'
+  return (n > 0 ? '+' : '−') + fmtTokens(Math.abs(n))
+}
+
+// The pane's trend caption, as long as the facts allow
+export function trendLabel(t: Trend): string {
+  const parts: string[] = []
+  if (t.delta !== undefined) parts.push(`${fmtDelta(t.delta)} last turn`)
+  if (t.perTurn) parts.push(`~${fmtTokens(t.perTurn)}/turn`)
+  if (t.turnsLeft !== undefined) parts.push(`~${t.turnsLeft} ${t.turnsLeft === 1 ? 'turn' : 'turns'} to auto-compact`)
+  return parts.join(' · ')
+}
+
+// The host command that opens `path` with its default app: Start-Process on
+// Windows (as Explorer would), `open` on macOS, `xdg-open` elsewhere. Never
+// $EDITOR: a terminal editor has no terminal to draw in from here
+export function openerFor(path: string, os: 'windows' | 'mac' | 'linux'): string[] {
+  if (os === 'windows') return ['powershell', '-NoProfile', '-NonInteractive', '-Command', `Start-Process -FilePath '${path.replace(/'/g, "''")}'`]
+  return [os === 'mac' ? 'open' : 'xdg-open', path]
+}

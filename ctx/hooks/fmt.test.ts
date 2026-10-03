@@ -1,7 +1,23 @@
 import { test, expect } from 'claude-code/testing'
 
 import type { CtxSnapshot } from '../types'
-import { ago, barRuns, barSegments, compactMarker, fillColor, fmtCount, fmtShare, fmtTokens, headline, shareBar } from './fmt'
+import {
+  ago,
+  barRuns,
+  barSegments,
+  compactMarker,
+  fillColor,
+  fmtCount,
+  fmtDelta,
+  fmtShare,
+  fmtTokens,
+  headline,
+  openerFor,
+  shareBar,
+  sparkline,
+  trend,
+  trendLabel,
+} from './fmt'
 
 const snap: CtxSnapshot = {
   rows: [
@@ -119,4 +135,42 @@ test('shareBar fills by eighths and keeps its width', () => {
   const b = shareBar(1, 16, 6)
   expect([...b.fill + b.rest].length).toBe(6)
   expect(shareBar(0, 0, 6)).toEqual({ fill: '', rest: '······' })
+})
+
+test('sparkline scales to its own range, a flat run mid-height', () => {
+  expect(sparkline([10, 20, 30, 40], 8)).toBe('▁▃▆█')
+  expect(sparkline([5, 5, 5], 8)).toBe('▄▄▄')
+  expect(sparkline([1, 2, 3, 4, 5], 3)).toBe('▁▅█')
+  expect(sparkline([], 8)).toBe('')
+})
+
+test('trend: the last step, the pace since the last drop, turns to auto-compact', () => {
+  expect(trend([])).toEqual({})
+  expect(trend([100])).toEqual({})
+  // steady +10k a turn, 60k short of the threshold: 6 turns
+  expect(trend([10_000, 20_000, 30_000, 40_000], 100_000)).toEqual({ delta: 10_000, perTurn: 10_000, turnsLeft: 6 })
+  // a compaction resets the pace instead of dragging it negative
+  expect(trend([80_000, 90_000, 20_000, 25_000, 30_000], 100_000)).toEqual({ delta: 5_000, perTurn: 5_000, turnsLeft: 14 })
+  // right after a drop there is no pace yet
+  expect(trend([90_000, 20_000], 100_000)).toEqual({ delta: -70_000 })
+  // the pace reads the last six turns only
+  expect(trend([0, 1_000, 2_000, 3_000, 4_000, 5_000, 6_000, 66_000]).perTurn).toBe(65_000 / 6)
+  // no threshold, no countdown
+  expect(trend([1, 2]).turnsLeft).toBeUndefined()
+})
+
+test('fmtDelta and trendLabel read short', () => {
+  expect(fmtDelta(3_200)).toBe('+3.2k')
+  expect(fmtDelta(-41_000)).toBe('−41k')
+  expect(fmtDelta(0)).toBe('±0')
+  expect(trendLabel({ delta: 3_200, perTurn: 2_100, turnsLeft: 1 })).toBe('+3.2k last turn · ~2.1k/turn · ~1 turn to auto-compact')
+  expect(trendLabel({ delta: -70_000 })).toBe('−70k last turn')
+})
+
+test('openerFor hands the path over whole, quoted for PowerShell', () => {
+  expect(openerFor("C:\Users\o'brien\CLAUDE.md", 'windows')).toEqual([
+    'powershell', '-NoProfile', '-NonInteractive', '-Command', "Start-Process -FilePath 'C:\Users\o''brien\CLAUDE.md'",
+  ])
+  expect(openerFor('/Users/me/CLAUDE.md', 'mac')).toEqual(['open', '/Users/me/CLAUDE.md'])
+  expect(openerFor('/home/me/CLAUDE.md', 'linux')).toEqual(['xdg-open', '/home/me/CLAUDE.md'])
 })

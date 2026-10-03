@@ -3,7 +3,24 @@ import type { EngineInterface, Register, SessionContextBreakdown, Timer } from '
 
 import type { CtxDetail, CtxServer, CtxSnapshot } from '../types'
 import type { BarRun } from './fmt'
-import { ago, barRuns, BUFFER_GLYPH, compactMarker, fillColor, FREE_GLYPH, fmtCount, fmtShare, fmtTokens, shareBar, shortPath } from './fmt'
+import {
+  ago,
+  barRuns,
+  BUFFER_GLYPH,
+  compactMarker,
+  fillColor,
+  FREE_GLYPH,
+  fmtCount,
+  fmtDelta,
+  fmtShare,
+  fmtTokens,
+  openerFor,
+  shareBar,
+  shortPath,
+  sparkline,
+  trend,
+  trendLabel,
+} from './fmt'
 
 const PANE = 'ctx'
 // How often an open pane redraws its "updated 12s ago"; no count runs on it
@@ -20,6 +37,32 @@ const opened = atom({ plugin: 'ctx', key: 'opened' } as const, [])
 const mode = atom({ plugin: 'ctx', key: 'mode' } as const, 'summary')
 const stale = atom({ plugin: 'ctx', key: 'stale' } as const, false)
 const tick = atom({ plugin: 'ctx', key: 'tick' } as const, 0)
+// The window's fill after each turn, oldest first, as the API reported it
+const history = atom({ plugin: 'ctx', key: 'history' } as const, [])
+const HISTORY_LIMIT = 48
+
+async function record($: EngineInterface, tokens: number) {
+  await update($, history, list => (list[list.length - 1] === tokens ? list : [...list, tokens].slice(-HISTORY_LIMIT)))
+}
+
+// Opens a memory file with the host's default app for it
+async function openFile($: EngineInterface, path: string) {
+  const name = shortPath(path)
+  try {
+    const home = (await $.env.get('HOME')) ?? ''
+    const os =
+      (await $.env.get('OS')) === 'Windows_NT' || /^[A-Za-z]:[\\/]/.test(path)
+        ? 'windows'
+        : path.startsWith('/Users/') || home.startsWith('/Users/')
+          ? 'mac'
+          : 'linux'
+    const { exitCode, stderr } = await $.process.run(openerFor(path, os), { timeoutMs: 15000 })
+    await $.ui.toast(exitCode === 0 ? `Opened ${name}` : `Couldn't open ${name}: ${stderr.trim().split('\n')[0] || `exit ${exitCode}`}`)
+  } catch {
+    // no host to run on (the Desktop app), or the opener is missing
+    await $.ui.toast(`Couldn't open ${name}`)
+  }
+}
 
 function toSnapshot(b: SessionContextBreakdown, detail: CtxDetail, at: number): CtxSnapshot {
   const byServer = new Map<string, CtxServer>()
@@ -165,6 +208,19 @@ function Fill({ el, s }: { el: El; s: CtxSnapshot }) {
   )
 }
 
+// The fill per turn: dim history, the latest reading lit in the fill's color
+function Spark({ el, values, width, percent }: { el: El; values: readonly number[]; width: number; percent: number }) {
+  const { Box, Text } = el
+  const line = [...sparkline(values, width)]
+  const last = line.pop() ?? ''
+  return (
+    <Box flexDirection="row" flexShrink={0}>
+      <Text color="claude" dimColor>{line.join('')}</Text>
+      <Text color={fillColor(percent)} bold>{last}</Text>
+    </Box>
+  )
+}
+
 function Swatch({ el, kind, color, scope }: { el: El; kind: string; color: string; scope: string }) {
   const { Text } = el
   const hover = { scope: SCOPE + scope, inverse: true }
@@ -217,7 +273,11 @@ export const register: Register = on => {
   // main-thread turn, a compaction, a /clear): count again then, never on a timer
   on('session.measure', async ($, e, next) => {
     const r = await next(e)
-    if (e.changed.includes('context')) void refresh($)
+    if (e.changed.includes('context')) {
+      // the API's own figure, so switching between exact and quick adds no jumps
+      if (e.context.tokens !== undefined) await record($, e.context.tokens)
+      void refresh($)
+    }
     return r
   })
 
@@ -263,7 +323,10 @@ export const register: Register = on => {
     const s = await read($, snap)
     const show = await read($, isVisible)
     const old = await read($, stale)
-    const barWidth = (e.props.bodyColumns ?? 80) >= 70 ? 16 : 8
+    const past = await read($, history)
+    const wide = (e.props.bodyColumns ?? 80) >= 70
+    const barWidth = wide ? 16 : 8
+    const step = trend(past).delta
     return (
       <Box flexDirection="column">
         <Box flexDirection="row" justifyContent="space-between" width="100%" columnGap={2}>
@@ -272,6 +335,8 @@ export const register: Register = on => {
               <Text dimColor>ctx</Text>
               {Bar({ el, runs: barRuns(s, barWidth) })}
               {Fill({ el, s })}
+              {wide && past.length >= 2 && Spark({ el, values: past, width: 10, percent: s.percent })}
+              {wide && step !== undefined && step !== 0 && <Text dimColor>{fmtDelta(step)}</Text>}
               {old && <Text color="warning">⚠ stale</Text>}
             </Box>
           ) : (
@@ -307,6 +372,7 @@ export const register: Register = on => {
     const open = await read($, opened)
     const want = await read($, mode)
     const old = await read($, stale)
+    const past = await read($, history)
     await read($, tick)
     const now = await $.clock.now()
     // the body as the surface measured it: the person may drag the dock narrower
@@ -331,6 +397,7 @@ export const register: Register = on => {
       )
     }
     const marker = compactMarker(s, width)
+    const pace = trend(past, s.compactAt)
     const status = want !== s.detail ? 'counting…' : s.detail === 'full' ? 'exact count' : 'estimated'
 
     return (
@@ -343,6 +410,22 @@ export const register: Register = on => {
         </Box>
         {Bar({ el, runs: barRuns(s, width) })}
         {marker && <Text color="inactive" dimColor>{marker}</Text>}
+        {past.length >= 2 && (
+          <Box flexDirection="column">
+            <Box flexDirection="row" columnGap={1}>
+              <Text color="inactive" dimColor>trend</Text>
+              {Spark({ el, values: past, width: Math.max(8, Math.min(HISTORY_LIMIT, width - 6)), percent: s.percent })}
+            </Box>
+            <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
+              <Text color="inactive" dimColor>{trendLabel({ delta: pace.delta, perTurn: pace.perTurn })}</Text>
+              {pace.turnsLeft !== undefined && (
+                <Text color={pace.turnsLeft <= 3 ? 'error' : pace.turnsLeft <= 10 ? 'warning' : 'inactive'} dimColor={pace.turnsLeft > 10} bold={pace.turnsLeft <= 10}>
+                  {`· ~${pace.turnsLeft} ${pace.turnsLeft === 1 ? 'turn' : 'turns'} to auto-compact`}
+                </Text>
+              )}
+            </Box>
+          </Box>
+        )}
         <Text> </Text>
         {s.rows
           .filter(r => r.tokens > 0 || r.kind === 'free')
@@ -375,7 +458,15 @@ export const register: Register = on => {
           )}
         {section('memory', 'f', 'Memory files', s.memory.reduce((a, f) => a + f.tokens, 0), String(s.memory.length))}
         {open.includes('memory') &&
-          s.memory.map(f => Item({ el, name: `${f.type}  ${shortPath(f.path)}`, right: fmtTokens(f.tokens), truncate: 'truncate-start' }))}
+          s.memory.map((f, i) => (
+            <Box flexDirection="row" width="100%" columnGap={2}>
+              <Box flexGrow={1} flexShrink={1}>
+                <Text>{'    '}</Text>
+                <Button key={'mem-' + i} label={`${f.type}  ${shortPath(f.path)} ↗`} plain dimColor onPress={() => openFile($, f.path)} />
+              </Box>
+              <Text dimColor>{fmtTokens(f.tokens)}</Text>
+            </Box>
+          ))}
         {section('skills', 's', 'Skills', s.skillTokens, fmtCount(s.skillIncluded, s.skillCount))}
         {open.includes('skills') && s.skills.slice(0, SKILL_LIMIT).map(k => Item({ el, name: k.name, right: fmtTokens(k.tokens) }))}
         {open.includes('skills') && s.skills.length > SKILL_LIMIT && (

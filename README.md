@@ -4,7 +4,7 @@ Personal [Claude Code mods](https://code.claude.com/docs): plugins of function h
 
 | Mod | What it does |
 | --- | --- |
-| [`ctx`](./ctx) | Context window details like the Desktop app's panel. `/ctx` opens a pane (docks beside the transcript in the fullscreen layout, from 110 columns; above the prompt otherwise) with a smooth eighth-block bar, an auto-compact marker, and MCP / memory / skills / agents sections; hover a bar segment or a row to light up its pair. A 📊 band above the prompt shows a mini bar and the fill (green, amber, red); the button, or `x` while the band has focus, toggles the pane. `/ctx exact` (or `e` in the pane) counts with the token API. Desktop's footer shows `ctx 8%`. |
+| [`ctx`](./ctx) | Context window details like the Desktop app's panel. `/ctx` opens a pane (docks beside the transcript in the fullscreen layout, from 110 columns; above the prompt otherwise) with a smooth eighth-block bar, an auto-compact marker, a per-turn trend sparkline with a turns-to-auto-compact estimate, and MCP / memory / skills / agents sections (press a memory file to open it); hover a bar segment or a row to light up its pair. A 📊 band above the prompt shows a mini bar, the fill (green, amber, red) and the last turn's growth; the button, or `x` while the band has focus, toggles the pane. `/ctx exact` (or `e` in the pane) counts with the token API. Desktop's footer shows `ctx 8%`. |
 
 ## Install (each computer)
 

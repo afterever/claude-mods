@@ -52,6 +52,8 @@ declare module 'claude-code' {
       mode: CtxDetail
       stale: boolean
       tick: number
+      /** The window's tokens after each turn, oldest first, as the API reported them. */
+      history: number[]
     }
   }
 }

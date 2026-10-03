@@ -36,9 +36,18 @@ const breakdown: SessionContextBreakdown = {
 }
 
 // The world beneath the plugin: a clock, a store, the count, the pane's open and close
-function world(on: On, counted: string[], modes: string[][] = []) {
+function world(on: On, counted: string[], modes: string[][] = [], ran: string[][] = [], toasts: string[] = []) {
   const clock = mock.clock(on, { now: 100_000 })
   mock.store(on)
+  mock.env(on, { OS: 'Windows_NT' })
+  on('process.run', async (_$, e) => {
+    ran.push([...e.argv])
+    return { value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } } as any
+  })
+  on('ui.toast', async (_$, e) => {
+    toasts.push(e.text)
+    return { value: undefined } as any
+  })
   on('session.usage', async ($, e) => {
     counted.push(e?.breakdown ?? 'none')
     return { value: { startedAt: 0, context: { window: 1_000_000, breakdown }, rateLimits: [] } } as any
@@ -125,4 +134,47 @@ test('the footer adds ctx N% on desktop only', async ($, on) => {
   await $.ui.mount({ plugin: 'ctx', surface: 'desktop', component: 'SessionMode', props: { modes: ['auto'] } }).catch(() => undefined)
   await $.ui.mount({ plugin: 'ctx', surface: 'terminal', component: 'SessionMode', props: { modes: ['auto'] } }).catch(() => undefined)
   expect(seen).toEqual([['auto', 'ctx 4%'], ['auto']])
+})
+
+const measure = (tokens: number) => ({ context: { window: 1_000_000, tokens }, rateLimits: [], changed: ['context' as const] })
+
+test('the pane draws the trend from the turns the engine measured', async ($, on) => {
+  const clock = world(on, [])
+  for (const t of [20_000, 26_000, 30_000, 36_500]) await $.session.measure(measure(t))
+  // a repeat reading (a refresh with no turn) adds nothing
+  await $.session.measure(measure(36_500))
+  await clock.settle()
+  const ui = await $.ui.mount({ plugin: 'ctx', surface: 'terminal', component: 'Pane', requestId: 'ctx', props: paneProps(48) })
+  expect(await ui.find({ text: 'trend' })).toBeDefined()
+  expect(await ui.find({ text: '▁▄▅' })).toBeDefined()
+  expect(await ui.find({ text: '█' })).toBeDefined()
+  expect(await ui.find({ text: '+6.5k last turn · ~5.5k/turn' })).toBeDefined()
+  // (967k - 36.5k) / 5.5k a turn
+  expect(await ui.find({ text: '· ~170 turns to auto-compact' })).toBeDefined()
+})
+
+test('the band shows the last step beside its sparkline', async ($, on) => {
+  const clock = world(on, [])
+  for (const t of [20_000, 36_500]) await $.session.measure(measure(t))
+  await clock.settle()
+  const ui = await $.ui.mount({
+    plugin: 'ctx',
+    surface: 'terminal',
+    component: 'AbovePrompt',
+    props: { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 120, scroll: { offset: 0, bodyRows: 10 }, view: {} },
+  })
+  expect(await ui.find({ text: '+16.5k' })).toBeDefined()
+})
+
+test('a memory file opens with its default app', async ($, on) => {
+  const ran: string[][] = []
+  const toasts: string[] = []
+  const clock = world(on, [], [], ran, toasts)
+  await $.session.measure(measure(36_500))
+  await clock.settle()
+  const ui = await $.ui.mount({ plugin: 'ctx', surface: 'terminal', component: 'Pane', requestId: 'ctx', props: paneProps(48) })
+  await ui.press({ key: 'sec-memory' })
+  await ui.press({ key: 'mem-0' })
+  expect(ran).toEqual([['powershell', '-NoProfile', '-NonInteractive', '-Command', "Start-Process -FilePath 'C:/bats/CLAUDE.md'"]])
+  expect(toasts).toEqual(['Opened …/bats/CLAUDE.md'])
 })
