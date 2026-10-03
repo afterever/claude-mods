@@ -36,7 +36,15 @@ const breakdown: SessionContextBreakdown = {
 }
 
 // The world beneath the plugin: a clock, a store, the count, the pane's open and close
-function world(on: On, counted: string[], modes: string[][] = [], ran: string[][] = [], toasts: string[] = [], stored: Record<string, unknown> = {}) {
+function world(
+  on: On,
+  counted: string[],
+  modes: string[][] = [],
+  ran: string[][] = [],
+  toasts: string[] = [],
+  stored: Record<string, unknown> = {},
+  compactions: (string | undefined)[] = [],
+) {
   const clock = mock.clock(on, { now: 100_000 })
   // the plugin's store, kept in `stored` so a test can read what was written
   on('store.get', async (_$, e) => ({ value: stored[e.key] }) as any)
@@ -46,6 +54,12 @@ function world(on: On, counted: string[], modes: string[][] = [], ran: string[][
   })
   on('session.cwd', async () => ({ value: 'C:/bats' }) as any)
   on('session.start', async () => ({ cwd: 'C:/bats' }))
+  on('prompt.submit', async (_$, e) => ({ text: e.text }) as any)
+  // a compaction that stands, its instructions kept for the test to read
+  on('session.compact', async (_$, e) => {
+    compactions.push(e.instructions)
+    return { messages: [{ role: 'user', text: 'summary', toolUses: [] }] } as any
+  })
   on('command.register', async () => ({ value: {} }) as any)
   on('session.id', async () => ({ value: 'now' }) as any)
   on('session.turns', async () => ({ value: 3 }) as any)
@@ -245,4 +259,82 @@ test('unused servers carry their idle streak across sessions', async ($, on) => 
   expect(await ui.find({ text: '    notion' })).toBeUndefined()
   expect(await ui.find({ text: '    skills  1 of 15 used' })).toBeDefined()
   expect(await ui.find({ text: '    agents  1 of 1 used' })).toBeDefined()
+})
+
+test('auto-compact warns once per step, and the band wears the badge', async ($, on) => {
+  const toasts: string[] = []
+  const clock = world(on, [], [], [], toasts)
+  for (const t of [300_000, 400_000, 500_000, 800_000]) {
+    await $.session.measure(measure(t))
+    await clock.settle()
+  }
+  expect(toasts).toEqual([
+    'Auto-compact is coming: ~6 turns left (400k / 967k). /ctx compact keeps what matters.',
+    'Auto-compact is close: ~2 turns left (800k / 967k). /ctx compact keeps what matters.',
+  ])
+  const band = await $.ui.mount({
+    plugin: 'ctx',
+    surface: 'terminal',
+    component: 'AbovePrompt',
+    props: { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 120, scroll: { offset: 0, bodyRows: 10 }, view: {} },
+  })
+  const badge = (await band.findAll({ type: 'Text', text: '⚠ ~2 turns' })).pop()
+  expect(badge?.props.color).toBe('error')
+  const pane = await $.ui.mount({ plugin: 'ctx', surface: 'terminal', component: 'Pane', requestId: 'ctx', props: paneProps(48) })
+  expect(await pane.find({ text: '⚠ Auto-compact is close · c compacts on your terms' })).toBeDefined()
+})
+
+test('compact keeps the files and requests, toasts the drop, marks the sparkline', async ($, on) => {
+  const toasts: string[] = []
+  const compactions: (string | undefined)[] = []
+  const clock = world(on, [], [], [], toasts, {}, compactions)
+  await $.session.measure(measure(100_000))
+  await $.session.measure(measure(150_000))
+  await clock.settle()
+  await $.prompt.submit({ text: 'fix the  bug\nin fmt', wait: false, origin: { kind: 'composer' } })
+  await $.prompt.submit({ text: '/ctx', wait: false, origin: { kind: 'composer' } })
+  await $.tool.call(call('Edit', { file_path: 'C:/x/fmt.ts', old_string: 'a', new_string: 'b' }))
+  await $.tool.call(call('Read', { file_path: 'C:/x/other.ts' }))
+
+  const ui = await $.ui.mount({ plugin: 'ctx', surface: 'terminal', component: 'Pane', requestId: 'ctx', props: paneProps(48) })
+  await ui.press({ key: 'ctx-compact' })
+  await clock.settle()
+  expect(compactions).toHaveLength(1)
+  const keep = compactions[0]!
+  expect(keep).toContain('[ctx keep]')
+  expect(keep).toContain('C:/x/fmt.ts')
+  expect(keep).not.toContain('other.ts')
+  expect(keep).toContain('1. "fix the bug in fmt"')
+  expect(keep).not.toContain('/ctx')
+  expect(toasts).toEqual(['Compacting…', 'Compacted 150k → ~36.5k (−113.5k)'])
+
+  // the next reading carries the mark: one glyph in the compaction color
+  await $.session.measure(measure(30_000))
+  await $.session.measure(measure(42_000))
+  await clock.settle()
+  // (the Messages row shares the color: its bar run and swatch are not bold)
+  const lit = (await ui.findAll({ type: 'Text' })).filter(t => t.props.color === 'permission' && t.props.bold)
+  expect(lit).toHaveLength(1)
+  expect(lit[0]!.text).toBe('▁')
+})
+
+test('autokeep adds the keep instructions to every compaction, once', async ($, on) => {
+  const compactions: (string | undefined)[] = []
+  const clock = world(on, [], [], [], [], {}, compactions)
+  await $.session.measure(measure(300_000))
+  await clock.settle()
+  const ui = await $.ui.mount({ plugin: 'ctx', surface: 'terminal', component: 'Pane', requestId: 'ctx', props: paneProps(48) })
+  // the engine's own compaction, as it raises it: the messages it is about to fold
+  const auto = { trigger: 'auto' as const, instructions: 'mine', messages: [{ role: 'user' as const, text: 'hi', toolUses: [] }] }
+  // off: a compaction passes as given
+  await $.session.compact(auto)
+  await ui.press({ key: 'ctx-autokeep' })
+  expect(await ui.find({ key: 'ctx-autokeep' })).toMatchObject({ props: { label: '◉ autokeep' } })
+  await $.session.compact(auto)
+  // the mod's own compact is not given them twice
+  await ui.press({ key: 'ctx-compact' })
+  await clock.settle()
+  expect(compactions[0]).toBe('mine')
+  expect(compactions[1]!.startsWith('mine\n\n[ctx keep]')).toBe(true)
+  expect(compactions[2]!.split('[ctx keep]')).toHaveLength(2)
 })

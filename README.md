@@ -4,7 +4,7 @@ Personal [Claude Code mods](https://code.claude.com/docs): plugins of function h
 
 | Mod | What it does |
 | --- | --- |
-| [`ctx`](./ctx) | Context window details like the Desktop app's panel. `/ctx` opens a pane (docks beside the transcript in the fullscreen layout, from 110 columns; above the prompt otherwise) with a smooth eighth-block bar, an auto-compact marker, a per-turn trend sparkline with a turns-to-auto-compact estimate, and MCP / memory / skills / agents sections (press a memory file to open it), plus **Heaviest results** (the tool results that ate the most context, with a toast for any single one over ~15k) and **Unused so far** (loaded MCP servers, skills and agents never called, with each server's idle streak across this project's sessions); hover a bar segment or a row to light up its pair. A 📊 band above the prompt shows a mini bar, the fill (green, amber, red) and the last turn's growth; the button, or `x` while the band has focus, toggles the pane. `/ctx exact` (or `e` in the pane) counts with the token API. Desktop's footer shows `ctx 8%`. |
+| [`ctx`](./ctx) | Context window details like the Desktop app's panel. `/ctx` opens a pane (docks beside the transcript in the fullscreen layout, from 110 columns; above the prompt otherwise) with a smooth eighth-block bar, an auto-compact marker, a per-turn trend sparkline with a turns-to-auto-compact estimate, and MCP / memory / skills / agents sections (press a memory file to open it), plus **Heaviest results** (the tool results that ate the most context, with a toast for any single one over ~15k) and **Unused so far** (loaded MCP servers, skills and agents never called, with each server's idle streak across this project's sessions); hover a bar segment or a row to light up its pair. A 📊 band above the prompt shows a mini bar, the fill (green, amber, red) and the last turn's growth; the button, or `x` while the band has focus, toggles the pane. `/ctx exact` (or `e` in the pane) counts with the token API. As auto-compact nears, a toast warns once per step (about 10 turns left, then about 3) and the band wears a `⚠ ~N turns` badge. `/ctx compact [focus]` (or `c` in the pane) compacts on your terms, telling the summary to keep the files you changed and your latest requests; `/ctx autokeep on` (or `k`) adds the same to every compaction, auto-compact included. Each compaction is toasted (`Compacted 412k → ~38k`) and marked in blue on the sparkline. Desktop's footer shows `ctx 8%`. |
 
 ## Install (each computer)
 
@@ -51,6 +51,7 @@ ctx/
   hooks/register.tsx              the mod
   hooks/fmt.ts, fmt.test.ts       pure formatting helpers and their tests
   hooks/usage.ts, usage.test.ts   tool-result sizes, usage counts, the project log
+  hooks/compact.ts, compact.test.ts  keep instructions and the auto-compact warning
   hooks/render.test.ts            the pane, band and footer drawn on terminal and desktop
   types/index.d.ts                the mod's $.state contract
 ```

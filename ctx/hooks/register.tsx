@@ -1,8 +1,9 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, SessionContextBreakdown, Timer } from 'claude-code'
 
-import type { CtxDetail, CtxProjectLog, CtxServer, CtxSnapshot } from '../types'
+import type { CtxDetail, CtxProjectLog, CtxServer, CtxSnapshot, CtxWarn } from '../types'
 import type { BarRun } from './fmt'
+import { addRecent, clipAsk, keepInstructions, mergeInstructions, shouldWarn, warnBadge, warnLevel, warnText } from './compact'
 import { addEater, addUsage, calibrate, DEFAULT_CPT, EMPTY_USAGE, estimateTokens, idleStreak, logSession, toolLabel, usageOf } from './usage'
 import {
   ago,
@@ -73,8 +74,83 @@ async function logProject($: EngineInterface) {
   }
 }
 
+const compacted = atom({ plugin: 'ctx', key: 'compacted' } as const, [])
+const edited = atom({ plugin: 'ctx', key: 'edited' } as const, [])
+const asks = atom({ plugin: 'ctx', key: 'asks' } as const, [])
+const autokeep = atom({ plugin: 'ctx', key: 'autokeep' } as const, false)
+const warned = atom({ plugin: 'ctx', key: 'warned' } as const, 'none')
+const EDIT_LIMIT = 12
+const ASK_LIMIT = 3
+
+// A compaction happened since the last reading: the next one carries the mark
+let pendingMark = false
+
+// The last `n` flags, padded in front: readings from before marks existed read as unmarked
+function alignFlags(flags: readonly boolean[], n: number): boolean[] {
+  return [...Array<boolean>(Math.max(0, n - flags.length)).fill(false), ...flags.slice(-n)]
+}
+
 async function record($: EngineInterface, tokens: number) {
-  await update($, history, list => (list[list.length - 1] === tokens ? list : [...list, tokens].slice(-HISTORY_LIMIT)))
+  const past = await read($, history)
+  if (past[past.length - 1] === tokens) return
+  const mark = pendingMark
+  pendingMark = false
+  await update($, compacted, flags => [...alignFlags(flags, past.length), mark].slice(-HISTORY_LIMIT))
+  await update($, history, list => [...list, tokens].slice(-HISTORY_LIMIT))
+}
+
+// The newest reading of the window, the API's when there is one
+async function latestTokens($: EngineInterface): Promise<number | undefined> {
+  const past = await read($, history)
+  return past[past.length - 1] ?? (await read($, snap))?.total
+}
+
+// How close auto-compaction is right now, with the turns left at this pace
+async function warning($: EngineInterface): Promise<{ level: CtxWarn; tokens: number; compactAt?: number; turnsLeft?: number }> {
+  const s = await read($, snap)
+  const tokens = (await latestTokens($)) ?? 0
+  const compactAt = s?.compactAt
+  const turnsLeft = trend(await read($, history), compactAt).turnsLeft
+  return { level: warnLevel(tokens, compactAt, turnsLeft), tokens, compactAt, turnsLeft }
+}
+
+async function keepText($: EngineInterface, focus?: string): Promise<string> {
+  return keepInstructions({ focus, edited: await read($, edited), asks: await read($, asks) })
+}
+
+// Once a compaction stands: the next reading is marked, what was eaten and
+// warned of starts over, and the drop is toasted when the new count lands
+async function afterCompaction($: EngineInterface, before: number | undefined) {
+  pendingMark = true
+  await update($, eaters, () => [])
+  await update($, warned, () => 'none')
+  await refresh($)
+  const s = await read($, snap)
+  if (before !== undefined && s) $.ui.toast(`Compacted ${fmtTokens(before)} → ~${fmtTokens(s.total)} (${fmtDelta(s.total - before)})`)
+}
+
+// Compacts now, the summary told what this session is in the middle of. The
+// mod's own session.compact hook does not hear its own call, so this follows up itself
+async function compactNow($: EngineInterface, focus?: string) {
+  $.ui.toast('Compacting…')
+  try {
+    const before = await latestTokens($)
+    const r = await $.session.compact({ instructions: await keepText($, focus) })
+    if ('skip' in r && r.skip) $.ui.toast(`Compaction skipped: ${r.skip}`)
+    else if (r.messages) await afterCompaction($, before)
+  } catch {
+    $.ui.toast('Could not compact right now')
+  }
+}
+
+async function setAutokeep($: EngineInterface, value: boolean) {
+  await update($, autokeep, () => value)
+  try {
+    await $.store.set('autokeep', value)
+  } catch {
+    // on for this session still
+  }
+  $.ui.toast(value ? 'Autokeep on: every compaction keeps your files and latest requests' : 'Autokeep off')
 }
 
 // Opens a memory file with the host's default app for it
@@ -242,14 +318,30 @@ function Fill({ el, s }: { el: El; s: CtxSnapshot }) {
 }
 
 // The fill per turn: dim history, the latest reading lit in the fill's color
-function Spark({ el, values, width, percent }: { el: El; values: readonly number[]; width: number; percent: number }) {
+// The fill per turn: dim history, compactions lit in blue, the latest
+// reading in the fill's color
+function Spark({ el, values, marks, width, percent }: { el: El; values: readonly number[]; marks: readonly boolean[]; width: number; percent: number }) {
   const { Box, Text } = el
-  const line = [...sparkline(values, width)]
-  const last = line.pop() ?? ''
+  const glyphs = [...sparkline(values, width)]
+  const flags = alignFlags(marks, values.length).slice(-glyphs.length)
+  const runs: { text: string; kind: 'past' | 'mark' | 'last' }[] = []
+  glyphs.forEach((g, i) => {
+    const kind = i === glyphs.length - 1 ? 'last' : flags[i] ? 'mark' : 'past'
+    const run = runs[runs.length - 1]
+    if (run && run.kind === kind) run.text += g
+    else runs.push({ text: g, kind })
+  })
   return (
     <Box flexDirection="row" flexShrink={0}>
-      <Text color="claude" dimColor>{line.join('')}</Text>
-      <Text color={fillColor(percent)} bold>{last}</Text>
+      {runs.map(r =>
+        r.kind === 'past' ? (
+          <Text color="claude" dimColor>{r.text}</Text>
+        ) : r.kind === 'mark' ? (
+          <Text color="permission" bold>{r.text}</Text>
+        ) : (
+          <Text color={fillColor(percent)} bold>{r.text}</Text>
+        ),
+      )}
     </Box>
   )
 }
@@ -280,8 +372,8 @@ export const register: Register = on => {
     try {
       await $.command.register({
         name: 'ctx',
-        description: 'Context window details (/ctx opens the pane; /ctx show|hide|toggle|exact|quick)',
-        argumentHint: '[show|hide|toggle|exact|quick]',
+        description: 'Context window details (/ctx opens the pane; /ctx show|hide|toggle|exact|quick|compact [focus]|autokeep [on|off])',
+        argumentHint: '[show|hide|toggle|exact|quick|compact [focus]|autokeep [on|off]]',
         immediate: true,
       })
     } catch {
@@ -296,6 +388,12 @@ export const register: Register = on => {
       await update($, project, () => (log ? { sessions: log.sessions.filter(x => x.id !== id) } : null))
     } catch {
       // no history: every streak starts at this session
+    }
+    try {
+      await update($, autokeep, () => false)
+      if ((await $.store.get('autokeep')) === true) await update($, autokeep, () => true)
+    } catch {
+      // autokeep stays off
     }
     try {
       // reopen where the person left it; unasked, it waits below 144 columns
@@ -323,12 +421,20 @@ export const register: Register = on => {
         const prev = past[past.length - 1]
         if (prev !== undefined && tokens < prev * DROP_RATIO) {
           await update($, eaters, () => [])
+          await update($, warned, () => 'none')
         } else if (prev !== undefined) {
           const chars = turnChars
           await update($, cptAtom, cpt => calibrate(cpt, chars, tokens - prev))
         }
         turnChars = 0
         await record($, tokens)
+        // warn once per step as auto-compaction nears
+        const w = await warning($)
+        const was = await read($, warned)
+        if (shouldWarn(was, w.level) && w.compactAt) {
+          await update($, warned, () => w.level)
+          $.ui.toast(warnText(w.level, w.tokens, w.compactAt, w.turnsLeft))
+        }
       }
       void refresh($).then(() => logProject($))
     }
@@ -343,6 +449,12 @@ export const register: Register = on => {
       const args = e as unknown as Record<string, unknown>
       const hit = usageOf(e.tool, args)
       if (hit) await update($, usage, u => addUsage(u, hit))
+      // the files the session changed, for what a compaction must keep
+      const path = typeof args.file_path === 'string' ? args.file_path : typeof args.notebook_path === 'string' ? args.notebook_path : ''
+      const ok = !('isError' in r && r.isError) && !('deny' in r && r.deny)
+      if (path && ok && (e.tool === 'Edit' || e.tool === 'Write' || e.tool === 'NotebookEdit')) {
+        await update($, edited, list => addRecent(list, path, EDIT_LIMIT))
+      }
       // a subagent's results stay in its own window
       const text = 'text' in r && typeof r.text === 'string' ? r.text : ''
       if (!e.agentId && text.length > 0) {
@@ -361,8 +473,38 @@ export const register: Register = on => {
     return r
   })
 
+  // The person's latest requests, for what a compaction must keep
+  on('prompt.submit', async ($, e, next) => {
+    const text = e.text.trim()
+    if (text && !text.startsWith('/')) await update($, asks, list => addRecent(list, clipAsk(text), ASK_LIMIT))
+    return next(e)
+  })
+
+  // Every compaction of the main conversation: with autokeep on, the summary is
+  // told what to keep; once it stands, the drop is marked and toasted
+  on('session.compact', async ($, e, next) => {
+    if (e.agentId) return next(e)
+    // only a compaction that carries its messages is rewritten (the engine's always do)
+    const keep =
+      (await read($, autokeep)) && Array.isArray(e.messages) ? { ...e, instructions: mergeInstructions(e.instructions, await keepText($)) } : e
+    const before = await latestTokens($)
+    const r = await next(keep)
+    if (e.trigger !== 'precompute' && r.messages) void afterCompaction($, before)
+    return r
+  })
+
   on('command.run', { command: 'ctx' }, async ($, e) => {
-    const arg = String(e.args || '').trim().toLowerCase()
+    const [word = '', ...rest] = String(e.args || '').trim().split(/\s+/)
+    const arg = word.toLowerCase()
+    if (arg === 'compact') {
+      await compactNow($, rest.join(' '))
+      return {}
+    }
+    if (arg === 'autokeep') {
+      const v = rest[0]?.toLowerCase()
+      await setAutokeep($, v === 'on' ? true : v === 'off' ? false : !(await read($, autokeep)))
+      return {}
+    }
     if (arg === 'hide') {
       await setVisible($, false)
       return {}
@@ -407,16 +549,24 @@ export const register: Register = on => {
     const wide = (e.props.bodyColumns ?? 80) >= 70
     const barWidth = wide ? 16 : 8
     const step = trend(past).delta
+    const marks = await read($, compacted)
+    const w = await warning($)
+    const hot = w.level === 'imminent' ? 'error' : 'warning'
     return (
       <Box flexDirection="column">
         <Box flexDirection="row" justifyContent="space-between" width="100%" columnGap={2}>
           {s ? (
             <Box flexDirection="row" columnGap={1} flexShrink={1}>
-              <Text dimColor>ctx</Text>
+              {w.level === 'none' ? <Text dimColor>ctx</Text> : <Text color={hot} bold>ctx</Text>}
               {Bar({ el, runs: barRuns(s, barWidth) })}
               {Fill({ el, s })}
-              {wide && past.length >= 2 && Spark({ el, values: past, width: 10, percent: s.percent })}
+              {wide && past.length >= 2 && Spark({ el, values: past, marks, width: 10, percent: s.percent })}
               {wide && step !== undefined && step !== 0 && <Text dimColor>{fmtDelta(step)}</Text>}
+              {w.level !== 'none' && w.compactAt && (
+                <Text color={hot} bold>
+                  {warnBadge(w.tokens, w.compactAt, w.turnsLeft)}
+                </Text>
+              )}
               {old && <Text color="warning">⚠ stale</Text>}
             </Box>
           ) : (
@@ -457,6 +607,9 @@ export const register: Register = on => {
     const cpt = await read($, cptAtom)
     const calls = await read($, usage)
     const log = await read($, project)
+    const marks = await read($, compacted)
+    const keepOn = await read($, autokeep)
+    const w = await warning($)
     await read($, tick)
     const now = await $.clock.now()
     // the body as the surface measured it: the person may drag the dock narrower
@@ -504,13 +657,18 @@ export const register: Register = on => {
           </Box>
           {Fill({ el, s })}
         </Box>
+        {w.level !== 'none' && (
+          <Text color={w.level === 'imminent' ? 'error' : 'warning'} bold wrap="wrap">
+            {(w.level === 'imminent' ? '⚠ Auto-compact is close' : '⚠ Auto-compact is coming') + ' · c compacts on your terms'}
+          </Text>
+        )}
         {Bar({ el, runs: barRuns(s, width) })}
         {marker && <Text color="inactive" dimColor>{marker}</Text>}
         {past.length >= 2 && (
           <Box flexDirection="column">
             <Box flexDirection="row" columnGap={1}>
               <Text color="inactive" dimColor>trend</Text>
-              {Spark({ el, values: past, width: Math.max(8, Math.min(HISTORY_LIMIT, width - 6)), percent: s.percent })}
+              {Spark({ el, values: past, marks, width: Math.max(8, Math.min(HISTORY_LIMIT, width - 6)), percent: s.percent })}
             </Box>
             <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
               <Text color="inactive" dimColor>{trendLabel({ delta: pace.delta, perTurn: pace.perTurn })}</Text>
@@ -632,6 +790,8 @@ export const register: Register = on => {
         <Text> </Text>
         <Box flexDirection="row" columnGap={2} flexWrap="wrap">
           <Button key="ctx-refresh" label="↻ refresh" hotkey="r" plain onPress={() => refresh($)} />
+          <Button key="ctx-compact" label="⇣ compact" hotkey="c" plain onPress={() => compactNow($)} />
+          <Button key="ctx-autokeep" label={keepOn ? '◉ autokeep' : '○ autokeep'} hotkey="k" plain onPress={() => setAutokeep($, !keepOn)} />
           <Button
             key="ctx-exact"
             label={want === 'full' ? '◉ exact' : '○ exact'}

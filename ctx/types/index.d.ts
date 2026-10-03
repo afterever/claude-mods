@@ -34,6 +34,9 @@ export type CtxProjectLog = {
   sessions: { id: string; loaded: Record<string, number>; used: string[] }[]
 }
 
+/** How close auto-compaction is. */
+export type CtxWarn = 'none' | 'near' | 'imminent'
+
 /** How a breakdown is counted: estimated locally, or with the token-count API. */
 export type CtxDetail = 'summary' | 'full'
 
@@ -84,6 +87,16 @@ declare module 'claude-code' {
       usage: CtxUsage
       /** This project's log as it stood when the session started. */
       project: CtxProjectLog | null
+      /** Per `history` reading: whether a compaction came just before it. */
+      compacted: boolean[]
+      /** Files the session changed, newest last. */
+      edited: string[]
+      /** The person's latest prompts, newest last, clipped. */
+      asks: string[]
+      /** Whether every compaction gets the mod's keep instructions. */
+      autokeep: boolean
+      /** The highest warning given since the last compaction. */
+      warned: CtxWarn
     }
   }
 }
