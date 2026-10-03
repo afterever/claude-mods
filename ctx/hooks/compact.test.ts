@@ -34,9 +34,15 @@ test('warnLevel reads the turns left, or the fill when there is no pace', () => 
   expect(warnLevel(500_000, undefined, 2)).toBe('none')
   expect(warnLevel(500_000, 967_000, 40)).toBe('none')
   expect(warnLevel(500_000, 967_000, 9)).toBe('near')
-  expect(warnLevel(500_000, 967_000, 3)).toBe('imminent')
+  expect(warnLevel(650_000, 967_000, 3)).toBe('imminent')
   expect(warnLevel(830_000, 967_000, undefined)).toBe('near')
   expect(warnLevel(930_000, 967_000, undefined)).toBe('imminent')
+  // one heavy early turn sets a steep pace: no warning at a tenth full
+  expect(warnLevel(120_000, 967_000, 9)).toBe('none')
+  expect(warnLevel(120_000, 967_000, 2)).toBe('none')
+  // past the floor (40% filled for near, 60% for imminent) the pace speaks
+  expect(warnLevel(450_000, 967_000, 2)).toBe('near')
+  expect(warnLevel(600_000, 967_000, 2)).toBe('imminent')
 })
 
 test('shouldWarn fires once per step up, re-armed by a fall', () => {

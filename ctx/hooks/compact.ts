@@ -37,13 +37,18 @@ export function mergeInstructions(existing: string | undefined, keep: string): s
   return given ? `${given}\n\n${keep}` : keep
 }
 
-// How close auto-compaction is: by the turns left at the session's pace, or
-// by how much of the threshold is filled when the pace says nothing yet
+// The pace counts only once this much of the threshold is filled: early on, one
+// heavy turn sets the pace alone and would warn at a tenth full
+const PACE_FLOOR = { near: 0.4, imminent: 0.6 }
+
+// How close auto-compaction is: by the turns left at the session's pace once
+// the window is well on its way, or by how much of the threshold is filled
 export function warnLevel(tokens: number, compactAt: number | undefined, turnsLeft: number | undefined): CtxWarn {
   if (!compactAt || compactAt <= 0) return 'none'
   const filled = tokens / compactAt
-  if (filled >= 0.95 || (turnsLeft !== undefined && turnsLeft <= 3)) return 'imminent'
-  if (filled >= 0.85 || (turnsLeft !== undefined && turnsLeft <= 10)) return 'near'
+  const within = (turns: number, floor: number) => turnsLeft !== undefined && turnsLeft <= turns && filled >= floor
+  if (filled >= 0.95 || within(3, PACE_FLOOR.imminent)) return 'imminent'
+  if (filled >= 0.85 || within(10, PACE_FLOOR.near)) return 'near'
   return 'none'
 }
 

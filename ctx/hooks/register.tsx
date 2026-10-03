@@ -84,6 +84,9 @@ const ASK_LIMIT = 3
 
 // A compaction happened since the last reading: the next one carries the mark
 let pendingMark = false
+// The mod's own compaction is under way: compactNow follows it up, so the
+// session.compact hook must not do it a second time should it hear it
+let selfCompact = false
 
 // The last `n` flags, padded in front: readings from before marks existed read as unmarked
 function alignFlags(flags: readonly boolean[], n: number): boolean[] {
@@ -135,7 +138,10 @@ async function compactNow($: EngineInterface, focus?: string) {
   $.ui.toast('Compacting…')
   try {
     const before = await latestTokens($)
-    const r = await $.session.compact({ instructions: await keepText($, focus) })
+    selfCompact = true
+    const r = await $.session.compact({ instructions: await keepText($, focus) }).finally(() => {
+      selfCompact = false
+    })
     if ('skip' in r && r.skip) $.ui.toast(`Compaction skipped: ${r.skip}`)
     else if (r.messages) await afterCompaction($, before)
   } catch {
@@ -489,7 +495,7 @@ export const register: Register = on => {
       (await read($, autokeep)) && Array.isArray(e.messages) ? { ...e, instructions: mergeInstructions(e.instructions, await keepText($)) } : e
     const before = await latestTokens($)
     const r = await next(keep)
-    if (e.trigger !== 'precompute' && r.messages) void afterCompaction($, before)
+    if (e.trigger !== 'precompute' && r.messages && !selfCompact) void afterCompaction($, before)
     return r
   })
 
@@ -552,6 +558,8 @@ export const register: Register = on => {
     const marks = await read($, compacted)
     const w = await warning($)
     const hot = w.level === 'imminent' ? 'error' : 'warning'
+    // the warning badge takes the sparkline's place on a band under 100 columns
+    const roomy = wide && (w.level === 'none' || (e.props.bodyColumns ?? 80) >= 100)
     return (
       <Box flexDirection="column">
         <Box flexDirection="row" justifyContent="space-between" width="100%" columnGap={2}>
@@ -560,8 +568,8 @@ export const register: Register = on => {
               {w.level === 'none' ? <Text dimColor>ctx</Text> : <Text color={hot} bold>ctx</Text>}
               {Bar({ el, runs: barRuns(s, barWidth) })}
               {Fill({ el, s })}
-              {wide && past.length >= 2 && Spark({ el, values: past, marks, width: 10, percent: s.percent })}
-              {wide && step !== undefined && step !== 0 && <Text dimColor>{fmtDelta(step)}</Text>}
+              {roomy && past.length >= 2 && Spark({ el, values: past, marks, width: 10, percent: s.percent })}
+              {roomy && step !== undefined && step !== 0 && <Text dimColor>{fmtDelta(step)}</Text>}
               {w.level !== 'none' && w.compactAt && (
                 <Text color={hot} bold>
                   {warnBadge(w.tokens, w.compactAt, w.turnsLeft)}
