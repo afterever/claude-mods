@@ -15,7 +15,7 @@ Claude Code's context window is the budget every session spends. When it fills, 
 
 Each feature below maps to one of these questions. A feature that answered none of them was not added.
 
-From 0.6.0 the same questions are also answered in dollars. Cost is not a fifth question: every request sends the whole window again, so cost is the price of the window itself. The rule that keeps this in scope is **ctx prices context decisions, not the session**. A dollar figure belongs here only if it changes a decision about the window (compact now, turn a server off, compact before resuming). Session and daily totals are billing, and the status line already shows them.
+From 0.6.0 the same questions are also answered in dollars. Cost is not a fifth question: every request sends the whole window again, so cost is the price of the window itself. The rule that keeps this in scope is **ctx prices context decisions, not the session**. A dollar figure belongs here only if it changes a decision about the window (compact now, turn a server off, compact before resuming). Session and daily totals are billing, and `/cost` and status lines already show them, so ctx has no billing display of its own. The one session figure it does draw (0.6.1) is the session total in the pane, there only as the denominator for the last turn's dollars. The rule is not allowed to lean on what else the person has installed: it once did ("the status line already shows them"), which was true only where a status line like claude-hud was set up.
 
 ## Principles
 
@@ -210,6 +210,14 @@ With that evidence, and idle time past the lifetime, the pane shows `⚠ cache l
 
 **The `turn.step` hook is observe-only.** It sits in the stream of every model response, so it does `yield* next(e)` and reads the result afterwards, inside a try/catch. It never touches a chunk, and nothing in it can throw into the response.
 
+### 0.6.1: a denominator and a count
+
+Two figures the pane showed without a reference point, and one cosmetic tightening. No new state, no new events.
+
+- **Session total, in the pane only.** `session $14.20 · last turn was 13% of it` is the first line of the cost block. 0.6.0 left the session total out because claude-hud already showed it, but that assumed a setup: Claude Code's default terminal footer shows no cost, and `/cost` only answers when asked. The total earns its place as the denominator for figures the pane already prints (`last turn +$1.84`, `~$58.5 until auto-compact`, `waiting costs ~$76 more`), which mean little without knowing what the session has spent. It stays out of the band, which is one line where the turn's dollars already compete for width and which would repeat a status line for the people who have one, and out of the Desktop footer, which keeps to one number. It is the ledger ctx already records (`spend.ledger`), the same figure as `/cost`, subagents and compactions included. `/ctx cost off` hides it with every other dollar figure. A share under 1% reads `<1%`, and the share never passes 100%.
+- **Turn count, on the trend line.** `trend ▁▁▇█ · 23 turns`. The sparkline can't be counted by eye: the band draws at most 10 glyphs, 48 readings are kept, and a repeated reading adds nothing. The number is the engine's own `$.session.turns()`, read when the pane draws. The 15-second tick redraws the pane, so a count that trails by a turn corrects itself. The total only: a "since compaction" count was considered and left out. The sparkline gives up the label's columns, so the line doesn't wrap in a narrow dock. A failed call hides the count and nothing else.
+- **The fill text is tighter.** `65.1k / 1M 7%` became `65.1k/1M·7%`, two columns saved. The `·` is the cost suffix's separator, and also the bar's free-space glyph. It is told apart by being dim, sitting after the label, and the percent beside it being bold and colored. The pane's header draws the same component, so it matches.
+
 ## Testing
 
 - **Unit tests** (`fmt.test.ts`, `usage.test.ts`, `compact.test.ts`, `cost.test.ts`) cover every rule with a number in it. The price fit is tested against Opus 5.5's list prices. It has to recover them exactly from clean turns, and when a mispriced turn is mixed in. With 1% noise and a small extra charge on most turns, it has to come within 5% (it lands within about 1%). When a behaviour was found wrong, a test pinning the right behaviour came first (the pace floor's `warnLevel(120_000, 967_000, 9)` → `none`).
@@ -231,6 +239,7 @@ Before every release: `claude plugin test ctx`, `claude plugin validate .`, and 
 - **Other billed calls inside a turn** (a tool's own model call, server tools with per-use fees) count toward that turn's dollars, as they should. The fit drops such turns as samples.
 - **Cache lifetime needs evidence.** "Likely expired" shows only after the session has seen a long gap followed by a hit or a miss. A miss for another reason (a model switch, a changed tool list) after a long gap can teach the five-minute lifetime wrongly. A later hit after a long gap corrects it.
 - **Idle overhead prices old sessions at today's rates**, the current model's. Sessions logged before 0.6.0 are left out.
+- **The turn count is not seen live.** Whether `session.turns()` counts a resumed conversation's earlier turns, and whether it has counted the turn that just ended when the pane redraws, is assumed. Check in a real session: it should match the prompts answered, and after a resume it shows whether the count starts at 0 or at the old total. The `·` beside the percent can only be judged on screen, since the kit can't check paint.
 - **Fast mode bills the same model id at twice the price.** Fast-mode turns mixed with standard ones fit no single set of prices, so the fit drops them as outliers or, past half the samples, gives no rates at all. Forward-looking figures then stay hidden; the measured ones still show.
 
 ## Release history
@@ -243,3 +252,4 @@ Before every release: `claude plugin test ctx`, `claude plugin validate .`, and 
 | 0.4.0 | Heaviest results; unused overhead with per-project idle streaks |
 | 0.5.0 | Auto-compact warning; guided compact; autokeep |
 | 0.6.0 | What the context costs: last-turn dollars from the ledger, learned prices, carrying cost, compaction payback, cache expiry, idle overhead in dollars |
+| 0.6.1 | Reference points: the session total (pane) as the turn's denominator, a turn count beside the trend, a tighter fill text in the band |

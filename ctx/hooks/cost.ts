@@ -273,6 +273,18 @@ export function turnLine(t: CtxTurn, sub: number | undefined): string {
   return `last turn +${fmtUsd(t.usd)} (${parts.join(' · ')})`
 }
 
+// "session $14.20 · last turn was 13% of it": the total is the denominator for
+// the turn's dollars, not a billing figure
+export function sessionLine(total: number, last: number | undefined): string | undefined {
+  if (!Number.isFinite(total) || total <= 0) return undefined
+  let line = `session ${fmtUsd(total)}`
+  if (last !== undefined && last > 0) {
+    const share = Math.min(100, Math.round((last / total) * 100))
+    line += ` · last turn was ${share < 1 ? '<1' : share}% of it`
+  }
+  return line
+}
+
 // "carrying ~$0.08/request · ~$0.49/turn · ~$58.5 until auto-compact"
 export function carryLine(tokens: number, r: Rates, rpt: number | undefined, pace: { perTurn?: number; turnsLeft?: number }): string {
   const per = carry(tokens, r)
