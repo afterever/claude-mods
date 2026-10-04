@@ -158,6 +158,8 @@ for (const surface of ['terminal', 'desktop'] as const) {
     })
     expect(await ui.find({ key: 'ctx-toggle' })).toBeDefined()
     expect(await ui.find({ text: '4%' })).toBeDefined()
+    // the tokens hug the slash, and a dot parts them from the percent
+    expect(await ui.find({ text: '36.5k/1M·' })).toBeDefined()
   })
 }
 
@@ -183,6 +185,8 @@ test('the pane draws the trend from the turns the engine measured', async ($, on
   expect(await ui.find({ text: 'trend' })).toBeDefined()
   expect(await ui.find({ text: '▁▄▅' })).toBeDefined()
   expect(await ui.find({ text: '█' })).toBeDefined()
+  // the engine's count of finished turns (the test world says 3), not the sparkline's steps
+  expect(await ui.find({ text: '· 3 turns' })).toBeDefined()
   expect(await ui.find({ text: '+6.5k last turn · ~5.5k/turn' })).toBeDefined()
   // (967k - 36.5k) / 5.5k a turn
   expect(await ui.find({ text: '· ~170 turns to auto-compact' })).toBeDefined()
@@ -432,6 +436,8 @@ test('a turn with a subagent shows its share once the prices are learned', async
   const all = await texts(pane)
   const total = priced(main[0]!) + priced(main[1]!) + subCost
   expect(all).toContain(`last turn +${fmtUsd(total)} (2 requests · 1 subagent ~$0.31 · cache 99% hit)`)
+  // the session's ledger, with the turn as its share
+  expect(all).toContain(`session ${fmtUsd(ledger.usd)} · last turn was ${Math.round((total / ledger.usd) * 100)}% of it`)
   // 232k re-read at $0.20 a million, 8 requests over 4 turns
   expect(all.some(t => t.startsWith('carrying ~$0.05/request · ~$0.09/turn'))).toBe(true)
 })
@@ -519,6 +525,9 @@ test('cost off takes every dollar figure away', async ($, on) => {
   expect(toasts).toContain('Cost off: tokens only')
   expect(stored.cost).toBe(false)
   expect((await texts(band)).some(t => t.startsWith('+$'))).toBe(false)
+  // nor does the pane keep the session total
+  const pane = await $.ui.mount({ plugin: 'ctx', surface: 'terminal', component: 'Pane', requestId: 'ctx', props: paneProps(60) })
+  expect((await texts(pane)).some(t => t.startsWith('session $'))).toBe(false)
 })
 
 test("a fresh session's first turn writes the prompt afresh, and nothing calls it a miss", async ($, on) => {

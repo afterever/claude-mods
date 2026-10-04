@@ -21,6 +21,7 @@ import {
   median,
   missLine,
   rewrite,
+  sessionLine,
   shownTurn,
   startTurn,
   stepDone,
@@ -396,12 +397,12 @@ function Bar({ el, runs }: { el: El; runs: BarRun[] }) {
   )
 }
 
-// "81.9k / 1M" dim, then the percent bold in green, amber or red
+// "81.9k/1M·" dim, then the percent bold in green, amber or red
 function Fill({ el, s }: { el: El; s: CtxSnapshot }) {
   const { Box, Text } = el
   return (
-    <Box flexDirection="row" columnGap={1} flexShrink={0}>
-      <Text dimColor>{`${fmtTokens(s.total)} / ${fmtTokens(s.max)}`}</Text>
+    <Box flexDirection="row" flexShrink={0}>
+      <Text dimColor>{`${fmtTokens(s.total)}/${fmtTokens(s.max)}·`}</Text>
       <Text bold color={fillColor(s.percent)}>{`${Math.round(s.percent)}%`}</Text>
     </Box>
   )
@@ -825,6 +826,15 @@ export const register: Register = on => {
     }
     const marker = compactMarker(s, width)
     const pace = trend(past, s.compactAt)
+    // the engine's own count of finished turns; the sparkline can't be counted
+    // by eye (it is capped and skips repeats). A failed call just hides it.
+    let turnsDone: number | undefined
+    try {
+      turnsDone = await $.session.turns()
+    } catch {
+      turnsDone = undefined
+    }
+    const turnCount = turnsDone && turnsDone > 0 ? `· ${turnsDone} ${turnsDone === 1 ? 'turn' : 'turns'}` : undefined
 
     // What this session has paid for and not used: loaded MCP servers it never
     // called, skills and agent types listed for the model and never invoked
@@ -835,6 +845,8 @@ export const register: Register = on => {
     const money = costShown && sp.ledger !== undefined
     const rates = money ? ratesOf(sp) : undefined
     const lastTurn = money ? shownTurn(sp) : undefined
+    // the ledger's total is the denominator for the turn's dollars below it
+    const sessionText = money && sp.ledger !== undefined ? sessionLine(sp.ledger, lastTurn?.usd) : undefined
     const winTokens = past[past.length - 1] ?? s.total
     const rpt = perTurn(sp)
     const after = afterCompact(sp, s)
@@ -889,7 +901,8 @@ export const register: Register = on => {
           <Box flexDirection="column">
             <Box flexDirection="row" columnGap={1}>
               <Text color="inactive" dimColor>trend</Text>
-              {Spark({ el, values: past, marks, width: Math.max(8, Math.min(HISTORY_LIMIT, width - 6)), percent: s.percent })}
+              {Spark({ el, values: past, marks, width: Math.max(8, Math.min(HISTORY_LIMIT, width - 6 - (turnCount ? turnCount.length + 1 : 0))), percent: s.percent })}
+              {turnCount && <Text color="inactive" dimColor>{turnCount}</Text>}
             </Box>
             <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
               <Text color="inactive" dimColor>{trendLabel({ delta: pace.delta, perTurn: pace.perTurn })}</Text>
@@ -901,8 +914,9 @@ export const register: Register = on => {
             </Box>
           </Box>
         )}
-        {(rates || lastTurn) && (
+        {(sessionText || rates || lastTurn) && (
           <Box flexDirection="column">
+            {sessionText && muted(sessionText)}
             {rates && muted(carryLine(winTokens, rates, rpt, pace))}
             {lastTurn && (
               <Text dimColor wrap="wrap">

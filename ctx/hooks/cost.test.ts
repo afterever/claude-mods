@@ -15,6 +15,7 @@ import {
   ledgerAt,
   median,
   price,
+  sessionLine,
   shownTurn,
   startTurn,
   stepDone,
@@ -250,6 +251,20 @@ test('the band says only what is out of the ordinary', () => {
   expect(bandSuffix(turn(), 130, { median: 1.5 })[0]!.tone).toBe('plain')
   expect(median([3, 1, 2])).toBe(2)
   expect(median([1, 2])).toBe(1.5)
+})
+
+test('the session total is the denominator for the last turn', () => {
+  expect(sessionLine(14.2, 1.84)).toBe('session $14.2 · last turn was 13% of it')
+  // no turn yet, or one that cost nothing: the total stands alone
+  expect(sessionLine(14.2, undefined)).toBe('session $14.2')
+  expect(sessionLine(14.2, 0)).toBe('session $14.2')
+  // a sliver of a big session isn't rounded down to nothing
+  expect(sessionLine(500, 0.5)).toBe('session $500 · last turn was <1% of it')
+  // the share never passes the whole
+  expect(sessionLine(1, 2)).toBe('session $1.00 · last turn was 100% of it')
+  // nothing spent, nothing to say
+  expect(sessionLine(0, 1)).toBeUndefined()
+  expect(sessionLine(Number.NaN, 1)).toBeUndefined()
 })
 
 test('the pane spells the turn out', () => {
