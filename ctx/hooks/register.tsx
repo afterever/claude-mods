@@ -1,10 +1,34 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, SessionContextBreakdown, Timer } from 'claude-code'
 
-import type { CtxDetail, CtxProjectLog, CtxServer, CtxSnapshot, CtxWarn } from '../types'
+import type { CtxDetail, CtxProjectLog, CtxSample, CtxServer, CtxSnapshot, CtxSpend, CtxWarn } from '../types'
 import type { BarRun } from './fmt'
+import type { ApiUsage, Piece, Rates } from './cost'
 import { addRecent, clipAsk, keepInstructions, mergeInstructions, shouldWarn, warnBadge, warnLevel, warnText } from './compact'
-import { addEater, addUsage, calibrate, DEFAULT_CPT, EMPTY_USAGE, estimateTokens, idleStreak, logSession, toolLabel, usageOf } from './usage'
+import { addEater, addUsage, calibrate, DEFAULT_CPT, EMPTY_USAGE, estimateTokens, idleSessions, logSession, toolLabel, usageOf } from './usage'
+import {
+  bandSuffix,
+  carry,
+  carryLine,
+  compacted as noteCompacted,
+  compactPlan,
+  EMPTY_SPEND,
+  fitRates,
+  fmtIdle,
+  fmtUsd,
+  idleCost,
+  ledgerAt,
+  median,
+  missLine,
+  rewrite,
+  shownTurn,
+  startTurn,
+  stepDone,
+  subUsd,
+  ttlMs,
+  turnDone,
+  turnLine,
+} from './cost'
 import {
   ago,
   barRuns,
@@ -66,9 +90,10 @@ async function logProject($: EngineInterface) {
     const loaded: Record<string, number> = {}
     for (const v of s.servers) if (v.tokens > 0) loaded[v.key] = v.tokens
     const used = Object.keys((await read($, usage)).mcp)
+    const { requests, misses } = await read($, spend)
     const key = await projectKey($)
     const log = (await $.store.get(key)) as CtxProjectLog | undefined
-    await $.store.set(key, logSession(log, await $.session.id(), loaded, used))
+    await $.store.set(key, logSession(log, await $.session.id(), loaded, used, { requests, misses }))
   } catch {
     // the log is a convenience: the pane still counts this session
   }
@@ -81,6 +106,43 @@ const autokeep = atom({ plugin: 'ctx', key: 'autokeep' } as const, false)
 const warned = atom({ plugin: 'ctx', key: 'warned' } as const, 'none')
 const EDIT_LIMIT = 12
 const ASK_LIMIT = 3
+// What the session spent, per turn, from the engine's cost ledger
+const spend = atom({ plugin: 'ctx', key: 'spend' } as const, EMPTY_SPEND)
+const costOn = atom({ plugin: 'ctx', key: 'costOn' } as const, true)
+// A compaction's summary when none has been seen yet, in tokens
+const SUMMARY_TOKENS = 8000
+
+// The prices of the model the main loop answers with, once the ledger has taught them
+function ratesOf(s: CtxSpend): Rates | undefined {
+  const model = shownTurn(s)?.model || s.cur?.model
+  return model ? fitRates(s.samples, model) : undefined
+}
+
+// What the window will be after a compaction: what the last one left, else
+// everything but the messages plus a summary
+function afterCompact(s: CtxSpend, snapshot: CtxSnapshot | null): number | undefined {
+  if (s.compact?.after) return s.compact.after
+  const messages = snapshot?.rows.find(r => r.name === 'Messages')
+  if (!snapshot || !messages) return undefined
+  const fixed = snapshot.rows.filter(r => r.kind === 'used' && r !== messages).reduce((a, r) => a + r.tokens, 0)
+  return fixed + (s.compact?.summary ?? SUMMARY_TOKENS)
+}
+
+// Main-loop requests per finished turn
+function perTurn(s: CtxSpend): number | undefined {
+  return s.turns > 0 ? s.requests / s.turns : undefined
+}
+
+// After a compaction the ledger says what it cost, and the result how big the window is now
+async function priceCompaction($: EngineInterface, r: { tokensAfter?: number; usage?: ApiUsage }, ledger: number | undefined) {
+  try {
+    const now = (await $.session.usage()).cost?.usd
+    const usd = now !== undefined && ledger !== undefined && now > ledger ? now - ledger : undefined
+    await update($, spend, s => noteCompacted(now !== undefined ? ledgerAt(s, now) : s, { after: r.tokensAfter, usd, summary: r.usage?.output_tokens }))
+  } catch {
+    // the toast goes out without the price
+  }
+}
 
 // A compaction happened since the last reading: the next one carries the mark
 let pendingMark = false
@@ -129,7 +191,15 @@ async function afterCompaction($: EngineInterface, before: number | undefined) {
   await update($, warned, () => 'none')
   await refresh($)
   const s = await read($, snap)
-  if (before !== undefined && s) $.ui.toast(`Compacted ${fmtTokens(before)} → ~${fmtTokens(s.total)} (${fmtDelta(s.total - before)})`)
+  if (before === undefined || !s) return
+  let text = `Compacted ${fmtTokens(before)} → ~${fmtTokens(s.total)} (${fmtDelta(s.total - before)})`
+  if (await read($, costOn)) {
+    const sp = await read($, spend)
+    const r = ratesOf(sp)
+    if (sp.compact?.usd) text += ` · summary ${fmtUsd(sp.compact.usd)}`
+    if (r) text += ` · now ~${fmtUsd(carry(s.total, r))}/request (was ~${fmtUsd(carry(before, r))})`
+  }
+  $.ui.toast(text)
 }
 
 // Compacts now, the summary told what this session is in the middle of. The
@@ -138,12 +208,16 @@ async function compactNow($: EngineInterface, focus?: string) {
   $.ui.toast('Compacting…')
   try {
     const before = await latestTokens($)
+    const ledger = (await read($, spend)).ledger
     selfCompact = true
     const r = await $.session.compact({ instructions: await keepText($, focus) }).finally(() => {
       selfCompact = false
     })
     if ('skip' in r && r.skip) $.ui.toast(`Compaction skipped: ${r.skip}`)
-    else if (r.messages) await afterCompaction($, before)
+    else if (r.messages) {
+      await priceCompaction($, r, ledger)
+      await afterCompaction($, before)
+    }
   } catch {
     $.ui.toast('Could not compact right now')
   }
@@ -157,6 +231,16 @@ async function setAutokeep($: EngineInterface, value: boolean) {
     // on for this session still
   }
   $.ui.toast(value ? 'Autokeep on: every compaction keeps your files and latest requests' : 'Autokeep off')
+}
+
+async function setCost($: EngineInterface, value: boolean) {
+  await update($, costOn, () => value)
+  try {
+    await $.store.set('cost', value)
+  } catch {
+    // for this session still
+  }
+  $.ui.toast(value ? 'Cost on: dollar figures beside the tokens' : 'Cost off: tokens only')
 }
 
 // Opens a memory file with the host's default app for it
@@ -352,6 +436,26 @@ function Spark({ el, values, marks, width, percent }: { el: El; values: readonly
   )
 }
 
+// Pieces of text, each in its tone: the band's last-turn suffix
+function Pieces({ el, pieces }: { el: El; pieces: Piece[] }) {
+  const { Box, Text } = el
+  return (
+    <Box flexDirection="row" flexShrink={0}>
+      {pieces.map(p =>
+        p.tone === 'plain' ? (
+          <Text>{p.text}</Text>
+        ) : p.tone === 'dim' ? (
+          <Text dimColor>{p.text}</Text>
+        ) : p.tone === 'sub' ? (
+          <Text color="permission">{p.text}</Text>
+        ) : (
+          <Text color={p.tone} bold>{p.text}</Text>
+        ),
+      )}
+    </Box>
+  )
+}
+
 function Swatch({ el, kind, color, scope }: { el: El; kind: string; color: string; scope: string }) {
   const { Text } = el
   const hover = { scope: SCOPE + scope, inverse: true }
@@ -378,8 +482,8 @@ export const register: Register = on => {
     try {
       await $.command.register({
         name: 'ctx',
-        description: 'Context window details (/ctx opens the pane; /ctx show|hide|toggle|exact|quick|compact [focus]|autokeep [on|off])',
-        argumentHint: '[show|hide|toggle|exact|quick|compact [focus]|autokeep [on|off]]',
+        description: 'Context window details (/ctx opens the pane; /ctx show|hide|toggle|exact|quick|compact [focus]|autokeep [on|off]|cost [on|off])',
+        argumentHint: '[show|hide|toggle|exact|quick|compact [focus]|autokeep [on|off]|cost [on|off]]',
         immediate: true,
       })
     } catch {
@@ -402,6 +506,17 @@ export const register: Register = on => {
       // autokeep stays off
     }
     try {
+      // the ledger as it stands, and the prices earlier sessions taught
+      await update($, costOn, () => true)
+      if ((await $.store.get('cost')) === false) await update($, costOn, () => false)
+      const saved = (await $.store.get('costSamples')) as CtxSample[] | undefined
+      if (Array.isArray(saved)) await update($, spend, s => (s.samples.length ? s : { ...s, samples: saved }))
+      const usd = (await $.session.usage()).cost?.usd
+      if (usd !== undefined) await update($, spend, s => ledgerAt(s, usd))
+    } catch {
+      // no ledger: the dollar figures stay out
+    }
+    try {
       // reopen where the person left it; unasked, it waits below 144 columns
       const saved = await $.store.get('visible')
       await update($, isVisible, () => saved === true)
@@ -419,6 +534,9 @@ export const register: Register = on => {
   // main-thread turn, a compaction, a /clear): count again then, never on a timer
   on('session.measure', async ($, e, next) => {
     const r = await next(e)
+    // the cost ledger, real dollars: the running turn has spent what it grew by
+    const usd = e.cost?.usd
+    if (usd !== undefined) await update($, spend, s => ledgerAt(s, usd))
     if (e.changed.includes('context')) {
       // the API's own figure, so switching between exact and quick adds no jumps
       const tokens = e.context.tokens
@@ -479,6 +597,54 @@ export const register: Register = on => {
     return r
   })
 
+  // A main-loop turn begins (subagents raise none): the one before is frozen,
+  // and a clean one is kept, here and for later sessions, to learn prices from
+  on('turn.start', async ($, e, next) => {
+    try {
+      const was = (await read($, spend)).samples
+      const s = await update($, spend, startTurn)
+      // state hands back copies: a new sample shows in the length or the newest one
+      if (s.samples.length !== was.length || s.samples[s.samples.length - 1]?.usd !== was[was.length - 1]?.usd) {
+        await $.store.set('costSamples', s.samples)
+      }
+    } catch {
+      // the turn runs whatever the count does
+    }
+    return next(e)
+  })
+
+  // Every model request, main loop and subagents: its token counts as the API
+  // reported them. Observe only: the response streams through untouched
+  on('turn.step', async function* ($, e, next) {
+    let startedAt = 0
+    try {
+      startedAt = await $.clock.now()
+    } catch {
+      // timing is only evidence about the cache
+    }
+    const r = yield* next(e)
+    try {
+      const u = r.usage
+      if (u) {
+        const endedAt = await $.clock.now()
+        await update($, spend, s => stepDone(s, u, { ...(e.agentId ? { agentId: e.agentId } : {}), startedAt, endedAt }))
+      }
+    } catch {
+      // counting never gets in the way of the response
+    }
+    return r
+  })
+
+  on('turn.complete', async ($, e, next) => {
+    const r = await next(e)
+    try {
+      await update($, spend, s => turnDone(s, e.agentId))
+    } catch {
+      // the answer stands either way
+    }
+    return r
+  })
+
   // The person's latest requests, for what a compaction must keep
   on('prompt.submit', async ($, e, next) => {
     const text = e.text.trim()
@@ -494,8 +660,9 @@ export const register: Register = on => {
     const keep =
       (await read($, autokeep)) && Array.isArray(e.messages) ? { ...e, instructions: mergeInstructions(e.instructions, await keepText($)) } : e
     const before = await latestTokens($)
+    const ledger = (await read($, spend)).ledger
     const r = await next(keep)
-    if (e.trigger !== 'precompute' && r.messages && !selfCompact) void afterCompaction($, before)
+    if (e.trigger !== 'precompute' && r.messages && !selfCompact) void priceCompaction($, r, ledger).then(() => afterCompaction($, before))
     return r
   })
 
@@ -509,6 +676,11 @@ export const register: Register = on => {
     if (arg === 'autokeep') {
       const v = rest[0]?.toLowerCase()
       await setAutokeep($, v === 'on' ? true : v === 'off' ? false : !(await read($, autokeep)))
+      return {}
+    }
+    if (arg === 'cost') {
+      const v = rest[0]?.toLowerCase()
+      await setCost($, v === 'on' ? true : v === 'off' ? false : !(await read($, costOn)))
       return {}
     }
     if (arg === 'hide') {
@@ -559,7 +731,13 @@ export const register: Register = on => {
     const w = await warning($)
     const hot = w.level === 'imminent' ? 'error' : 'warning'
     // the warning badge takes the sparkline's place on a band under 100 columns
-    const roomy = wide && (w.level === 'none' || (e.props.bodyColumns ?? 80) >= 100)
+    const cols = e.props.bodyColumns ?? 80
+    const roomy = wide && (w.level === 'none' || cols >= 100)
+    // the last turn's dollars, from the ledger; nothing where there is none
+    const sp = await read($, spend)
+    const money = (await read($, costOn)) && sp.ledger !== undefined
+    const lastTurn = money ? shownTurn(sp) : undefined
+    const rates = money ? ratesOf(sp) : undefined
     return (
       <Box flexDirection="column">
         <Box flexDirection="row" justifyContent="space-between" width="100%" columnGap={2}>
@@ -570,11 +748,15 @@ export const register: Register = on => {
               {Fill({ el, s })}
               {roomy && past.length >= 2 && Spark({ el, values: past, marks, width: 10, percent: s.percent })}
               {roomy && step !== undefined && step !== 0 && <Text dimColor>{fmtDelta(step)}</Text>}
+              {wide &&
+                lastTurn &&
+                Pieces({ el, pieces: bandSuffix(lastTurn, cols, { median: sp.usds.length >= 3 ? median(sp.usds) : undefined, subUsd: subUsd(lastTurn, rates) }) })}
               {w.level !== 'none' && w.compactAt && (
                 <Text color={hot} bold>
                   {warnBadge(w.tokens, w.compactAt, w.turnsLeft)}
                 </Text>
               )}
+              {w.level !== 'none' && rates && cols >= 100 && <Text dimColor>{`· ~${fmtUsd(carry(w.tokens, rates))}/request`}</Text>}
               {old && <Text color="warning">⚠ stale</Text>}
             </Box>
           ) : (
@@ -646,9 +828,30 @@ export const register: Register = on => {
 
     // What this session has paid for and not used: loaded MCP servers it never
     // called, skills and agent types listed for the model and never invoked
+    // Dollar figures: what the last turn spent (real, from the ledger), and what
+    // the window costs to keep, rewrite and compact (at the learned prices)
+    const sp = await read($, spend)
+    const costShown = await read($, costOn)
+    const money = costShown && sp.ledger !== undefined
+    const rates = money ? ratesOf(sp) : undefined
+    const lastTurn = money ? shownTurn(sp) : undefined
+    const winTokens = past[past.length - 1] ?? s.total
+    const rpt = perTurn(sp)
+    const after = afterCompact(sp, s)
+    const plan = rates && after !== undefined && winTokens > 2 * after ? compactPlan(winTokens, after, rates, sp.compact?.summary ?? SUMMARY_TOKENS) : undefined
+    const ttl = ttlMs(sp)
+    const idleMs = sp.lastStepAt !== undefined ? now - sp.lastStepAt : 0
+    const cold = money && ttl !== undefined && sp.lastStepAt !== undefined && idleMs >= ttl
+    const muted = (text: string) => <Text color="inactive" dimColor wrap="wrap">{text}</Text>
+
     const idleServers = s.servers
       .filter(v => v.tokens > 0 && !calls.mcp[v.key])
-      .map(v => ({ ...v, streak: idleStreak(log ?? undefined, v.key) + 1 }))
+      .map(v => {
+        const run = idleSessions(log ?? undefined, v.key)
+        // this session counts too, with what it has spent so far
+        const cost = rates ? idleCost(v.tokens, [...run, { requests: sp.requests, misses: sp.misses }], rates) : undefined
+        return { ...v, streak: run.length + 1, cost }
+      })
     const idleSkills = s.skills.filter(k => !calls.skills[k.name])
     const idleAgents = s.agents.filter(a => !calls.agents[a.name])
     const sumOf = (xs: { tokens: number }[]) => xs.reduce((a, x) => a + x.tokens, 0)
@@ -670,6 +873,16 @@ export const register: Register = on => {
             {(w.level === 'imminent' ? '⚠ Auto-compact is close' : '⚠ Auto-compact is coming') + ' · c compacts on your terms'}
           </Text>
         )}
+        {cold && (
+          <Box flexDirection="column">
+            <Text color="warning" bold wrap="wrap">{`⚠ cache likely expired · idle ${fmtIdle(idleMs)}`}</Text>
+            {muted(
+              `  next request re-writes ${fmtTokens(winTokens)}` +
+                (rates ? ` ≈ ~${fmtUsd(rewrite(winTokens, rates))} (warm ~${fmtUsd(carry(winTokens, rates))})` : ''),
+            )}
+            {rates && after !== undefined && after < winTokens && muted(`  c compact first: re-writes ~${fmtTokens(after)} ≈ ~${fmtUsd(rewrite(after, rates))}`)}
+          </Box>
+        )}
         {Bar({ el, runs: barRuns(s, width) })}
         {marker && <Text color="inactive" dimColor>{marker}</Text>}
         {past.length >= 2 && (
@@ -686,6 +899,31 @@ export const register: Register = on => {
                 </Text>
               )}
             </Box>
+          </Box>
+        )}
+        {(rates || lastTurn) && (
+          <Box flexDirection="column">
+            {rates && muted(carryLine(winTokens, rates, rpt, pace))}
+            {lastTurn && (
+              <Text dimColor wrap="wrap">
+                {turnLine(lastTurn, lastTurn.subRuns > 0 ? subUsd(lastTurn, rates) : undefined)}
+              </Text>
+            )}
+            {lastTurn && lastTurn.missTokens > 0 && (
+              <Text color="error" wrap="wrap">
+                {missLine(lastTurn, rates)}
+              </Text>
+            )}
+            {plan &&
+              muted(
+                `compact now saves ~${fmtUsd(plan.saving)}/request · ~${fmtUsd(plan.once)} once · pays back in ~${plan.payback} ${plan.payback === 1 ? 'request' : 'requests'}`,
+              )}
+            {plan &&
+              rates &&
+              rpt &&
+              after !== undefined &&
+              pace.turnsLeft !== undefined &&
+              muted(`at auto in ~${pace.turnsLeft} turns · waiting costs ~${fmtUsd(carry(winTokens - after, rates) * rpt * pace.turnsLeft)} more`)}
           </Box>
         )}
         <Text> </Text>
@@ -774,16 +1012,23 @@ export const register: Register = on => {
         {section('dead', 'd', 'Unused so far', deadTokens, String(idleServers.length + idleSkills.length + idleAgents.length))}
         {open.includes('dead') &&
           idleServers.map(v => (
-            <Box flexDirection="row" width="100%" columnGap={2}>
-              <Box flexGrow={1} flexShrink={1}>
-                <Text dimColor wrap="truncate-end">{'    ' + v.name}</Text>
+            <Box flexDirection="column" width="100%">
+              <Box flexDirection="row" width="100%" columnGap={2}>
+                <Box flexGrow={1} flexShrink={1}>
+                  <Text dimColor wrap="truncate-end">{'    ' + v.name}</Text>
+                </Box>
+                {v.streak >= 2 ? (
+                  <Text color={v.streak >= 5 ? 'warning' : 'inactive'} dimColor={v.streak < 5}>{`idle ${v.streak} sessions`}</Text>
+                ) : (
+                  <Text color="inactive" dimColor>no calls</Text>
+                )}
+                <Text dimColor>{fmtTokens(v.tokens).padStart(6)}</Text>
               </Box>
-              {v.streak >= 2 ? (
-                <Text color={v.streak >= 5 ? 'warning' : 'inactive'} dimColor={v.streak < 5}>{`idle ${v.streak} sessions`}</Text>
-              ) : (
-                <Text color="inactive" dimColor>no calls</Text>
+              {v.cost && (
+                <Text color="inactive" dimColor wrap="truncate-end">
+                  {`      ~${fmtUsd(v.cost.total)} so far` + (v.cost.n > 1 ? ` · ~${fmtUsd(v.cost.perSession)}/session` : '')}
+                </Text>
               )}
-              <Text dimColor>{fmtTokens(v.tokens).padStart(6)}</Text>
             </Box>
           ))}
         {open.includes('dead') && s.skills.length > 0 &&
@@ -800,6 +1045,7 @@ export const register: Register = on => {
           <Button key="ctx-refresh" label="↻ refresh" hotkey="r" plain onPress={() => refresh($)} />
           <Button key="ctx-compact" label="⇣ compact" hotkey="c" plain onPress={() => compactNow($)} />
           <Button key="ctx-autokeep" label={keepOn ? '◉ autokeep' : '○ autokeep'} hotkey="k" plain onPress={() => setAutokeep($, !keepOn)} />
+          <Button key="ctx-cost" label={costShown ? '◉ cost' : '○ cost'} hotkey="p" plain onPress={() => setCost($, !costShown)} />
           <Button
             key="ctx-exact"
             label={want === 'full' ? '◉ exact' : '○ exact'}

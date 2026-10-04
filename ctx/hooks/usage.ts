@@ -84,21 +84,34 @@ export const EMPTY_USAGE: CtxUsage = { mcp: {}, skills: {}, agents: {} }
 
 const LOG_SESSIONS = 30
 
+type LoggedSession = CtxProjectLog['sessions'][number]
+
 // Writes this session's line into the project's log: the MCP servers it had
-// loaded (with their tokens) and the ones it called; the newest session last
-export function logSession(log: CtxProjectLog | undefined, id: string, loaded: Record<string, number>, used: readonly string[]): CtxProjectLog {
+// loaded (with their tokens), the ones it called, and its requests and cache
+// misses, which price what an idle server cost; the newest session last
+export function logSession(
+  log: CtxProjectLog | undefined,
+  id: string,
+  loaded: Record<string, number>,
+  used: readonly string[],
+  spent?: { requests: number; misses: number },
+): CtxProjectLog {
   const sessions = (log?.sessions ?? []).filter(s => s.id !== id)
-  sessions.push({ id, loaded, used: [...used] })
+  sessions.push({ id, loaded, used: [...used], ...(spent ? { requests: spent.requests, misses: spent.misses } : {}) })
   return { sessions: sessions.slice(-LOG_SESSIONS) }
 }
 
-// How many sessions in a row, newest back, had the server loaded and never
+// The sessions in a row, newest back, that had the server loaded and never
 // called it; a session without it loaded neither counts nor breaks the run
-export function idleStreak(log: CtxProjectLog | undefined, server: string): number {
-  let n = 0
+export function idleSessions(log: CtxProjectLog | undefined, server: string): LoggedSession[] {
+  const run: LoggedSession[] = []
   for (const s of [...(log?.sessions ?? [])].reverse()) {
     if (s.used.includes(server)) break
-    if (s.loaded[server] !== undefined) n++
+    if (s.loaded[server] !== undefined) run.push(s)
   }
-  return n
+  return run
+}
+
+export function idleStreak(log: CtxProjectLog | undefined, server: string): number {
+  return idleSessions(log, server).length
 }

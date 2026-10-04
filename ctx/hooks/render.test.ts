@@ -1,6 +1,8 @@
 import { test, expect, mock } from 'claude-code/testing'
 import type { On, SessionContextBreakdown } from 'claude-code'
 
+import { fmtUsd } from './cost'
+
 const breakdown: SessionContextBreakdown = {
   categories: [
     { name: 'System prompt', tokens: 3100, color: 'promptBorder', isDeferred: false, kind: 'used' },
@@ -44,6 +46,8 @@ function world(
   toasts: string[] = [],
   stored: Record<string, unknown> = {},
   compactions: (string | undefined)[] = [],
+  // the session's cost ledger, when the test keeps one
+  ledger?: { usd: number },
 ) {
   const clock = mock.clock(on, { now: 100_000 })
   // the plugin's store, kept in `stored` so a test can read what was written
@@ -58,6 +62,8 @@ function world(
   // a compaction that stands, its instructions kept for the test to read
   on('session.compact', async (_$, e) => {
     compactions.push(e.instructions)
+    // the summarizer's request, billed to the ledger
+    if (ledger) ledger.usd += 0.69
     return { messages: [{ role: 'user', text: 'summary', toolUses: [] }] } as any
   })
   on('command.register', async () => ({ value: {} }) as any)
@@ -79,7 +85,7 @@ function world(
   })
   on('session.usage', async ($, e) => {
     counted.push(e?.breakdown ?? 'none')
-    return { value: { startedAt: 0, context: { window: 1_000_000, breakdown }, rateLimits: [] } } as any
+    return { value: { startedAt: 0, context: { window: 1_000_000, breakdown }, rateLimits: [], ...(ledger ? { cost: { usd: ledger.usd } } : {}) } } as any
   })
   on('session.measure', async (_$, e) => ({ changed: e.changed }))
   on('ui.open', async () => ({ value: { isPlaced: true as const } }))
@@ -250,7 +256,7 @@ test('unused servers carry their idle streak across sessions', async ($, on) => 
   expect(await ui.find({ text: '    skills  0 of 15 used' })).toBeDefined()
   // this session's line went into the project's log
   const saved = stored['project:C:/bats'] as typeof log
-  expect(saved.sessions[saved.sessions.length - 1]).toEqual({ id: 'now', loaded: { notion: 700 }, used: [] })
+  expect(saved.sessions[saved.sessions.length - 1]).toEqual({ id: 'now', loaded: { notion: 700 }, used: [], requests: 0, misses: 0 })
 
   // a call clears it, and the skill and agent counts follow theirs
   await $.tool.call(call('mcp__notion__search', {}))
@@ -337,4 +343,195 @@ test('autokeep adds the keep instructions to every compaction, once', async ($, 
   expect(compactions[0]).toBe('mine')
   expect(compactions[1]!.startsWith('mine\n\n[ctx keep]')).toBe(true)
   expect(compactions[2]!.split('[ctx keep]')).toHaveLength(2)
+})
+
+// Opus 5.5's list prices, $ per million tokens: input 4 (output 5x), cache read 0.20, 1-hour write 8
+type Usage = { input_tokens: number; output_tokens: number; cache_read_input_tokens: number; cache_creation_input_tokens: number; model: string }
+const priced = (x: Usage) => ((x.input_tokens + 5 * x.output_tokens) * 4 + x.cache_read_input_tokens * 0.2 + x.cache_creation_input_tokens * 8) / 1e6
+const u = (input: number, output: number, read: number, write: number, model = 'claude-opus-5-5'): Usage => ({
+  input_tokens: input,
+  output_tokens: output,
+  cache_read_input_tokens: read,
+  cache_creation_input_tokens: write,
+  model,
+})
+
+// The engine beneath the turn events: each request answers with the next usage queued
+function turns(on: On, queue: Usage[]) {
+  on('turn.start', async (_$, e) => ({ turnId: e.turnId }))
+  on('turn.step', async function* (_$, e) {
+    return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: 'end_turn' as const, usage: queue.shift() ?? null }
+  })
+  on('turn.complete', async () => ({ text: '' }))
+}
+
+type Step = { usage: Usage; agentId?: string; extra?: number }
+let turnNo = 0
+
+// One main-loop turn as a session runs it: start, the requests, the ledger
+// billing them (plus any `extra` a subagent or a tool's model call cost), the end
+async function runTurn($: any, queue: Usage[], ledger: { usd: number }, tokens: number, steps: Step[]) {
+  const turnId = 't' + ++turnNo
+  await $.turn.start({ text: 'go', turnId })
+  for (const [index, s] of steps.entries()) {
+    queue.push(s.usage)
+    const st = $.turn.step({ turnId, index, model: s.usage.model, messageCount: 3, ...(s.agentId ? { agentId: s.agentId } : {}) })
+    for await (const _ of st) void _
+    ledger.usd += priced(s.usage) + (s.extra ?? 0)
+    if (s.agentId) await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 'sub', agentId: s.agentId, reason: 'answer' })
+  }
+  await $.session.measure({ context: { window: 1_000_000, tokens }, rateLimits: [], cost: { usd: ledger.usd }, changed: ['context', 'cost'] })
+  await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId, reason: 'answer' })
+}
+
+// Three clean turns: enough for the ledger to teach the model's prices
+async function teach($: any, queue: Usage[], ledger: { usd: number }) {
+  await runTurn($, queue, ledger, 210_000, [{ usage: u(3, 800, 200_000, 6_000) }, { usage: u(3, 400, 206_000, 2_000) }])
+  await runTurn($, queue, ledger, 224_000, [{ usage: u(5, 2_000, 210_000, 12_000) }])
+  await runTurn($, queue, ledger, 228_000, [{ usage: u(3, 300, 222_000, 1_000) }, { usage: u(3, 300, 223_000, 500) }, { usage: u(3, 600, 224_000, 3_000) }])
+}
+
+const bandProps = (bodyColumns: number) => ({ hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns, scroll: { offset: 0, bodyRows: 10 }, view: {} })
+const texts = async (ui: any) => ((await ui.findAll({ type: 'Text' })) as { text: string }[]).map(t => t.text)
+
+for (const surface of ['terminal', 'desktop'] as const) {
+  test(`the band shows what the last turn cost on ${surface}`, async ($, on) => {
+    const ledger = { usd: 0 }
+    const queue: Usage[] = []
+    const clock = world(on, [], [], [], [], {}, [], ledger)
+    turns(on, queue)
+    await $.session.measure(measure(200_000))
+    await clock.settle()
+    const band = await $.ui.mount({ plugin: 'ctx', surface, component: 'AbovePrompt', props: bandProps(120) })
+    // no turn yet: nothing to say
+    expect((await texts(band)).some(t => t.startsWith('+$'))).toBe(false)
+
+    await runTurn($, queue, ledger, 210_000, [{ usage: u(3, 800, 200_000, 6_000) }, { usage: u(3, 400, 206_000, 2_000) }])
+    const spent = priced(u(3, 800, 200_000, 6_000)) + priced(u(3, 400, 206_000, 2_000))
+    expect(await band.find({ text: '+' + fmtUsd(spent) })).toBeDefined()
+    expect(await band.find({ text: '·2r' })).toBeDefined()
+  })
+}
+
+test('a turn with a subagent shows its share once the prices are learned', async ($, on) => {
+  const ledger = { usd: 0 }
+  const queue: Usage[] = []
+  const clock = world(on, [], [], [], [], {}, [], ledger)
+  turns(on, queue)
+  await teach($, queue, ledger)
+  // a subagent on another model, billed in the same turn
+  const sub = u(10, 2_000, 40_000, 20_000, 'claude-haiku-4-5')
+  const subCost = 0.31
+  const main = [u(3, 500, 228_000, 2_000), u(3, 500, 230_000, 2_000)]
+  await runTurn($, queue, ledger, 232_000, [{ usage: main[0]! }, { usage: sub, agentId: 'a1', extra: subCost - priced(sub) }, { usage: main[1]! }])
+  await clock.settle()
+
+  const band = await $.ui.mount({ plugin: 'ctx', surface: 'terminal', component: 'AbovePrompt', props: bandProps(120) })
+  expect(await band.find({ text: '·⑂~$0.31' })).toBeDefined()
+  const pane = await $.ui.mount({ plugin: 'ctx', surface: 'terminal', component: 'Pane', requestId: 'ctx', props: paneProps(60) })
+  const all = await texts(pane)
+  const total = priced(main[0]!) + priced(main[1]!) + subCost
+  expect(all).toContain(`last turn +${fmtUsd(total)} (2 requests · 1 subagent ~$0.31 · cache 99% hit)`)
+  // 232k re-read at $0.20 a million, 8 requests over 4 turns
+  expect(all.some(t => t.startsWith('carrying ~$0.05/request · ~$0.09/turn'))).toBe(true)
+})
+
+test('a cache miss is shown as it happened, and an idle cache as likely expired', async ($, on) => {
+  const ledger = { usd: 0 }
+  const queue: Usage[] = []
+  const clock = world(on, [], [], [], [], {}, [], ledger)
+  turns(on, queue)
+  await teach($, queue, ledger)
+  // back after 20 minutes and still cached: the cache lives an hour
+  await clock.advance(20 * 60_000)
+  await runTurn($, queue, ledger, 230_000, [{ usage: u(3, 500, 228_000, 2_000) }])
+  // a request that wrote everything afresh
+  await runTurn($, queue, ledger, 232_000, [{ usage: u(3, 500, 0, 231_000) }])
+  await clock.settle()
+  let pane = await $.ui.mount({ plugin: 'ctx', surface: 'terminal', component: 'Pane', requestId: 'ctx', props: paneProps(60) })
+  expect(await texts(pane)).toContain('● cache miss: a request wrote 231k fresh · ~$1.85')
+  expect((await texts(pane)).some(t => t.startsWith('⚠ cache likely expired'))).toBe(false)
+
+  await pane.unmount()
+  await clock.advance(65 * 60_000)
+  pane = await $.ui.mount({ plugin: 'ctx', surface: 'terminal', component: 'Pane', requestId: 'ctx', props: paneProps(60) })
+  const all = await texts(pane)
+  expect(all).toContain('⚠ cache likely expired · idle 1h 5m')
+  expect(all).toContain('  next request re-writes 232k ≈ ~$1.86 (warm ~$0.05)')
+})
+
+test('a compaction is priced from the ledger, and the plan before it from the learned prices', async ($, on) => {
+  const ledger = { usd: 0 }
+  const queue: Usage[] = []
+  const toasts: string[] = []
+  const clock = world(on, [], [], [], toasts, {}, [], ledger)
+  turns(on, queue)
+  await teach($, queue, ledger)
+  await runTurn($, queue, ledger, 600_000, [{ usage: u(3, 500, 228_000, 370_000) }])
+  await runTurn($, queue, ledger, 602_000, [{ usage: u(3, 500, 600_000, 2_000) }])
+  await clock.settle()
+  const pane = await $.ui.mount({ plugin: 'ctx', surface: 'terminal', component: 'Pane', requestId: 'ctx', props: paneProps(60) })
+  // after: everything but the 33.4k of messages (3.1k), plus an 8k summary
+  const plan = (await texts(pane)).find(t => t.startsWith('compact now saves'))
+  expect(plan).toBe('compact now saves ~$0.12/request · ~$0.37 once · pays back in ~4 requests')
+
+  await pane.press({ key: 'ctx-compact' })
+  await clock.settle()
+  expect(toasts[toasts.length - 1]).toBe('Compacted 602k → ~36.5k (−565.5k) · summary $0.69 · now ~$0.007/request (was ~$0.12)')
+})
+
+test('an idle server is priced by the requests and misses each session logged', async ($, on) => {
+  const log = {
+    sessions: [
+      { id: 'old1', loaded: { notion: 700 }, used: [] as string[] },
+      { id: 'old2', loaded: { notion: 700 }, used: [] as string[], requests: 2_000, misses: 10 },
+    ],
+  }
+  const ledger = { usd: 0 }
+  const queue: Usage[] = []
+  const clock = world(on, [], [], [], [], { 'project:C:/bats': log }, [], ledger)
+  turns(on, queue)
+  await $.session.start({ cwd: 'C:/bats', surface: 'terminal', isInteractive: true })
+  await teach($, queue, ledger)
+  await $.turn.start({ text: 'go', turnId: 'next' })
+  await clock.settle()
+  const pane = await $.ui.mount({ plugin: 'ctx', surface: 'terminal', component: 'Pane', requestId: 'ctx', props: paneProps(60) })
+  await pane.press({ key: 'sec-dead' })
+  // old2: 700 x (2000 reads at $0.20 + 10 writes at $8) per million = $0.336; this session adds
+  // under a tenth of a cent; old1 logged neither
+  expect(await pane.find({ text: '      ~$0.34 so far · ~$0.17/session' })).toBeDefined()
+})
+
+test('cost off takes every dollar figure away', async ($, on) => {
+  const ledger = { usd: 0 }
+  const queue: Usage[] = []
+  const stored: Record<string, unknown> = {}
+  const toasts: string[] = []
+  const clock = world(on, [], [], [], toasts, stored, [], ledger)
+  turns(on, queue)
+  await teach($, queue, ledger)
+  await clock.settle()
+  const band = await $.ui.mount({ plugin: 'ctx', surface: 'terminal', component: 'AbovePrompt', props: bandProps(120) })
+  expect((await texts(band)).some(t => t.startsWith('+$'))).toBe(true)
+  // the learned prices are kept for later sessions
+  expect((stored.costSamples as unknown[]).length).toBe(2)
+  await $.command.run({ command: 'ctx', args: 'cost off' } as any)
+  expect(toasts).toContain('Cost off: tokens only')
+  expect(stored.cost).toBe(false)
+  expect((await texts(band)).some(t => t.startsWith('+$'))).toBe(false)
+})
+
+test("a fresh session's first turn writes the prompt afresh, and nothing calls it a miss", async ($, on) => {
+  const ledger = { usd: 0 }
+  const queue: Usage[] = []
+  const clock = world(on, [], [], [], [], {}, [], ledger)
+  turns(on, queue)
+  await runTurn($, queue, ledger, 47_000, [{ usage: u(3, 500, 0, 45_000) }, { usage: u(3, 300, 45_000, 2_000) }])
+  await clock.settle()
+  const band = await $.ui.mount({ plugin: 'ctx', surface: 'terminal', component: 'AbovePrompt', props: bandProps(130) })
+  const shown = await texts(band)
+  expect(shown.some(t => t.startsWith('+$'))).toBe(true)
+  expect(shown.some(t => t.includes('●'))).toBe(false)
+  const pane = await $.ui.mount({ plugin: 'ctx', surface: 'terminal', component: 'Pane', requestId: 'ctx', props: paneProps(60) })
+  expect((await texts(pane)).some(t => t.startsWith('● cache miss'))).toBe(false)
 })

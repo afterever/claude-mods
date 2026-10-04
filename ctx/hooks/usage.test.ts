@@ -1,6 +1,6 @@
 import { test, expect } from 'claude-code/testing'
 
-import { addEater, addUsage, calibrate, DEFAULT_CPT, EMPTY_USAGE, estimateTokens, idleStreak, logSession, toolLabel, usageOf } from './usage'
+import { addEater, addUsage, calibrate, DEFAULT_CPT, EMPTY_USAGE, estimateTokens, idleSessions, idleStreak, logSession, toolLabel, usageOf } from './usage'
 
 test('toolLabel says what each call was about', () => {
   expect(toolLabel('Read', { file_path: 'C:/github/claude-mods/ctx/hooks/register.tsx' })).toBe('Read …/hooks/register.tsx')
@@ -61,6 +61,14 @@ test('idleStreak counts sessions in a row that loaded a server and never called 
   log = logSession(log, 's4', { gmail: 1800, notion: 2100 }, ['gmail'])
   expect(log.sessions).toHaveLength(4)
   expect(idleStreak(log, 'gmail')).toBe(0)
+})
+
+test('a session line carries its requests and misses once it has them', () => {
+  let log = logSession(undefined, 's1', { notion: 2100 }, [])
+  log = logSession(log, 's2', { notion: 2100 }, [], { requests: 140, misses: 3 })
+  expect(log.sessions[0]).toEqual({ id: 's1', loaded: { notion: 2100 }, used: [] })
+  expect(log.sessions[1]).toEqual({ id: 's2', loaded: { notion: 2100 }, used: [], requests: 140, misses: 3 })
+  expect(idleSessions(log, 'notion').map(s => s.id)).toEqual(['s2', 's1'])
 })
 
 test('the project log keeps the last 30 sessions', () => {

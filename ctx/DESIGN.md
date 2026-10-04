@@ -15,6 +15,8 @@ Claude Code's context window is the budget every session spends. When it fills, 
 
 Each feature below maps to one of these questions. A feature that answered none of them was not added.
 
+From 0.6.0 the same questions are also answered in dollars. Cost is not a fifth question: every request sends the whole window again, so cost is the price of the window itself. The rule that keeps this in scope is **ctx prices context decisions, not the session**. A dollar figure belongs here only if it changes a decision about the window (compact now, turn a server off, compact before resuming). Session and daily totals are billing, and the status line already shows them.
+
 ## Principles
 
 These came out of the review of 0.1.0 and held for every later release.
@@ -36,6 +38,7 @@ These came out of the review of 0.1.0 and held for every later release.
 | `hooks/fmt.ts` | Number formats, the bar, sparkline, trend, the file opener's command | Pure functions, unit-tested without an engine |
 | `hooks/usage.ts` | Tool labels, token estimates, usage counts, the project log | Pure; the logic behind 0.4.0 |
 | `hooks/compact.ts` | Keep instructions, warning levels and text | Pure; the logic behind 0.5.0 |
+| `hooks/cost.ts` | Per-turn spend, the price fit, carrying and compaction costs, the band suffix | Pure; the logic behind 0.6.0 |
 | `types/index.d.ts` | The `$.state` contract | `claude plugin validate` checks every state key against it |
 
 Keeping the logic pure is what made four releases in one day safe: every rule with a number in it (the pace floor, the drop ratio, calibration) has a unit test that runs in milliseconds.
@@ -44,8 +47,8 @@ Keeping the logic pure is what made four releases in one day safe: every rule wi
 
 | Kind | Survives | Used for |
 | --- | --- | --- |
-| `$.state` atoms | Hot reloads, not new sessions | Everything a drawing reads: `snap`, `history`, `eaters`, `usage`, `mode`, `warned`… |
-| `$.store` | New sessions | Whether the pane was open, autokeep on/off, each project's MCP usage log |
+| `$.state` atoms | Hot reloads, not new sessions | Everything a drawing reads: `snap`, `history`, `eaters`, `usage`, `mode`, `warned`, `spend`, `costOn`… |
+| `$.store` | New sessions | Whether the pane was open, autokeep and cost on/off, each project's MCP usage log, the price samples (`costSamples`) |
 | Module variables | Nothing | `turnChars`, `pendingMark`, `selfCompact`, the last-count-wins counters |
 
 `mode` (exact or quick) is deliberately session state, not store: an exact count costs a token-count API call per change, so it should not quietly carry over into tomorrow's session.
@@ -62,7 +65,10 @@ The bar, the rows and the sections use the breakdown, because only it has catego
 | Event | What ctx does |
 | --- | --- |
 | `session.start` | Registers `/ctx`, counts once, loads the project log and autokeep, reopens the pane if it was open |
-| `session.measure` | Records the API's figure, learns characters per token, warns, recounts, writes the project log |
+| `session.measure` | Records the API's figure and the cost ledger, learns characters per token, warns, recounts, writes the project log |
+| `turn.start` | Freezes the last turn's spend; a clean one becomes a price sample |
+| `turn.step` | Observes each model request's token counts (main loop and subagents); never touches the stream |
+| `turn.complete` | Closes the main-loop turn; counts a subagent's run |
 | `tool.call` | Wraps every call: records usage (server, skill, agent), result size, edited files |
 | `prompt.submit` | Remembers the last three requests (not slash commands) |
 | `session.compact` | With autokeep on, adds the keep instructions; afterwards marks, toasts and resets |
@@ -152,10 +158,62 @@ Auto-compaction's worst failure is losing the thread: the summary drops which fi
 
 **Running the follow-up exactly once.** In the test kit, the mod's own `session.compact` hook did not hear the compaction the mod itself started, so `compactNow` runs the follow-up itself. In case a live session does raise the hook, a `selfCompact` flag stops the hook from running it a second time.
 
+### 0.6.0: what the context costs
+
+The trend says the window grows 8k a turn. 0.6.0 says what that costs, and what compacting would save. Everything is split into two kinds of figure, and the pane never mixes them up:
+
+- **Measured** (shown plainly): what the last turn cost, its requests, its cache hit rate, a cache miss, what a compaction cost. These come straight from the engine.
+- **Estimated** (shown with `~`): what keeping, rewriting or compacting the window will cost, and a subagent's share of a turn. These need prices, which ctx learns.
+
+**Where the numbers come from.** Checked against the engine's types (build 2.1.288):
+- `turn.step`'s result carries each request's four token counts as the API reported them (`input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens`) and the model's API id. It fires for the main loop and for subagents, which carry `agentId`.
+- `session.measure` carries `cost.usd`, the session's ledger, the same total `/cost` and the status line show. It includes subagents and compactions.
+- `session.compact`'s result carries `tokensAfter` and the summarizer's counts.
+- What the engine does not give a mod: a price per token, or whether the cache is still warm. Only the built-in model-switch hooks get those.
+
+**The last turn's cost is the ledger's growth.** The ledger as it stood at `turn.start` is the turn's base. Every `session.measure` that moves the ledger updates the running turn to `ledger − base`, and the next `turn.start` freezes it. Nothing depends on whether the ledger settles before or after `turn.complete`: the turn stays open to new measurements until the next one begins. The figure includes subagents and any tool's own model call, because the ledger does.
+
+**Prices are learned, not looked up.** Hardcoding a price table was turned down because prices change, and the obvious shortcut is wrong. Cache reads are 0.1× input on most models, but 0.05× on Opus 5.5 and 0.025× on Fable 5.1, so a fixed ratio would have doubled every carrying cost on this user's own model. Instead:
+- The ledger is computed from the same token counts at fixed prices, so a clean turn satisfies `usd = a·(input + 5·output) + b·read + c·write` exactly. Output is 5× input on every current model, which is the one ratio assumed.
+- `fitRates` solves for `a`, `b` and `c` by least squares over the last 12 clean turns of that model. Three independent turns give the exact prices.
+- A **clean turn** is main loop only, one model, no subagent, no compaction. That is the same selectivity `calibrate` uses for characters per token.
+- A turn the fit misses by more than 5% (a WebFetch's own small-model call billed inside it, say) is dropped, worst first, as long as at least half the turns are kept.
+- The result must also make sense: a read cheaper than input, a write at least input's price. Otherwise there are no rates and no estimates.
+- Samples go to `$.store`, so the next session starts with its prices known.
+
+**The band suffix** follows the last turn's token change: `+$1.84·6r·⑂~$0.31·●12% hit`. Each piece shows only when it says something:
+- The dollars always, in red past 3× the session's median turn.
+- `·6r` (requests in the turn), dimmed, at 120 columns and wider.
+- `⑂~$0.31`, the subagent share, only when a subagent ran. It is the turn's dollars less what the main loop's counts explain at the learned prices, so it carries `~`.
+- `●12% hit` only below 90% (amber, red below 50%). A high hit rate is the normal case and would be noise.
+
+As the band narrows, pieces drop from the right: requests and the subagent share go first (below 120 columns), then the cache marker (below 100). The dollars go last.
+
+**The pane** adds, under the trend:
+- `carrying ~$0.08/request · ~$0.49/turn · ~$58.5 until auto-compact`. Carrying cost is the window re-read from the cache once. Per turn multiplies by the session's average requests per turn. Until auto-compact adds up the remaining turns while the window keeps growing at its pace.
+- `last turn +$1.84 (6 requests · 1 subagent ~$0.31 · cache 98% hit)`.
+- `● cache miss: a request wrote 231k fresh · ~$1.85`, when a main-loop request wrote at least 20k tokens and more than half its prompt afresh.
+- **Cold starts are not misses.** The session's first request, and the first after a compaction, write the prompt afresh by nature. They are counted in the session's misses (the rewrite costs, and idle overhead prices it), but no miss line and no band `●` is shown for them. A cache that is warm except at the start is the normal case.
+- `compact now saves ~$0.12/request · ~$0.37 once · pays back in ~4 requests`, and `at auto in ~68 turns · waiting costs ~$76 more`. The one-off cost is the summarizer reading the window, writing the summary, and the smaller window cached afresh. The window afterwards is what the last compaction left, or else everything but the messages plus an 8k summary. Auto-compact will run anyway, so the real choice is *now or later*, and the second line prices *later*. The lines appear only once the window is more than twice its compacted size.
+
+**Cache expiry is inferred from what the session saw, not guessed.** The engine doesn't tell a mod the cache's lifetime. Each main-loop request records the idle gap before it:
+- A hit after more than five idle minutes means the hour-long cache.
+- A miss after four or more idle minutes (with no such hit) means the five-minute cache.
+
+With that evidence, and idle time past the lifetime, the pane shows `⚠ cache likely expired · idle 1h 5m`, what the next request will cost to re-write the window, and what it would cost after compacting. That's the one moment a dollar figure argues for compacting right away. With no evidence, only the after-the-fact miss line shows. Deriving the lifetime from the price fit was turned down: it would stack two estimates, and a mix of cache lifetimes would quietly break it. A compaction starts the idle record over: the prefix changed, so the write after it says nothing about the cache's lifetime. That matters because the pane's own advice is to compact after an idle break, and the write that follows would otherwise teach the five-minute lifetime wrongly.
+
+**Idle overhead in dollars.** Each project-log line now records its session's main-loop requests and cache misses. An idle server's cost is its tokens × (requests × read price + misses × write price), over the sessions in its idle streak that logged both, this session included. Lines from before 0.6.0 have neither, and are left out rather than guessed. The figure sits dimmed under the token row: an idle server's main cost is room in the window, and a warm cache makes carrying it cheap.
+
+**After a compaction** the toast adds what it cost (the ledger's growth across it) and the carrying cost before and after: `Compacted 602k → ~36.5k (−565.5k) · summary $0.69 · now ~$0.007/request (was ~$0.12)`. A compaction during a turn marks that turn unclean.
+
+**`/ctx cost on|off`** (`p`) hides every dollar figure. It is on by default and remembered, like autokeep. The counting goes on regardless, so turning it back on shows figures straight away.
+
+**The `turn.step` hook is observe-only.** It sits in the stream of every model response, so it does `yield* next(e)` and reads the result afterwards, inside a try/catch. It never touches a chunk, and nothing in it can throw into the response.
+
 ## Testing
 
-- **Unit tests** (`fmt.test.ts`, `usage.test.ts`, `compact.test.ts`) cover every rule with a number in it. When a behaviour was found wrong, a test pinning the right behaviour came first (the pace floor's `warnLevel(120_000, 967_000, 9)` → `none`).
-- **Render tests** (`render.test.ts`) run the real hooks in the engine's test kit, with the world beneath them mocked: the clock, the store, `session.usage`, `tool.call`, `session.compact`. They draw the pane, band and footer on both terminal and Desktop and check what is drawn, what is toasted and what is written to the store.
+- **Unit tests** (`fmt.test.ts`, `usage.test.ts`, `compact.test.ts`, `cost.test.ts`) cover every rule with a number in it. The price fit is tested against Opus 5.5's list prices. It has to recover them exactly from clean turns, and when a mispriced turn is mixed in. With 1% noise and a small extra charge on most turns, it has to come within 5% (it lands within about 1%). When a behaviour was found wrong, a test pinning the right behaviour came first (the pace floor's `warnLevel(120_000, 967_000, 9)` → `none`).
+- **Render tests** (`render.test.ts`) run the real hooks in the engine's test kit, with the world beneath them mocked: the clock, the store, `session.usage`, `tool.call`, `session.compact`, and from 0.6.0 the turn events and a cost ledger that bills each request at list prices. They draw the pane, band and footer on both terminal and Desktop and check what is drawn, what is toasted and what is written to the store.
 - **What the kit cannot check:** paint (exact colors on screen, line wrapping) and live engine behaviour (whether `/ctx compact` mid-turn is accepted, whether the hook hears the mod's own compaction). These are listed below.
 
 Before every release: `claude plugin test ctx`, `claude plugin validate .`, and `tsc` with the tsconfig the types file describes.
@@ -168,6 +226,12 @@ Before every release: `claude plugin test ctx`, `claude plugin validate .`, and 
 - **Token estimates** for single results are characters divided by a learned ratio. They improve as the session goes on but stay approximate, hence the `~`.
 - **Idle streaks are tracked for MCP servers only.** Skills and agents are counted per session, not across sessions.
 - **History is per session.** A new session's trend starts empty and shows from the second turn.
+- **Ledger timing is assumed, not seen live.** A turn's dollars are the ledger's growth from one `turn.start` to the next. If the engine moved the ledger for a turn only after the next turn had started, that cost would land in the later turn. The kit can't show the live order, so check it in a real session: one turn's `+$` should match `/cost`'s change across it.
+- **Prices need three clean turns of one model.** Until then (in a project's first session, or after a model switch) only the measured figures show. Turns that spawn subagents never teach prices.
+- **Other billed calls inside a turn** (a tool's own model call, server tools with per-use fees) count toward that turn's dollars, as they should. The fit drops such turns as samples.
+- **Cache lifetime needs evidence.** "Likely expired" shows only after the session has seen a long gap followed by a hit or a miss. A miss for another reason (a model switch, a changed tool list) after a long gap can teach the five-minute lifetime wrongly. A later hit after a long gap corrects it.
+- **Idle overhead prices old sessions at today's rates**, the current model's. Sessions logged before 0.6.0 are left out.
+- **Fast mode bills the same model id at twice the price.** Fast-mode turns mixed with standard ones fit no single set of prices, so the fit drops them as outliers or, past half the samples, gives no rates at all. Forward-looking figures then stay hidden; the measured ones still show.
 
 ## Release history
 
@@ -178,3 +242,4 @@ Before every release: `claude plugin test ctx`, `claude plugin validate .`, and 
 | 0.3.0 | Per-turn trend and turns to auto-compact; memory files open from the pane |
 | 0.4.0 | Heaviest results; unused overhead with per-project idle streaks |
 | 0.5.0 | Auto-compact warning; guided compact; autokeep |
+| 0.6.0 | What the context costs: last-turn dollars from the ledger, learned prices, carrying cost, compaction payback, cache expiry, idle overhead in dollars |
