@@ -218,13 +218,18 @@ Two figures the pane showed without a reference point, and one cosmetic tighteni
 - **Turn count, on the trend line.** `trend ▁▁▇█ · 23 turns`. The sparkline can't be counted by eye: the band draws at most 10 glyphs, 48 readings are kept, and a repeated reading adds nothing. The number is the engine's own `$.session.turns()`, read when the pane draws. The 15-second tick redraws the pane, so a count that trails by a turn corrects itself. The total only: a "since compaction" count was considered and left out. The sparkline gives up the label's columns, so the line doesn't wrap in a narrow dock. A failed call hides the count and nothing else.
 - **The fill text is tighter.** `65.1k / 1M 7%` became `65.1k/1M·7%`, two columns saved. The `·` is the cost suffix's separator, and also the bar's free-space glyph. It is told apart by being dim, sitting after the label, and the percent beside it being bold and colored. The pane's header draws the same component, so it matches.
 
+### 0.6.2: two cosmetic touches
+
+- **The session total is green.** In `session $0.84 · last turn was 35% of it` only the amount is drawn in the theme's `success` color; the label and the share stay dim. It is the figure the line is about, and the rest of the cost block is dim. The line is three sibling `Text`s and not a nested one, since a child can't undo its parent's dim.
+- **The pane ends with `ctx v0.6.2`.** The host gives a hooks module no way to read its own manifest: `node:fs` is refused, and so is a JSON import (only code files load). So `hooks/version.ts` holds a copy, and no test can compare it with `plugin.json`. Bump both on every release; the pre-release checklist below compares them.
+
 ## Testing
 
 - **Unit tests** (`fmt.test.ts`, `usage.test.ts`, `compact.test.ts`, `cost.test.ts`) cover every rule with a number in it. The price fit is tested against Opus 5.5's list prices. It has to recover them exactly from clean turns, and when a mispriced turn is mixed in. With 1% noise and a small extra charge on most turns, it has to come within 5% (it lands within about 1%). When a behaviour was found wrong, a test pinning the right behaviour came first (the pace floor's `warnLevel(120_000, 967_000, 9)` → `none`).
 - **Render tests** (`render.test.ts`) run the real hooks in the engine's test kit, with the world beneath them mocked: the clock, the store, `session.usage`, `tool.call`, `session.compact`, and from 0.6.0 the turn events and a cost ledger that bills each request at list prices. They draw the pane, band and footer on both terminal and Desktop and check what is drawn, what is toasted and what is written to the store.
 - **What the kit cannot check:** paint (exact colors on screen, line wrapping) and live engine behaviour (whether `/ctx compact` mid-turn is accepted, whether the hook hears the mod's own compaction). These are listed below.
 
-Before every release: `claude plugin test ctx`, `claude plugin validate .`, and `tsc` with the tsconfig the types file describes.
+Before every release: `claude plugin test ctx`, `claude plugin validate .`, and `tsc` with the tsconfig the types file describes. Also check that `version` in `.claude-plugin/plugin.json` equals `VERSION` in `hooks/version.ts`.
 
 ## Known limits and open questions
 
@@ -239,7 +244,7 @@ Before every release: `claude plugin test ctx`, `claude plugin validate .`, and 
 - **Other billed calls inside a turn** (a tool's own model call, server tools with per-use fees) count toward that turn's dollars, as they should. The fit drops such turns as samples.
 - **Cache lifetime needs evidence.** "Likely expired" shows only after the session has seen a long gap followed by a hit or a miss. A miss for another reason (a model switch, a changed tool list) after a long gap can teach the five-minute lifetime wrongly. A later hit after a long gap corrects it.
 - **Idle overhead prices old sessions at today's rates**, the current model's. Sessions logged before 0.6.0 are left out.
-- **The turn count is not seen live.** Whether `session.turns()` counts a resumed conversation's earlier turns, and whether it has counted the turn that just ended when the pane redraws, is assumed. Check in a real session: it should match the prompts answered, and after a resume it shows whether the count starts at 0 or at the old total. The `·` beside the percent can only be judged on screen, since the kit can't check paint.
+- **The turn count is seen live in a fresh session only.** It matched the prompts answered (2 after two prompts), so it does not count the turn in flight. Whether `session.turns()` counts a resumed conversation's earlier turns is still unchecked. The `·` beside the percent reads cleanly on screen.
 - **Fast mode bills the same model id at twice the price.** Fast-mode turns mixed with standard ones fit no single set of prices, so the fit drops them as outliers or, past half the samples, gives no rates at all. Forward-looking figures then stay hidden; the measured ones still show.
 
 ## Release history
@@ -253,3 +258,4 @@ Before every release: `claude plugin test ctx`, `claude plugin validate .`, and 
 | 0.5.0 | Auto-compact warning; guided compact; autokeep |
 | 0.6.0 | What the context costs: last-turn dollars from the ledger, learned prices, carrying cost, compaction payback, cache expiry, idle overhead in dollars |
 | 0.6.1 | Reference points: the session total (pane) as the turn's denominator, a turn count beside the trend, a tighter fill text in the band |
+| 0.6.2 | Cosmetic: the session total in green, the mod's version at the foot of the pane |
