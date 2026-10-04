@@ -4,7 +4,7 @@ Personal [Claude Code mods](https://code.claude.com/docs): plugins of function h
 
 | Mod | What it does |
 | --- | --- |
-| [`ctx`](./ctx) | Context window details in a pane and a band above the prompt: how full, how fast it is filling, what filled it, and compacting on your terms. Why each feature exists: [ctx/DESIGN.md](./ctx/DESIGN.md). |
+| [`ctx`](./ctx) | Context window details in a pane and a band above the prompt: how full, how fast it is filling, what filled it, compacting on your terms, and what each of those costs. Why each feature exists: [ctx/DESIGN.md](./ctx/DESIGN.md). |
 
 ## Install (each computer)
 
@@ -30,6 +30,7 @@ Pick up new versions with `claude plugin marketplace update afterever-mods` and 
 | `/ctx exact`, `/ctx quick` (`e` in the pane) | Count with the token API, or estimate locally (the default) |
 | `/ctx compact [focus]` (`c`) | Compact now, keeping your focus, edited files and latest requests |
 | `/ctx autokeep on|off` (`k`) | Add the same to every compaction, auto-compact included (off by default) |
+| `/ctx cost on|off` (`p`) | Show or hide the dollar figures: the last turn's cost, carrying cost, compaction payback, idle overhead (on by default) |
 | `m` `f` `s` `a` `h` `d` in the pane | Open MCP tools, memory files, skills, agents, heaviest results, unused so far |
 | `r` in the pane | Count again |
 
@@ -64,6 +65,7 @@ ctx/
   hooks/fmt.ts, fmt.test.ts       pure formatting helpers and their tests
   hooks/usage.ts, usage.test.ts   tool-result sizes, usage counts, the project log
   hooks/compact.ts, compact.test.ts  keep instructions and the auto-compact warning
+  hooks/cost.ts, cost.test.ts     per-turn spend, learned prices, carrying and compaction costs
   hooks/render.test.ts            the pane, band and footer drawn on terminal and desktop
   types/index.d.ts                the mod's $.state contract
 ```
