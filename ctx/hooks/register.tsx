@@ -6,6 +6,7 @@ import type { BarRun } from './fmt'
 import type { ApiUsage, Piece, Rates } from './cost'
 import { addRecent, clipAsk, keepInstructions, mergeInstructions, shouldWarn, warnBadge, warnLevel, warnText } from './compact'
 import { addEater, addUsage, calibrate, DEFAULT_CPT, EMPTY_USAGE, estimateTokens, idleSessions, logSession, toolLabel, usageOf } from './usage'
+import { VERSION } from './version'
 import {
   bandSuffix,
   carry,
@@ -21,7 +22,7 @@ import {
   median,
   missLine,
   rewrite,
-  sessionLine,
+  sessionParts,
   shownTurn,
   startTurn,
   stepDone,
@@ -846,7 +847,7 @@ export const register: Register = on => {
     const rates = money ? ratesOf(sp) : undefined
     const lastTurn = money ? shownTurn(sp) : undefined
     // the ledger's total is the denominator for the turn's dollars below it
-    const sessionText = money && sp.ledger !== undefined ? sessionLine(sp.ledger, lastTurn?.usd) : undefined
+    const session = money && sp.ledger !== undefined ? sessionParts(sp.ledger, lastTurn?.usd) : undefined
     const winTokens = past[past.length - 1] ?? s.total
     const rpt = perTurn(sp)
     const after = afterCompact(sp, s)
@@ -914,9 +915,16 @@ export const register: Register = on => {
             </Box>
           </Box>
         )}
-        {(sessionText || rates || lastTurn) && (
+        {(session || rates || lastTurn) && (
           <Box flexDirection="column">
-            {sessionText && muted(sessionText)}
+            {session && (
+              // the total is the one figure picked out; siblings, not nesting, because a child can't undo its parent's dim
+              <Text wrap="wrap">
+                <Text color="inactive" dimColor>session </Text>
+                <Text color="success">{session.amount}</Text>
+                <Text color="inactive" dimColor>{session.tail}</Text>
+              </Text>
+            )}
             {rates && muted(carryLine(winTokens, rates, rpt, pace))}
             {lastTurn && (
               <Text dimColor wrap="wrap">
@@ -1075,6 +1083,7 @@ export const register: Register = on => {
             Shown above the prompt. In the fullscreen layout (110+ columns) this docks beside the transcript.
           </Text>
         )}
+        <Text color="inactive" dimColor>{`ctx v${VERSION}`}</Text>
       </Box>
     )
   })

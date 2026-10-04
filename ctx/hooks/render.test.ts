@@ -2,6 +2,7 @@ import { test, expect, mock } from 'claude-code/testing'
 import type { On, SessionContextBreakdown } from 'claude-code'
 
 import { fmtUsd } from './cost'
+import { VERSION } from './version'
 
 const breakdown: SessionContextBreakdown = {
   categories: [
@@ -437,7 +438,13 @@ test('a turn with a subagent shows its share once the prices are learned', async
   const total = priced(main[0]!) + priced(main[1]!) + subCost
   expect(all).toContain(`last turn +${fmtUsd(total)} (2 requests · 1 subagent ~$0.31 · cache 99% hit)`)
   // the session's ledger, with the turn as its share
-  expect(all).toContain(`session ${fmtUsd(ledger.usd)} · last turn was ${Math.round((total / ledger.usd) * 100)}% of it`)
+  // (three Texts, so the amount can be green on its own)
+  expect(all).toContain('session ')
+  expect(all).toContain(fmtUsd(ledger.usd))
+  expect(all).toContain(` · last turn was ${Math.round((total / ledger.usd) * 100)}% of it`)
+  expect((await pane.findAll({ type: 'Text', text: fmtUsd(ledger.usd) })).some(t => (t as any).props?.color === 'success')).toBe(true)
+  // the foot of the pane names the mod's version
+  expect(all).toContain(`ctx v${VERSION}`)
   // 232k re-read at $0.20 a million, 8 requests over 4 turns
   expect(all.some(t => t.startsWith('carrying ~$0.05/request · ~$0.09/turn'))).toBe(true)
 })
@@ -527,7 +534,7 @@ test('cost off takes every dollar figure away', async ($, on) => {
   expect((await texts(band)).some(t => t.startsWith('+$'))).toBe(false)
   // nor does the pane keep the session total
   const pane = await $.ui.mount({ plugin: 'ctx', surface: 'terminal', component: 'Pane', requestId: 'ctx', props: paneProps(60) })
-  expect((await texts(pane)).some(t => t.startsWith('session $'))).toBe(false)
+  expect((await texts(pane)).some(t => t.startsWith('session '))).toBe(false)
 })
 
 test("a fresh session's first turn writes the prompt afresh, and nothing calls it a miss", async ($, on) => {

@@ -276,13 +276,19 @@ export function turnLine(t: CtxTurn, sub: number | undefined): string {
 // "session $14.20 · last turn was 13% of it": the total is the denominator for
 // the turn's dollars, not a billing figure
 export function sessionLine(total: number, last: number | undefined): string | undefined {
+  const p = sessionParts(total, last)
+  return p && `session ${p.amount}${p.tail}`
+}
+
+// The same line in two parts, so the pane can pick the dollars out
+export function sessionParts(total: number, last: number | undefined): { amount: string; tail: string } | undefined {
   if (!Number.isFinite(total) || total <= 0) return undefined
-  let line = `session ${fmtUsd(total)}`
+  let tail = ''
   if (last !== undefined && last > 0) {
     const share = Math.min(100, Math.round((last / total) * 100))
-    line += ` · last turn was ${share < 1 ? '<1' : share}% of it`
+    tail = ` · last turn was ${share < 1 ? '<1' : share}% of it`
   }
-  return line
+  return { amount: fmtUsd(total), tail }
 }
 
 // "carrying ~$0.08/request · ~$0.49/turn · ~$58.5 until auto-compact"
