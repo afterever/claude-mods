@@ -18,16 +18,23 @@ const fresh = (): Flow => ({
   isFinished: false,
   tasks: [],
   isAuto: true,
+  ids: [],
 })
 
 /** No flow, or the last one is closed: the next spawn opens a new batch. */
 export const startsBatch = (prev: Flow | null): boolean => prev === null || prev.isFinished
 
-/** A non-savvy agent started: join the running auto flow, or open a new one. */
-export const onSpawn = (prev: Flow | null): Flow | null => {
+/** A non-savvy agent `id` started: join the running auto flow, or open a new one. */
+export const onSpawn = (prev: Flow | null, id: string): Flow | null => {
   if (prev && !prev.isFinished && !prev.isAuto) return prev
   const base = prev && !prev.isFinished ? prev : fresh()
-  return { ...base, total: base.total + 1, running: base.running + 1 }
+  const ids = base.ids ?? []
+  return {
+    ...base,
+    total: base.total + 1,
+    running: base.running + 1,
+    ids: ids.includes(id) ? ids : [...ids, id],
+  }
 }
 
 /** Whether a run's completion counts toward an auto flow: it was running and not a savvy worker. */
@@ -35,12 +42,24 @@ export const isCounted = (run: Pick<AgentRun, 'status' | 'type'> | undefined): b
   run !== undefined && run.status === 'running' && !isSavvyType(run.type)
 
 /**
- * An agent finished. Count it when it was one this flow spawned; once nothing runs
- * any more, close the flow, which draws as the green "Done" row until dismissed.
+ * Only this batch's own agents decide it is over: a run left `running` by an earlier
+ * batch (an interrupted agent never reports back) must not hold it open.
  */
-export const onFinish = (prev: Flow | null, counted: boolean, isIdle: boolean): Flow | null => {
+const isBatchIdle = (f: Flow, runs: Pick<AgentRun, 'id' | 'status'>[]): boolean =>
+  (f.ids ?? []).every(id => runs.find(r => r.id === id)?.status !== 'running')
+
+/**
+ * An agent finished. Count it when it was one this flow spawned; once none of the
+ * batch is running any more, close the flow, which draws as the green "Done" row
+ * until dismissed.
+ */
+export const onFinish = (
+  prev: Flow | null,
+  counted: boolean,
+  runs: Pick<AgentRun, 'id' | 'status'>[],
+): Flow | null => {
   if (!prev || !prev.isAuto || prev.isFinished) return prev
-  if (isIdle) return { ...prev, done: prev.total, running: 0, phase: 'close', isFinished: true }
+  if (isBatchIdle(prev, runs)) return { ...prev, done: prev.total, running: 0, phase: 'close', isFinished: true }
   if (!counted) return prev
   return { ...prev, done: Math.min(prev.total, prev.done + 1), running: Math.max(0, prev.running - 1) }
 }

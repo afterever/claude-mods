@@ -768,10 +768,11 @@ export const register: Register = (on, options) => {
     // Outside a /savvy-flow, every non-savvy agent drives the flow row itself (auto.ts).
     const isSavvy = isSavvyType(e.subagentType)
     const isFreshBatch = !isSavvy && startsBatch(await read($, flow))
+    const runId = started.agentId ?? e.tool_use_id
     await update($, agents, list => {
       const round = 1 + list.filter(a => norm(a.description) === norm(e.description) && e.description).length
       const run: AgentRun = {
-        id: started.agentId ?? e.tool_use_id,
+        id: runId,
         agentId: started.agentId,
         type: e.subagentType,
         description: e.description,
@@ -790,7 +791,7 @@ export const register: Register = (on, options) => {
       return [...kept.filter(a => a.id !== run.id), run].slice(-200)
     })
     await update($, now, () => at)
-    if (!isSavvy) await update($, flow, onSpawn)
+    if (!isSavvy) await update($, flow, prev => onSpawn(prev, runId))
     const f = await read($, flow)
     await autoOpen($, f && !f.isFinished ? f.title : isSavvy ? 'savvy-flow' : AUTO_TITLE)
     return started
@@ -863,9 +864,9 @@ export const register: Register = (on, options) => {
         }),
       )
       await update($, now, () => at)
-      // Nothing running any more closes a spawn-derived flow into the green "Done" row.
-      const isIdle = !(await read($, agents)).some(a => a.status === 'running')
-      await update($, flow, prev => onFinish(prev, counted, isIdle))
+      // The batch's own agents all finished: a spawn-derived flow closes into the green "Done" row.
+      const runs = await read($, agents)
+      await update($, flow, prev => onFinish(prev, counted, runs))
     }
     return next(e)
   })

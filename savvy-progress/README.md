@@ -9,7 +9,7 @@ A Claude Code mod: a progress bar above the prompt and a live panel of subagents
 
 Upstream shows the bar only for `savvy-*` workers or an explicit `progress` report. Here:
 
-- Any subagent (`Explore`, `general-purpose`, a custom one, ...) opens an **auto flow** titled "Subagents". Its counters come from spawns and completions, in `hooks/auto.ts`: every start adds to the total, every finish adds to done, and when nothing runs any more the row closes.
+- Any subagent (`Explore`, `general-purpose`, a custom one, ...) opens an **auto flow** titled "Subagents". Its counters come from spawns and completions, in `hooks/auto.ts`: every start adds to the total, every finish adds to done, and once every agent of the batch has finished the row closes. Only the batch's own agents count, so an agent left "running" by an interrupted earlier batch cannot hold it open.
 - The panel auto-opens once per session for it (and for `savvy-*` workers as before). Close it and it stays closed until the next session; `/agents-info` or the crew button reopens it.
 - A new batch of work starts with a clean list; agents still running stay.
 - An orchestrated flow (the `progress` tool, or a `savvy-*` worker) is never touched by this: its counters stay the orchestrator's. Once an explicit report arrives it takes the flow over.

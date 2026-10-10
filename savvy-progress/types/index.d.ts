@@ -16,6 +16,8 @@ export type Flow = {
   tasks: PlannedTask[]
   /** Derived from subagent spawns and completions, not reported by an orchestrator. */
   isAuto?: boolean
+  /** Ids of the agents an auto flow spawned: only these decide it is over. */
+  ids?: string[]
 }
 
 export type AgentStatus = 'running' | 'done' | 'failed'
