@@ -1,3 +1,5 @@
 # Written by Claude Code each time it loads a mod; regenerated, never edited
 ctx/tsconfig.json
 ctx/.claude-plugin/types/
+savvy-progress/tsconfig.json
+savvy-progress/.claude-plugin/types/
