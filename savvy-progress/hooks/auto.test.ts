@@ -1,7 +1,7 @@
 import { test, expect } from 'claude-code/testing'
 
 import type { AgentStatus, Flow } from '../types'
-import { AUTO_TITLE, isCounted, isSavvyType, onFinish, onSpawn, startsBatch } from './auto'
+import { AUTO_TITLE, isCounted, isSavvyType, onFinish, onSpawn, openKey, startsBatch } from './auto'
 
 const orchestrated: Flow = {
   title: 'Ship it',
@@ -113,6 +113,13 @@ test('an uncounted completion changes nothing while the batch still runs', () =>
 test('a finished flow is not reopened by a late completion', () => {
   const f = auto({ isFinished: true, done: 2, running: 0, phase: 'close' })
   expect(onFinish(f, true, [run('a', 'done'), run('b', 'done')])).toBe(f)
+})
+
+test('the panel key changes per batch for an auto flow, per title for an orchestrated one', () => {
+  expect(openKey(auto({ ids: ['a', 'b'] }))).toBe('a')
+  expect(openKey(onSpawn(auto({ ids: ['a'] }), 'b')!)).toBe('a')
+  expect(openKey(onSpawn(auto({ isFinished: true, ids: ['a'] }), 'c')!)).toBe('c')
+  expect(openKey(orchestrated)).toBe('Ship it')
 })
 
 test('only a running non-savvy agent is counted', () => {

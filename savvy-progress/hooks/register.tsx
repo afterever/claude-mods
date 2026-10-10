@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { AgentRun, Flow, Panel, Phase, PlannedTask } from '../types'
-import { AUTO_TITLE, isCounted, isSavvyType, onFinish, onSpawn, startsBatch } from './auto'
+import { AUTO_TITLE, isCounted, isSavvyType, onFinish, onSpawn, openKey, startsBatch } from './auto'
 
 const flow = atom({ plugin: 'savvy-progress', key: 'flow' } as const, null)
 const agents = atom({ plugin: 'savvy-progress', key: 'agents' } as const, [])
@@ -793,7 +793,7 @@ export const register: Register = (on, options) => {
     await update($, now, () => at)
     if (!isSavvy) await update($, flow, prev => onSpawn(prev, runId))
     const f = await read($, flow)
-    await autoOpen($, f && !f.isFinished ? f.title : isSavvy ? 'savvy-flow' : AUTO_TITLE)
+    await autoOpen($, f && !f.isFinished ? openKey(f) : isSavvy ? 'savvy-flow' : AUTO_TITLE)
     return started
   })
 

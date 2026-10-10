@@ -21,6 +21,13 @@ const fresh = (): Flow => ({
   ids: [],
 })
 
+/**
+ * What `autoOpen` dedupes on: the panel opens again whenever this changes. An auto
+ * flow keys on its first agent, so every new batch opens it, but the agents joining
+ * a batch do not reopen what the person closed; an orchestrated flow keys on its title.
+ */
+export const openKey = (f: Flow): string => (f.isAuto ? (f.ids?.[0] ?? AUTO_TITLE) : f.title)
+
 /** No flow, or the last one is closed: the next spawn opens a new batch. */
 export const startsBatch = (prev: Flow | null): boolean => prev === null || prev.isFinished
 
