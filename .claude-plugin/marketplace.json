@@ -9,6 +9,11 @@
       "name": "ctx",
       "source": "./ctx",
       "description": "Context window details like the Desktop app's panel: /ctx opens a pane that docks beside the transcript, and a 📊 button above the prompt toggles it"
+    },
+    {
+      "name": "savvy-progress",
+      "source": "./savvy-progress",
+      "description": "Progress bar above the prompt and a live agents panel for any subagent work, with a green Done row when it ends. Fork of johnnyvizz's savvy-progress."
     }
   ]
 }

@@ -5,12 +5,14 @@ Personal [Claude Code mods](https://code.claude.com/docs): plugins of function h
 | Mod | What it does |
 | --- | --- |
 | [`ctx`](./ctx) | Context window details in a pane and a band above the prompt: how full, how fast it is filling, what filled it, compacting on your terms, and what each of those costs. Why each feature exists: [ctx/DESIGN.md](./ctx/DESIGN.md). |
+| [`savvy-progress`](./savvy-progress) | A progress bar above the prompt and a live agents panel for any subagent work, closing into a green Done row. Fork of johnnyvizz's savvy-progress; what changed: [savvy-progress/README.md](./savvy-progress/README.md). |
 
 ## Install (each computer)
 
 ```
 claude plugin marketplace add afterever/claude-mods
 claude plugin install ctx@afterever-mods
+claude plugin install savvy-progress@afterever-mods
 ```
 
 Before the repo is on GitHub, add it from its folder instead:
