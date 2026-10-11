@@ -1,6 +1,6 @@
 # ctx: design notes
 
-This document explains why `ctx` is built the way it is. [README.md](../README.md) covers installing it; this covers the reasoning behind each feature, the alternatives that were turned down, and the numbers chosen. It is written for whoever changes the mod next, including a future Claude session.
+This document explains why `ctx` is built the way it is. [README.md](./README.md) covers installing and using it; this covers the reasoning behind each feature, the alternatives that were turned down, and the numbers chosen. It is written for whoever changes the mod next, including a future Claude session.
 
 ## The problem
 

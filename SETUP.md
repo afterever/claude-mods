@@ -46,8 +46,10 @@ the mods in this repo with `claude plugin marketplace update afterever-mods` and
 ## ctx
 
 My own mod: context window details in a pane and a band above the prompt. Nothing to configure
-after installing. What it does and the commands: [README.md](./README.md#use-ctx). Why each feature
-exists: [ctx/DESIGN.md](./ctx/DESIGN.md).
+after installing, except that the pane docks to the right only in the fullscreen layout:
+[ctx/README.md](./ctx/README.md#get-the-pane-on-the-right-use-the-fullscreen-layout). What it does
+and the commands: [ctx/README.md](./ctx/README.md#use-it). Why each feature exists:
+[ctx/DESIGN.md](./ctx/DESIGN.md).
 
 ## subagent-progress
 

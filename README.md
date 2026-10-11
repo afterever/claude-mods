@@ -4,7 +4,7 @@ Personal [Claude Code mods](https://code.claude.com/docs): plugins of function h
 
 | Mod | What it does |
 | --- | --- |
-| [`ctx`](./ctx) | Context window details in a pane and a band above the prompt: how full, how fast it is filling, what filled it, compacting on your terms, and what each of those costs. Why each feature exists: [ctx/DESIGN.md](./ctx/DESIGN.md). |
+| [`ctx`](./ctx) | Context window details in a pane and a band above the prompt: how full, how fast it is filling, what filled it, compacting on your terms, and what each of those costs. How to use it, and how to get the pane on the right: [ctx/README.md](./ctx/README.md). Why each feature exists: [ctx/DESIGN.md](./ctx/DESIGN.md). |
 | [`subagent-progress`](./subagent-progress) | A progress bar above the prompt and a live agents panel for any subagent work, each subagent a crab whose costume follows its model and effort, closing into a green Done row. Fork of johnnyvizz's savvy-progress (renamed in 2.0.0); what changed: [subagent-progress/README.md](./subagent-progress/README.md). |
 
 ## Install (each computer)
@@ -21,15 +21,7 @@ Pick up new versions with `claude plugin marketplace update afterever-mods` and 
 
 ## Use ctx
 
-| Command or key | Does |
-| --- | --- |
-| `/ctx`, or 📊 / `x` on the band | Open or close the pane |
-| `/ctx exact`, `/ctx quick` (`e` in the pane) | Count with the token API, or estimate locally (the default) |
-| `/ctx compact [focus]` (`c`) | Compact now, keeping your focus, edited files and latest requests |
-| `/ctx autokeep on|off` (`k`) | Add the same to every compaction, auto-compact included (off by default) |
-| `/ctx cost on|off` (`p`) | Show or hide the dollar figures: the last turn's cost, carrying cost, compaction payback, idle overhead (on by default) |
-| `m` `f` `s` `a` `h` `d` in the pane | Open MCP tools, memory files, skills, agents, heaviest results, unused so far |
-| `r` in the pane | Count again |
+`/ctx` opens the pane and the 📊 button above the prompt toggles it. The commands, the keys inside the pane, and what to do when the pane sits above the prompt instead of docking on the right (it needs the fullscreen layout) are in [ctx/README.md](./ctx/README.md).
 
 ## Develop
 
@@ -56,6 +48,7 @@ Bump `version` in the mod's `plugin.json` when you change it, or installed copie
 .claude-plugin/marketplace.json   the marketplace listing
 SETUP.md                          reproduce the whole mod setup on a new computer
 ctx/
+  README.md                       install, the fullscreen layout, commands and keys
   DESIGN.md                       why each feature exists and how it is built
   .claude-plugin/plugin.json      name, version, state contract
   hooks/hooks.json                points at register.tsx
