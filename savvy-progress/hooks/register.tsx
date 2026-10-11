@@ -269,9 +269,13 @@ ${CRAB_CSS}${crab(W - CRAB_W + 1, 0, 'other', false, isWorking, 0.8)}
 </svg>`
 }
 
-const barText = (f: Flow, width: number): string => {
-  const filled = Math.round(width * ratio(f))
-  return '█'.repeat(filled) + '░'.repeat(Math.max(0, width - filled))
+// Text bar for the terminal, in eighths of a cell: a 6-cell bar still moves in ~2% steps.
+const EIGHTHS = ['', '▏', '▎', '▍', '▌', '▋', '▊', '▉']
+const bar = (fraction: number, width: number): string => {
+  const eighths = Math.round(Math.max(0, Math.min(1, fraction)) * width * 8)
+  const full = Math.floor(eighths / 8)
+  const part = EIGHTHS[eighths % 8]
+  return '█'.repeat(full) + part + '░'.repeat(Math.max(0, width - full - (part ? 1 : 0)))
 }
 
 // ---------------------------------------------------------------------------
@@ -616,11 +620,6 @@ const compactSvg = (W: number, list: AgentRun[], planned: Planned[], t: ReturnTy
 
 // --- terminal drawing: the same rows in text.
 
-const ctxBar = (pct: number, width: number): string => {
-  const filled = Math.round((width * pct) / 100)
-  return '█'.repeat(filled) + '░'.repeat(Math.max(0, width - filled))
-}
-
 const STATUS_GLYPH: Record<string, string> = { running: '●', done: '✓', failed: '✗', planned: '◷' }
 
 // Opens the agents pane, or closes it when it is up; true when it ends up open.
@@ -948,21 +947,27 @@ export const register: Register = (on, options) => {
     // Terminal: the same content in text rows.
     const cols = Math.max(24, e.props.bodyColumns || 40)
     const barW = Math.max(6, Math.min(20, cols - 34))
+    // Theme keys, so done and failed follow the person's theme; running keeps the tier's color.
+    const statusColor = (a: AgentRun, color: string) => (a.status === 'failed' ? 'error' : a.status === 'done' ? 'success' : color)
+    // The bar shows steps when the worker reports them, else its context fill in grey.
+    const runBar = (a: AgentRun, color: string, width: number) => {
+      const progress = progressOf(a)
+      return progress === null ? <Text dimColor>{bar(ctxOf(a) / 100, width)}</Text> : <Text color={color}>{bar(progress, width)}</Text>
+    }
     const row = (a: AgentRun) => {
       const tier = tierOf(a.type)
       const color = colorOf(tier)
-      const ctx = ctxOf(a)
-      const progress = progressOf(a)
       const model = a.effort ? `${modelName(a.model)} · ${a.effort}` : modelName(a.model)
-      const steps = a.stepTotal ? `${a.stepDone ?? 0}/${a.stepTotal}${a.stepNote ? ' ' + a.stepNote : ''} · ` : ''
+      // Steps and their free-text note go last: a cut line loses them, not the time and cost.
+      const steps = a.stepTotal ? ` · ${a.stepDone ?? 0}/${a.stepTotal}${a.stepNote ? ' ' + a.stepNote : ''}` : ''
       return (
-        <Box key={a.id} flexDirection="column" marginBottom={1}>
+        <Box key={a.id} flexDirection="column">
           <Box flexDirection="row" gap={1}>
             <Text color={color}>▣</Text>
             <Text bold wrap="truncate-end">
               {a.description || a.type}
             </Text>
-            <Text color={a.status === 'failed' ? 'red' : a.status === 'done' ? 'green' : color}>{STATUS_GLYPH[a.status]}</Text>
+            <Text color={statusColor(a, color)}>{STATUS_GLYPH[a.status]}</Text>
           </Box>
           <Text dimColor wrap="truncate-end">
             {'  '}
@@ -971,11 +976,29 @@ export const register: Register = (on, options) => {
           </Text>
           <Text wrap="truncate-end">
             {'  '}
-            {progress === null ? <Text dimColor>{ctxBar(ctx, barW)}</Text> : <Text color={color}>{ctxBar(progress * 100, barW)}</Text>}
+            {runBar(a, color, barW)}
             <Text dimColor>
               {' '}
-              {steps}ctx {ctx}% · {fmtTokens(a.contextTokens)} ≈{fmtCost(a.costUsd)} {fmtTime(elapsed(a, at))}
+              {fmtTime(elapsed(a, at))} · ≈{fmtCost(a.costUsd)} · ctx {ctxOf(a)}% · {fmtTokens(a.contextTokens)}
+              {steps}
             </Text>
+          </Text>
+        </Box>
+      )
+    }
+    // Compact: one line per agent, the bar only where it fits.
+    const lineBarW = cols >= 40 ? Math.min(10, cols - 30) : 0
+    const line = (a: AgentRun) => {
+      const color = colorOf(tierOf(a.type))
+      return (
+        <Box key={a.id} flexDirection="row" gap={1}>
+          <Text color={statusColor(a, color)}>{STATUS_GLYPH[a.status]}</Text>
+          <Box flexGrow={1} flexShrink={1}>
+            <Text wrap="truncate-end">{a.description || a.type}</Text>
+          </Box>
+          {lineBarW > 0 && runBar(a, color, lineBarW)}
+          <Text dimColor>
+            {fmtTime(elapsed(a, at))} ≈{fmtCost(a.costUsd)}
           </Text>
         </Box>
       )
@@ -990,21 +1013,19 @@ export const register: Register = (on, options) => {
           {toggleCompact}
         </Box>
         <Text dimColor>
-          ≈{fmtCost(t.cost)} · {fmtTokens(t.tokens)} {s.tokensWord} · {fmtTime(t.time)}
+          {fmtTime(t.time)} · ≈{fmtCost(t.cost)} · {fmtTokens(t.tokens)} {s.tokensWord}
         </Text>
         {p.isCompact ? (
-          <Text wrap="truncate-end">
-            {[...running, ...finished].map(a => (
-              <Text key={a.id} color={colorOf(tierOf(a.type))}>
-                {STATUS_GLYPH[a.status]}{' '}
-              </Text>
-            ))}
+          <Box flexDirection="column">
+            {running.map(line)}
+            {finished.length > 0 && toggleDone}
+            {!p.isDoneCollapsed && finished.map(line)}
             {planned.map(pl => (
-              <Text key={`plan-${pl.n}`} dimColor>
-                ◷{' '}
+              <Text key={`plan-${pl.n}`} dimColor wrap="truncate-end">
+                {STATUS_GLYPH.planned} {pl.n}. {pl.title}
               </Text>
             ))}
-          </Text>
+          </Box>
         ) : (
           <Box flexDirection="column" marginTop={1}>
             {isEmpty && <Text dimColor>{s.empty}</Text>}
@@ -1016,9 +1037,9 @@ export const register: Register = (on, options) => {
             {planned.map(pl => {
               const tier = pl.tier in TIER_COLOR ? pl.tier : 'other'
               return (
-                <Box key={`plan-${pl.n}`} flexDirection="column" marginBottom={1}>
+                <Box key={`plan-${pl.n}`} flexDirection="column">
                   <Text dimColor wrap="truncate-end">
-                    <Text color={colorOf(tier)}>▢</Text> {pl.n}. {pl.title} ◷
+                    <Text color={colorOf(tier)}>▢</Text> {pl.n}. {pl.title}
                   </Text>
                   <Text dimColor wrap="truncate-end">
                     {'  '}
@@ -1044,7 +1065,7 @@ export const register: Register = (on, options) => {
     const crew = list.length + plannedOf(f, list).length
     const isWorking = list.some(a => a.status === 'running')
     const crewButton = (
-      <Button key="savvy-agents" label={`×${crew}`} plain onPress={() => void togglePane($)} />
+      <Button key="savvy-agents" label={`×${crew}`} plain hotkey="a" onPress={() => void togglePane($)} />
     )
     const percent = `${Math.round(ratio(f) * 100)}%`
     const dismiss = (
@@ -1057,7 +1078,8 @@ export const register: Register = (on, options) => {
       />
     )
 
-    if ('Svg' in ui) {
+    // The terminal's table answers `'Svg' in ui` too but draws it empty: the text row is its own.
+    if (e.surface !== 'terminal' && 'Svg' in ui) {
       const { Svg } = ui
       // About 8 CSS px per reported column; the rest is the count, the dismiss
       // and their gaps. No floor above the slot: a row wider than it would wrap.
@@ -1073,17 +1095,21 @@ export const register: Register = (on, options) => {
 
     const cols = e.props.bodyColumns
     const titleW = Math.max(8, Math.min(30, f.title.length + 2, Math.floor(cols / 3)))
-    const width = Math.max(6, Math.min(40, cols - titleW - 32))
+    // What follows the bar, measured: label, percent, the crew button (`a: ×N`), ▣ and ✕,
+    // and the row's six gaps of 2. The bar takes what is left.
+    const tail = label(f).length + percent.length + `a: ×${crew}`.length + 2 + 12
+    const width = Math.max(6, Math.min(40, cols - titleW - tail))
+    const color = f.isFinished ? 'success' : ACCENT
     return (
       <Box flexDirection="row" gap={2}>
         <Box width={titleW} flexShrink={0}>
-          <Text color={f.isFinished ? DONE : ACCENT}>● </Text>
+          <Text color={color}>{f.isFinished ? '✓' : '●'} </Text>
           <Text wrap="truncate-end">{f.title}</Text>
         </Box>
-        <Text color={f.isFinished ? DONE : ACCENT}>{barText(f, width)}</Text>
+        <Text color={color}>{bar(ratio(f), width)}</Text>
         <Text bold>{label(f)}</Text>
         <Text dimColor>{percent}</Text>
-        <Text color={CLAY}>▣</Text>
+        <Text color="claude">▣</Text>
         {crewButton}
         {dismiss}
       </Box>
