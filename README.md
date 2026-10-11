@@ -15,12 +15,7 @@ claude plugin install ctx@afterever-mods
 claude plugin install subagent-progress@afterever-mods
 ```
 
-Before the repo is on GitHub, add it from its folder instead:
-
-```
-claude plugin marketplace add C:\github\claude-mods
-claude plugin install ctx@afterever-mods
-```
+That installs the two mods in this repo. The whole setup, with the third-party mods, the global `CLAUDE.md` line and the skins patch and skin, is in [SETUP.md](./SETUP.md).
 
 Pick up new versions with `claude plugin marketplace update afterever-mods` and then `claude plugin update ctx@afterever-mods` (restart Claude Code to apply).
 
@@ -51,7 +46,7 @@ claude plugin validate C:\github\claude-mods
 claude plugin test C:\github\claude-mods\ctx
 ```
 
-Claude Code writes `ctx/.claude-plugin/types/` and `ctx/tsconfig.json` each time it loads a mod. They are regenerated and git-ignored.
+Claude Code writes `<mod>/.claude-plugin/types/` and `<mod>/tsconfig.json` each time it loads a mod. They are regenerated and git-ignored.
 
 Bump `version` in the mod's `plugin.json` when you change it, or installed copies will not pick the change up.
 
@@ -59,6 +54,7 @@ Bump `version` in the mod's `plugin.json` when you change it, or installed copie
 
 ```
 .claude-plugin/marketplace.json   the marketplace listing
+SETUP.md                          reproduce the whole mod setup on a new computer
 ctx/
   DESIGN.md                       why each feature exists and how it is built
   .claude-plugin/plugin.json      name, version, state contract
@@ -70,4 +66,14 @@ ctx/
   hooks/cost.ts, cost.test.ts     per-turn spend, learned prices, carrying and compaction costs
   hooks/render.test.ts            the pane, band and footer drawn on terminal and desktop
   types/index.d.ts                the mod's $.state contract
+subagent-progress/
+  README.md                       what it does and what changed from savvy-progress
+  LICENSE                         MIT, upstream's notice
+  .claude-plugin/plugin.json      name, version
+  hooks/hooks.json                points at register.tsx
+  hooks/register.tsx              the mod: tools, panel, band, state
+  hooks/auto.ts, auto.test.ts     the flow derived from spawns and completions
+  hooks/crew.ts, crew.test.ts     which costume a model and effort wears
+  hooks/render.test.ts            the panel and band drawn on terminal and desktop
+  types/index.d.ts                the mod's state contract
 ```
