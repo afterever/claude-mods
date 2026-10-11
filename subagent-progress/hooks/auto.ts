@@ -1,8 +1,8 @@
 import type { AgentRun, Flow } from '../types'
 
-// Subagent work outside any /savvy-flow: nobody reports a plan, so the flow row is
-// derived from spawns and completions. An orchestrated flow (the `progress` tool,
-// or a `savvy-*` worker) is never touched here.
+// Subagent work nobody reports a plan for: the flow row is derived from spawns and
+// completions. An orchestrated flow (the `progress` tool, or a `savvy-*` worker of an
+// upstream savvy-flow) is never touched here.
 
 export const AUTO_TITLE = 'Subagents'
 

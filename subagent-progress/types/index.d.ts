@@ -2,7 +2,11 @@ export type Phase = 'plan' | 'design' | 'delegate' | 'review' | 'close'
 
 export type PlannedTask = {
   title: string
+  /** A savvy-flow tier or a costume name; empty when the plan names a model instead. */
   tier: string
+  /** What the task will run on: an alias or a model id. Picks the costume with `effort`. */
+  model?: string
+  effort?: string
   after: number[]
 }
 
@@ -52,7 +56,7 @@ export type Panel = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'savvy-progress': {
+    'subagent-progress': {
       flow: Flow | null
       agents: AgentRun[]
       panel: Panel
