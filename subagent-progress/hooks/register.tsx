@@ -3,19 +3,21 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { AgentRun, Flow, Panel, Phase, PlannedTask } from '../types'
 import { AUTO_TITLE, isCounted, isSavvyType, onFinish, onSpawn, openKey, startsBatch } from './auto'
+import { COSTUME_COLOR, bareType, costumeOf, plannedCostume, plannedProfile } from './crew'
+import type { Costume } from './crew'
 
-const flow = atom({ plugin: 'savvy-progress', key: 'flow' } as const, null)
-const agents = atom({ plugin: 'savvy-progress', key: 'agents' } as const, [])
-const panel = atom({ plugin: 'savvy-progress', key: 'panel' } as const, {
+const flow = atom({ plugin: 'subagent-progress', key: 'flow' } as const, null)
+const agents = atom({ plugin: 'subagent-progress', key: 'agents' } as const, [])
+const panel = atom({ plugin: 'subagent-progress', key: 'panel' } as const, {
   isCompact: false,
   isDoneCollapsed: false,
   autoOpenedFor: '',
 })
-const now = atom({ plugin: 'savvy-progress', key: 'now' } as const, 0)
+const now = atom({ plugin: 'subagent-progress', key: 'now' } as const, 0)
 
-const TOOL = 'mcp__savvy-progress__progress'
-const STEP_TOOL = 'mcp__savvy-progress__step'
-const PANE = 'savvy-agents'
+const TOOL = 'mcp__subagent-progress__progress'
+const STEP_TOOL = 'mcp__subagent-progress__step'
+const PANE = 'subagents'
 const PHASES: readonly Phase[] = ['plan', 'design', 'delegate', 'review', 'close']
 const ACCENT = '#8f8cf4'
 const DONE = '#5fbf8f'
@@ -26,7 +28,7 @@ type ProgressInput = {
   done?: number
   phase?: Phase
   finished?: boolean
-  tasks?: { title?: string; tier?: string; after?: number[] }[]
+  tasks?: { title?: string; tier?: string; model?: string; effort?: string; after?: number[] }[]
 }
 
 // ---------------------------------------------------------------------------
@@ -113,7 +115,7 @@ async function detectLang($: EngineInterface, option: unknown): Promise<Lang> {
 }
 
 const blank = (): Flow => ({
-  title: 'savvy-flow',
+  title: AUTO_TITLE,
   total: 0,
   done: 0,
   running: 0,
@@ -131,6 +133,8 @@ const cleanTasks = (tasks: ProgressInput['tasks']): PlannedTask[] | undefined =>
     .map(t => ({
       title: (t.title ?? '').trim(),
       tier: (t.tier ?? '').replace(/^savvy-/, '').trim().toLowerCase(),
+      model: t.model?.trim() || undefined,
+      effort: t.effort?.trim().toLowerCase() || undefined,
       after: (t.after ?? []).filter(n => Number.isInteger(n) && n > 0),
     }))
 
@@ -281,24 +285,14 @@ const bar = (fraction: number, width: number): string => {
 // ---------------------------------------------------------------------------
 // Agents panel: every subagent of the session, plus the tasks the flow planned.
 
-const TIER_COLOR: Record<string, string> = {
-  fable: '#7F77DD',
-  heavy: '#D85A30',
-  careful: '#BA7517',
-  medium: '#378ADD',
-  light: '#1D9E75',
-  other: '#888780',
-}
+const colorOf = (costume: Costume): string => COSTUME_COLOR[costume]
 
-// What each savvy tier runs on, for planned tasks that have no run yet.
-const colorOf = (tier: string): string => TIER_COLOR[tier] ?? '#888780'
-
-const TIER_MODEL: Record<string, string> = {
-  fable: 'Fable · high',
-  heavy: 'Opus · xhigh',
-  careful: 'Opus · high',
-  medium: 'Opus · medium',
-  light: 'Opus · low',
+// "Opus · xhigh": what a planned task will run on, when it says (its model, or its savvy tier).
+const profileLabel = (p: PlannedTask): string => {
+  const { model, effort } = plannedProfile(p)
+  if (!model) return ''
+  const name = modelName(model)
+  return [name.charAt(0).toUpperCase() + name.slice(1), effort].filter(Boolean).join(' · ')
 }
 
 // USD per million tokens: input, output, cache read, cache write (5-minute TTL).
@@ -333,13 +327,6 @@ const costOf = (model: string, u: Usage): number => {
 }
 
 const windowOf = (model: string): number => (/haiku/i.test(model) ? 200_000 : 1_000_000)
-
-// `savvy-careful`, or `savvy-flow:savvy-careful` when the agents ship in a plugin.
-const tierOf = (type: string): string => {
-  const bare = type.replace(/^[^:]*:/, '')
-  const t = bare.replace(/^savvy-/, '').toLowerCase()
-  return t in TIER_COLOR && bare.startsWith('savvy-') ? t : 'other'
-}
 
 const modelName = (id: string): string => {
   const m = /(fable|mythos|opus|sonnet|haiku)-(\d+)(?:-(\d{1,2})(?!\d))?/i.exec(id)
@@ -390,8 +377,8 @@ const PANE_CSS = `<style>
 @media (prefers-reduced-motion: reduce){.live{animation:none}}
 </style>`
 
-// Pixel Clawd from DockCrab (Clawdy): a 24×18 crab on a 30×28 grid, one costume per tier.
-// The body keeps the brand clay; the tier's color lives in the costume's accent.
+// Pixel Clawd from DockCrab (Clawdy): a 24×18 crab on a 30×28 grid, one costume per kind
+// of agent (hooks/crew.ts). The body keeps the brand clay; the costume's color lives in its accent.
 const CLAY = '#D97757'
 const INK = '#1F1E1D'
 
@@ -423,66 +410,66 @@ const CRAB_CSS = `<style>
 .run .bd{animation:bob .5s steps(1) infinite -.125s}
 .run g{transform-box:fill-box}
 @keyframes st{50%{transform:translateY(-1px)}}@keyframes bob{50%{transform:translateY(1px)}}
-.c-fable.run{animation:float 1s ease-in-out infinite}
-.c-fable.run .la,.c-fable.run .lb,.c-fable.run .bd{animation:none}
-.c-fable.run .ant{animation:blink 1s steps(1) infinite}
-.c-fable.run .star{animation:blink .5s steps(1) infinite -.25s}
+.c-astronaut.run{animation:float 1s ease-in-out infinite}
+.c-astronaut.run .la,.c-astronaut.run .lb,.c-astronaut.run .bd{animation:none}
+.c-astronaut.run .ant{animation:blink 1s steps(1) infinite}
+.c-astronaut.run .star{animation:blink .5s steps(1) infinite -.25s}
 @keyframes float{50%{transform:translateY(-2px)}}@keyframes blink{50%{opacity:.15}}
-.c-heavy.run .it{animation:scan 1s steps(1) infinite}
-.c-heavy.run .gl{animation:blink 1s steps(1) infinite -.5s}
+.c-detective.run .it{animation:scan 1s steps(1) infinite}
+.c-detective.run .gl{animation:blink 1s steps(1) infinite -.5s}
 @keyframes scan{25%{transform:translate(-1px,1px)}50%{transform:translate(-2px,2px)}75%{transform:translate(-1px,1px)}}
-.c-careful.run .it{transform-origin:100% 100%;animation:twist .5s ease-in-out infinite}
+.c-engineer.run .it{transform-origin:100% 100%;animation:twist .5s ease-in-out infinite}
 @keyframes twist{50%{transform:rotate(-35deg)}}
-.c-medium.run .pan{transform-origin:0 50%;animation:tilt 1s ease-in-out infinite}
-.c-medium.run .egg{animation:flip 1s ease-in-out infinite}
+.c-chef.run .pan{transform-origin:0 50%;animation:tilt 1s ease-in-out infinite}
+.c-chef.run .egg{animation:flip 1s ease-in-out infinite}
 @keyframes tilt{20%,40%{transform:rotate(-12deg)}}@keyframes flip{30%{transform:translateY(-5px) scaleY(-1)}60%{transform:translateY(0)}}
-.c-light.run .la{animation-duration:.25s}.c-light.run .lb{animation-duration:.25s;animation-delay:-.125s}
-.c-light.run .flag{transform-origin:0 50%;animation:wave .25s steps(1) infinite}
+.c-racer.run .la{animation-duration:.25s}.c-racer.run .lb{animation-duration:.25s;animation-delay:-.125s}
+.c-racer.run .flag{transform-origin:0 50%;animation:wave .25s steps(1) infinite}
 @keyframes wave{50%{transform:skewY(-12deg) scaleX(.85)}}
-.c-explore.run .it{transform-origin:50% 100%;animation:fence .5s ease-in-out infinite}
+.c-pirate.run .it{transform-origin:50% 100%;animation:fence .5s ease-in-out infinite}
 @keyframes fence{50%{transform:rotate(25deg)}}
 @media (prefers-reduced-motion: reduce){.run,.run g{animation:none!important}}
 </style>`
 
-const COSTUMES: Record<string, (f: Fill, t: string) => void> = {
-  // Fable: astronaut in a glass dome; floats instead of walking, the antenna and the star blink.
-  fable: (f, t) => {
+const WARDROBE: Record<Costume, (f: Fill, t: string) => void> = {
+  // Fable, Opus at high or above: astronaut in a glass dome; floats instead of walking, the antenna and the star blink.
+  astronaut: (f, t) => {
     crabBody(f)
     f(6, 7, 18, 1, '#E6E8EE'); f(5, 8, 1, 14, '#E6E8EE'); f(24, 8, 1, 14, '#E6E8EE'); f(6, 22, 18, 1, '#C9CCD2')
     f(6, 8, 18, 14, 'rgba(169,214,245,.32)'); f(8, 9, 2, 1, '#fff'); f(8, 10, 1, 2, '#fff')
     f(14, 4, 2, 3, '#C9CCD2'); f(14, 2, 2, 2, t, 'ant'); f(13, 18, 4, 2, t)
     f(27, 3, 1, 3, '#F5C542', 'star'); f(26, 4, 3, 1, '#F5C542', 'star')
   },
-  // Heavy: detective with a deerstalker; the magnifier sweeps and glints.
-  heavy: (f, t) => {
+  // Opus below high: detective with a deerstalker; the magnifier sweeps and glints.
+  detective: (f, t) => {
     crabBody(f, -4, 'it')
     stamp(f, 6, 3, ['......bbbbbb......', '....bbcbbcbbbb....', '...bbbbbbbbbbbb...', '..bcbbcbbcbbcbbb..', '.bbbbbbbbbbbbbbbb.', 'dddddddddddddddddd'], { b: '#7A4A26', c: '#A0703F', d: '#5A3519' })
     f(6, 9, 18, 1, t)
     stamp(f, 23, 1, ['.kkk.', 'k...k', 'k...k', 'k...k', '.kkk.'], { k: '#3A3A3C' }, 'it')
     f(24, 2, 3, 3, 'rgba(169,214,245,.7)', 'it'); f(25, 6, 1, 4, '#7A4A26', 'it'); f(24, 2, 1, 1, '#fff', 'gl')
   },
-  // Careful: engineer in a hard hat; the wrench turns a bolt.
-  careful: (f, t) => {
+  // Sonnet at high or above: engineer in a hard hat; the wrench turns a bolt.
+  engineer: (f, t) => {
     crabBody(f)
     stamp(f, 6, 4, ['.....yyyyyyyy.....', '...yyyyyhhyyyyy...', '..yyyyyyhhyyyyyy..', '..yyyyyyhhyyyyyy..', '.yyyyyyyhhyyyyyyy.', 'dddddddddddddddddd'], { y: '#F5C542', h: '#FBE08A', d: '#C99A1E' })
     f(13, 5, 4, 2, t)
     stamp(f, 0, 10, ['.s.s', 'sss.', '.s..', '.s..'], { s: '#8E929A' }, 'it')
   },
-  // Medium: chef, the toque traced from DockCrab's Sprites.chefHat; tosses the omelette.
-  medium: (f, t) => {
+  // Sonnet below high: chef, the toque traced from DockCrab's Sprites.chefHat; tosses the omelette.
+  chef: (f, t) => {
     crabBody(f, -4, 'pan')
     stamp(f, 6, 0, ['........lll.......', '.......lllll......', '.wwwwgwwwwwwgwwwww', 'wwwwwwwwwwwwwwwwww', 'wwwwwwwwwwwwwwwwww', 'wwwwwgwwwwwggwwwww', '.wwwwgwwwwwggwwwww', '.dddbbbbbbbbbbbbb.', '.dddbbbbbbbbbbbbb.', '.dddbbbbbbbbbbbbb.'], { w: '#F4F3EE', l: '#F7F6F2', g: '#D2D1C8', b: t, d: '#B45F43' })
     f(22, 8, 7, 2, '#4A4A48', 'pan'); f(26, 10, 1, 1, '#4A4A48', 'pan'); f(24, 7, 3, 1, '#F5B731', 'egg')
   },
-  // Light: racer in a helmet; runs at double pace, the checkered flag flutters.
-  light: (f, t) => {
+  // Haiku: racer in a helmet; runs at double pace, the checkered flag flutters.
+  racer: (f, t) => {
     crabBody(f, -4)
     stamp(f, 6, 5, ['....rrrrrrrrrr....', '..rrrrrrwwrrrrrr..', '.rrrrrrrwwrrrrrrr.', '.rrrrrrrwwrrrrrrr.', '.rrrrrrrwwrrrrrrr.', '.kkkkkkkkkkkkkkkkr'], { r: t, w: '#F8F6F1', k: INK })
     f(25, 1, 1, 9, '#8E929A')
     stamp(f, 26, 1, ['wkwk', 'kwkw', 'wkwk'], { w: '#F8F6F1', k: INK }, 'flag')
   },
-  // Explore: pirate scouting the code; the cutlass fences.
-  explore: f => {
+  // The Explore agent: pirate scouting the code; the cutlass fences.
+  pirate: f => {
     crabBody(f)
     stamp(f, 5, 3, ['.kk..............kk.', '.kkk....kkkk....kkk.', '..kkkkkkkwwkkkkkkk..', '..kkkkkkkkkkkkkkkk..', '.gggggggggggggggggg.'], { k: '#55514C', w: '#F8F6F1', g: '#F5C542' })
     f(7, 11, 11, 1, INK); f(18, 11, 4, 3, INK)
@@ -491,19 +478,17 @@ const COSTUMES: Record<string, (f: Fill, t: string) => void> = {
   other: f => crabBody(f),
 }
 
-const costumeOf = (type: string): string => (type === 'Explore' ? 'explore' : tierOf(type))
-
 const CRAB_SCALE = 1.1
 
 // Body and props nest inside `bd` so a prop rides the bob and adds its own motion;
 // legs stay outside it and step on their own.
-const crab = (x: number, y: number, costume: string, dim = false, isWalking = false, scale = CRAB_SCALE): string => {
+const crab = (x: number, y: number, costume: Costume, dim = false, isWalking = false, scale = CRAB_SCALE): string => {
   const groups = new Map<string, string[]>([['bd', []]])
   const f: Fill = (cx, cy, w, h, c, cls = 'bd') => {
     if (!groups.has(cls)) groups.set(cls, [])
     groups.get(cls)?.push(`<rect x="${cx}" y="${cy}" width="${w}" height="${h}" fill="${c}"/>`)
   }
-  const draw = COSTUMES[costume] ?? ((g: Fill) => crabBody(g))
+  const draw = WARDROBE[costume] ?? ((g: Fill) => crabBody(g))
   draw(f, colorOf(costume))
   const group = (cls: string) => `<g class="${cls}">${(groups.get(cls) ?? []).join('')}</g>`
   const props = [...groups.keys()].filter(k => k !== 'bd' && k !== 'la' && k !== 'lb')
@@ -552,8 +537,8 @@ const ctxOf = (a: AgentRun): number => (a.contextMax ? Math.min(100, Math.round(
 
 const agentSvg = (W: number, a: AgentRun, at: number): string => {
   const s = tr()
-  const tier = tierOf(a.type)
-  const color = colorOf(tier)
+  const costume = costumeOf(a)
+  const color = colorOf(costume)
   const ctx = ctxOf(a)
   const textW = W - 42 - 22
   const meta = [a.effort ? `${modelName(a.model)} · ${a.effort}` : modelName(a.model)]
@@ -569,9 +554,9 @@ const agentSvg = (W: number, a: AgentRun, at: number): string => {
   return svg(
     W,
     66,
-    `${crab(0, 14, costumeOf(a.type), false, a.status === 'running')}
+    `${crab(0, 14, costume, false, a.status === 'running')}
 <text class="t" x="42" y="18" font-family="${FONT}" font-size="13" font-weight="600">${xml(fitText(a.description || a.type, 13, textW))}</text>
-<text x="42" y="34" font-family="${FONT}" font-size="11"><tspan fill="${color}">${xml(tier === 'other' ? a.type : tier)}</tspan><tspan class="s">  ${xml(meta.join('  ·  '))}</tspan></text>
+<text x="42" y="34" font-family="${FONT}" font-size="11"><tspan fill="${color}">${xml(bareType(a.type))}</tspan><tspan class="s">  ${xml(meta.join('  ·  '))}</tspan></text>
 ${steps && stepsW > 30 ? `<text class="t" x="42" y="49" font-family="${FONT}" font-size="11" font-variant-numeric="tabular-nums">${xml(fitText(steps, 11, stepsW))}</text>` : ''}
 <text class="s" x="${42 + barW}" y="49" text-anchor="end" font-family="${FONT}" font-size="11" font-variant-numeric="tabular-nums">${stats}</text>
 <rect class="k" x="42" y="55" width="${barW}" height="4" rx="2"/><rect${progress === null ? ' class="m"' : ''} x="42" y="55" width="${fillW}" height="4" rx="2"${progress === null ? '' : ` fill="${color}"`}/>
@@ -581,27 +566,28 @@ ${statusMark(W - 8, 16, a.status, color)}
 }
 
 const plannedSvg = (W: number, p: Planned): string => {
-  const tier = p.tier in TIER_COLOR ? p.tier : 'other'
-  const color = colorOf(tier)
+  const costume = plannedCostume(p)
+  const color = colorOf(costume)
   const textW = W - 42 - 22
-  const meta = [TIER_MODEL[tier] ?? '']
+  const meta = [profileLabel(p)]
   if (p.after.length) meta.push(`${tr().after} ${p.after.join(', ')}`)
   return svg(
     W,
     46,
-    `${crab(0, 6, tier, true)}
+    `${crab(0, 6, costume, true)}
 <text class="s" x="42" y="18" font-family="${FONT}" font-size="13" font-weight="600">${xml(fitText(`${p.n}. ${p.title}`, 13, textW))}</text>
-<text x="42" y="34" font-family="${FONT}" font-size="11"><tspan fill="${color}">${xml(tier)}</tspan><tspan class="m">  ${xml(meta.filter(Boolean).join('  ·  '))}</tspan></text>
+<text x="42" y="34" font-family="${FONT}" font-size="11"><tspan fill="${color}">${xml(p.tier)}</tspan><tspan class="m">  ${xml(meta.filter(Boolean).join('  ·  '))}</tspan></text>
 ${statusMark(W - 8, 16, 'planned', color)}
 <line class="ln" x1="0" y1="45.5" x2="${W}" y2="45.5"/>`,
   )
 }
 
 const compactSvg = (W: number, list: AgentRun[], planned: Planned[], t: ReturnType<typeof totals>): string => {
+  const icon = (k: Costume, s: string, dim: boolean) => ({ k, c: colorOf(k), s, dim })
   const icons = [
-    ...list.filter(a => a.status === 'running').map(a => ({ k: costumeOf(a.type), c: colorOf(tierOf(a.type)), s: 'running', dim: false })),
-    ...list.filter(a => a.status !== 'running').map(a => ({ k: costumeOf(a.type), c: colorOf(tierOf(a.type)), s: a.status, dim: false })),
-    ...planned.map(p => ({ k: p.tier in TIER_COLOR ? p.tier : 'other', c: colorOf(p.tier), s: 'planned', dim: true })),
+    ...list.filter(a => a.status === 'running').map(a => icon(costumeOf(a), 'running', false)),
+    ...list.filter(a => a.status !== 'running').map(a => icon(costumeOf(a), a.status, false)),
+    ...planned.map(p => icon(plannedCostume(p), 'planned', true)),
   ]
   const fit = Math.max(1, Math.floor((W - 150) / 36))
   const shown = icons.slice(0, fit)
@@ -649,9 +635,10 @@ export const register: Register = (on, options) => {
     await $.tool.register({
       name: 'progress',
       description:
-        'Report /savvy-flow progress to the progress bar above the prompt and the agents panel. ' +
+        "Report a multi-agent plan to the progress bar above the prompt and the agents panel. " +
         'Call it after presenting the plan (title, total, tasks, phase "delegate"), each time a task is accepted (done), ' +
-        'when switching phase or re-planning (tasks), and once at the end with finished: true. Fields left out keep their previous value.',
+        'when switching phase or re-planning (tasks), and once at the end with finished: true. Fields left out keep their previous value. ' +
+        'Optional: without it the bar follows subagent spawns and completions by itself.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -668,10 +655,19 @@ export const register: Register = (on, options) => {
               type: 'object',
               properties: {
                 title: { type: 'string', description: 'A few words; reused verbatim as the Agent description.' },
-                tier: { type: 'string', enum: ['fable', 'heavy', 'careful', 'medium', 'light'] },
+                model: {
+                  type: 'string',
+                  description: 'What the task will run on: `opus`, `sonnet`, `haiku`, `fable` or a model id. With `effort` it picks the crab\'s costume.',
+                },
+                effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh', 'max'] },
+                tier: {
+                  type: 'string',
+                  enum: ['fable', 'heavy', 'careful', 'medium', 'light'],
+                  description: 'A savvy-flow worker tier, for when `model` is left out.',
+                },
                 after: { type: 'array', items: { type: 'integer' }, description: 'Numbers of the tasks this one waits for.' },
               },
-              required: ['title', 'tier'],
+              required: ['title'],
             },
           },
         },
@@ -680,7 +676,7 @@ export const register: Register = (on, options) => {
     await $.tool.register({
       name: 'step',
       description:
-        'For savvy-flow workers: report progress on your own task to the agents panel. ' +
+        'For subagents: report progress on your own task to the agents panel. ' +
         'Right after reading the brief, call it with `total` (your plan in 3-8 steps) and `done: 0`; ' +
         'call it again as each step finishes. Cheap and silent: it only draws a bar.',
       inputSchema: {
@@ -792,7 +788,7 @@ export const register: Register = (on, options) => {
     await update($, now, () => at)
     if (!isSavvy) await update($, flow, prev => onSpawn(prev, runId))
     const f = await read($, flow)
-    await autoOpen($, f && !f.isFinished ? openKey(f) : isSavvy ? 'savvy-flow' : AUTO_TITLE)
+    await autoOpen($, f && !f.isFinished ? openKey(f) : isSavvy ? 'flow' : AUTO_TITLE)
     return started
   })
 
@@ -947,7 +943,7 @@ export const register: Register = (on, options) => {
     // Terminal: the same content in text rows.
     const cols = Math.max(24, e.props.bodyColumns || 40)
     const barW = Math.max(6, Math.min(20, cols - 34))
-    // Theme keys, so done and failed follow the person's theme; running keeps the tier's color.
+    // Theme keys, so done and failed follow the person's theme; running keeps the costume's color.
     const statusColor = (a: AgentRun, color: string) => (a.status === 'failed' ? 'error' : a.status === 'done' ? 'success' : color)
     // The bar shows steps when the worker reports them, else its context fill in grey.
     const runBar = (a: AgentRun, color: string, width: number) => {
@@ -955,8 +951,7 @@ export const register: Register = (on, options) => {
       return progress === null ? <Text dimColor>{bar(ctxOf(a) / 100, width)}</Text> : <Text color={color}>{bar(progress, width)}</Text>
     }
     const row = (a: AgentRun) => {
-      const tier = tierOf(a.type)
-      const color = colorOf(tier)
+      const color = colorOf(costumeOf(a))
       const model = a.effort ? `${modelName(a.model)} · ${a.effort}` : modelName(a.model)
       // Steps and their free-text note go last: a cut line loses them, not the time and cost.
       const steps = a.stepTotal ? ` · ${a.stepDone ?? 0}/${a.stepTotal}${a.stepNote ? ' ' + a.stepNote : ''}` : ''
@@ -971,7 +966,7 @@ export const register: Register = (on, options) => {
           </Box>
           <Text dimColor wrap="truncate-end">
             {'  '}
-            {tier === 'other' ? a.type : tier} · {model}
+            {bareType(a.type)} · {model}
             {a.round > 1 ? ` · ${s.round} ${a.round}` : ''}
           </Text>
           <Text wrap="truncate-end">
@@ -989,7 +984,7 @@ export const register: Register = (on, options) => {
     // Compact: one line per agent, the bar only where it fits.
     const lineBarW = cols >= 40 ? Math.min(10, cols - 30) : 0
     const line = (a: AgentRun) => {
-      const color = colorOf(tierOf(a.type))
+      const color = colorOf(costumeOf(a))
       return (
         <Box key={a.id} flexDirection="row" gap={1}>
           <Text color={statusColor(a, color)}>{STATUS_GLYPH[a.status]}</Text>
@@ -1034,21 +1029,18 @@ export const register: Register = (on, options) => {
             {finished.length > 0 && toggleDone}
             {!p.isDoneCollapsed && finished.map(row)}
             {planned.length > 0 && <Text dimColor>{s.planned} · {planned.length}</Text>}
-            {planned.map(pl => {
-              const tier = pl.tier in TIER_COLOR ? pl.tier : 'other'
-              return (
-                <Box key={`plan-${pl.n}`} flexDirection="column">
-                  <Text dimColor wrap="truncate-end">
-                    <Text color={colorOf(tier)}>▢</Text> {pl.n}. {pl.title}
-                  </Text>
-                  <Text dimColor wrap="truncate-end">
-                    {'  '}
-                    {tier} · {TIER_MODEL[tier] ?? ''}
-                    {pl.after.length ? ` · ${s.after} ${pl.after.join(', ')}` : ''}
-                  </Text>
-                </Box>
-              )
-            })}
+            {planned.map(pl => (
+              <Box key={`plan-${pl.n}`} flexDirection="column">
+                <Text dimColor wrap="truncate-end">
+                  <Text color={colorOf(plannedCostume(pl))}>▢</Text> {pl.n}. {pl.title}
+                </Text>
+                <Text dimColor wrap="truncate-end">
+                  {'  '}
+                  {[pl.tier, profileLabel(pl)].filter(Boolean).join(' · ')}
+                  {pl.after.length ? ` · ${s.after} ${pl.after.join(', ')}` : ''}
+                </Text>
+              </Box>
+            ))}
           </Box>
         )}
       </Box>
@@ -1065,12 +1057,12 @@ export const register: Register = (on, options) => {
     const crew = list.length + plannedOf(f, list).length
     const isWorking = list.some(a => a.status === 'running')
     const crewButton = (
-      <Button key="savvy-agents" label={`×${crew}`} plain hotkey="a" onPress={() => void togglePane($)} />
+      <Button key="subagent-crew" label={`×${crew}`} plain hotkey="a" onPress={() => void togglePane($)} />
     )
     const percent = `${Math.round(ratio(f) * 100)}%`
     const dismiss = (
       <Button
-        key="savvy-dismiss"
+        key="subagent-dismiss"
         label="✕"
         plain
         role="dismiss"
