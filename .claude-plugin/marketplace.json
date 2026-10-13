@@ -19,6 +19,11 @@
       "name": "prompt-upgrade",
       "source": "./prompt-upgrade",
       "description": "Turns a rough prompt into a great one before it is sent: /better asks up to three quick questions, rewrites the prompt and shows original and upgrade side by side. Nothing runs until you press Run. Idea and spec from https://tristenobrien.ai/."
+    },
+    {
+      "name": "work-report",
+      "source": "./work-report",
+      "description": "Shows what Claude has done for you: /report opens a pane with Today, Week, Month and Year tabs of tasks finished, an estimate of the hours that saved you and what that time is worth."
     }
   ]
 }
