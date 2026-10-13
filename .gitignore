@@ -5,3 +5,5 @@ subagent-progress/tsconfig.json
 subagent-progress/.claude-plugin/types/
 prompt-upgrade/tsconfig.json
 prompt-upgrade/.claude-plugin/types/
+work-report/tsconfig.json
+work-report/.claude-plugin/types/

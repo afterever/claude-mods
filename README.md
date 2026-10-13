@@ -7,6 +7,7 @@ Personal [Claude Code mods](https://code.claude.com/docs): plugins of function h
 | [`ctx`](./ctx) | Context window details in a pane and a band above the prompt: how full, how fast it is filling, what filled it, compacting on your terms, and what each of those costs. How to use it, and how to get the pane on the right: [ctx/README.md](./ctx/README.md). Why each feature exists: [ctx/DESIGN.md](./ctx/DESIGN.md). |
 | [`subagent-progress`](./subagent-progress) | A progress bar above the prompt and a live agents panel for any subagent work, each subagent a crab whose costume follows its model and effort, closing into a green Done row. Fork of johnnyvizz's savvy-progress (renamed in 2.0.0); what changed: [subagent-progress/README.md](./subagent-progress/README.md). |
 | [`prompt-upgrade`](./prompt-upgrade) | `/better` turns a rough prompt into a great one before it is sent: a pane asks up to three quick questions, rewrites the prompt and shows original and upgrade side by side, and nothing runs until you press Run. Optional automatic mode. Idea and spec from [tristenobrien.ai](https://tristenobrien.ai/); how to use it: [prompt-upgrade/README.md](./prompt-upgrade/README.md). |
+| [`work-report`](./work-report) | `/report` shows what Claude has done for you: tasks finished, an estimate of the hours that saved you and what that time is worth, in a pane with Today, Week, Month and Year tabs. Counts only, kept in the mod's own store; no model calls. How to use it: [work-report/README.md](./work-report/README.md). |
 
 ## Install (each computer)
 
@@ -15,9 +16,10 @@ claude plugin marketplace add afterever/claude-mods
 claude plugin install ctx@afterever-mods
 claude plugin install subagent-progress@afterever-mods
 claude plugin install prompt-upgrade@afterever-mods
+claude plugin install work-report@afterever-mods
 ```
 
-That installs the three mods in this repo. The whole setup, with the third-party mods, the global `CLAUDE.md` line and the skins patch and skin, is in [SETUP.md](./SETUP.md).
+That installs the four mods in this repo. The whole setup, with the third-party mods, the global `CLAUDE.md` line and the skins patch and skin, is in [SETUP.md](./SETUP.md).
 
 Pick up new versions with `claude plugin marketplace update afterever-mods` and then `claude plugin update ctx@afterever-mods` (restart Claude Code to apply).
 
@@ -81,5 +83,18 @@ prompt-upgrade/
   hooks/layout.ts, layout.test.ts widths, tracker, big numbers
   hooks/svg.ts, svg.test.ts       the three numbers as one drawing on the desktop
   hooks/flow.test.ts              the whole flow, with the model stubbed
+  types/index.d.ts                the mod's state contract
+work-report/
+  README.md                       commands, what counts as a task, the estimate, the tabs
+  .claude-plugin/plugin.json      name, version, state contract
+  hooks/hooks.json                points at register.tsx
+  hooks/register.tsx              the mod: events, commands, the pane and the button
+  hooks/view.tsx                  the pane
+  hooks/kinds.ts, kinds.test.ts   sorting a task by its tools
+  hooks/record.ts, record.test.ts which prompts count, claiming a turn
+  hooks/dates.ts, dates.test.ts   local-noon day stepping, ranges, day of the year
+  hooks/report.ts, report.test.ts totals, the estimate, the streak, chart bars
+  hooks/layout.ts, layout.test.ts widths, big numerals, tiles, bars, the chart
+  hooks/flow.test.ts              the whole flow, with the engine's events stubbed
   types/index.d.ts                the mod's state contract
 ```
