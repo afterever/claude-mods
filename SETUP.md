@@ -24,6 +24,7 @@ Paste this into Claude Code on the new computer:
 | `goal-meter` | `nateherkai/claude-code-mods` | 1.0.0 | Task plan shown as a progress bar while a `/goal` runs |
 | `skins` | `hellosverre/claude-skins` | 0.5.1 | Colour scheme and words for the transcript |
 | `cache-keeper` | `nateherkai/claude-code-mods` | 1.0.0 | Adds the `session-handoff` skill |
+| `whats-agent-doing` | `tzafrir/whats-agent-doing` | 0.4.3 | Box above the prompt naming the step Claude is on, with a step history |
 
 ## Install
 
@@ -31,12 +32,14 @@ Paste this into Claude Code on the new computer:
 claude plugin marketplace add afterever/claude-mods
 claude plugin marketplace add nateherkai/claude-code-mods
 claude plugin marketplace add hellosverre/claude-skins
+claude plugin marketplace add tzafrir/whats-agent-doing
 
 claude plugin install ctx@afterever-mods
 claude plugin install subagent-progress@afterever-mods
 claude plugin install goal-meter@nateherk-mods
 claude plugin install cache-keeper@nateherk-mods
 claude plugin install skins@hellosverre-mods
+claude plugin install whats-agent-doing@tzafrir
 ```
 
 Restart Claude Code afterwards: an installed plugin is not hot-reloaded. Pick up new versions of
@@ -186,9 +189,29 @@ restart. Only the Patch 1 code change needs a restart.
 Third-party, installed as is. It adds the `session-handoff` skill, which writes a structured
 end-of-session summary. Nothing to configure.
 
+## whats-agent-doing
+
+Third-party (Tzafrir Rehan), installed as is, written against 0.4.3. A box above the prompt that
+names the step Claude is on in plain English and how long it has been on it: a command shows its
+own description ("Find the commit that broke fixed-amount coupons") instead of its flags, and a
+background agent gets a row each. Nothing to configure.
+
+- **Expand the history:** click the triangle, or focus the box with `ctrl+x tab` and press Enter.
+  Each step ends as ✓ done, ✗ failed, ⊘ denied or ■ interrupted, with its duration.
+- **Collapse the whole band:** `ctrl+x ctrl+a`.
+- **It only displays.** The README and the installed hooks show no network, files or model calls,
+  so it costs no tokens, and it never answers a permission prompt, only shows that one is waiting.
+- **No clash with the other mods.** It registers no slash command or tool, unlike
+  `subagent-progress` with `/agents-info`. Other bands above the prompt stack under its box.
+- **Both it and `subagent-progress` show background agents,** so an agent appears in two places.
+- **Needs function hooks,** which are early access: it loads in a terminal or the desktop app's
+  Code tab, not in Claude chat or Cowork, and its API may change between releases.
+- Update with `claude plugin marketplace update tzafrir`, then
+  `claude plugin update whats-agent-doing@tzafrir`.
+
 ## Check it worked
 
-- `claude plugin list` shows the five plugins above.
+- `claude plugin list` shows the six plugins above.
 - `/ctx` opens the context pane, and the band shows above the prompt.
 - Run a few subagents: the progress bar fills and ends in a green Done row; `/agents-info` toggles
   the panel.
@@ -197,6 +220,8 @@ end-of-session summary. Nothing to configure.
 - In use, the spinner shows a Claude Code pool word (Clauding, Reticulating...) and the turn
   footer an original done word (Baked, Brewed, Sautéed...).
 - A multi-step request makes Claude call `mcp__goal-meter__tasks` with `plan` first.
+- While Claude works, a box above the prompt names the current step and a timer; the triangle
+  expands the history.
 
 ## Keeping this file current
 
