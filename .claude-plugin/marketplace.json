@@ -14,6 +14,11 @@
       "name": "subagent-progress",
       "source": "./subagent-progress",
       "description": "Progress bar above the prompt and a live agents panel for any subagent work, each subagent a crab whose costume follows its model and effort. Fork of johnnyvizz's savvy-progress."
+    },
+    {
+      "name": "prompt-upgrade",
+      "source": "./prompt-upgrade",
+      "description": "Turns a rough prompt into a great one before it is sent: /better asks up to three quick questions, rewrites the prompt and shows original and upgrade side by side. Nothing runs until you press Run. Idea and spec from https://tristenobrien.ai/."
     }
   ]
 }
