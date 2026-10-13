@@ -21,6 +21,8 @@ Paste this into Claude Code on the new computer:
 | --- | --- | --- | --- |
 | `ctx` | `afterever/claude-mods` (this repo) | 0.6.2 | Context window pane and band, compacting on your terms |
 | `subagent-progress` | `afterever/claude-mods` (this repo) | 2.0.0 | Progress bar and live panel for subagent work |
+| `prompt-upgrade` | `afterever/claude-mods` (this repo) | 0.1.0 | `/better` turns a rough prompt into a great one before it is sent |
+| `work-report` | `afterever/claude-mods` (this repo) | 0.1.0 | `/report` shows what Claude has done for you: tasks, hours saved, what that is worth |
 | `goal-meter` | `nateherkai/claude-code-mods` | 1.0.0 | Task plan shown as a progress bar while a `/goal` runs |
 | `skins` | `hellosverre/claude-skins` | 0.5.1 | Colour scheme and words for the transcript |
 | `cache-keeper` | `nateherkai/claude-code-mods` | 1.0.0 | Adds the `session-handoff` skill |
@@ -36,6 +38,8 @@ claude plugin marketplace add tzafrir/whats-agent-doing
 
 claude plugin install ctx@afterever-mods
 claude plugin install subagent-progress@afterever-mods
+claude plugin install prompt-upgrade@afterever-mods
+claude plugin install work-report@afterever-mods
 claude plugin install goal-meter@nateherk-mods
 claude plugin install cache-keeper@nateherk-mods
 claude plugin install skins@hellosverre-mods
@@ -61,6 +65,34 @@ live agents panel, each subagent a crab whose costume follows its model and effo
 configure. What it does and what changed: [subagent-progress/README.md](./subagent-progress/README.md).
 
 **Do not install `savvy-progress` next to it.** Both register `/agents-info`.
+
+## prompt-upgrade
+
+My own mod, built from the Prompt Upgrade idea and spec of the author of AI Made Easy
+([tristenobrien.ai](https://tristenobrien.ai/)): `/better` asks up to three quick questions,
+rewrites a rough prompt and shows the original and the upgrade side by side. Nothing is sent until
+you press Run. Written against 0.1.0. Nothing to configure.
+
+- **It costs tokens only when used:** each upgrade makes two model calls (`haiku` picks the
+  questions, `sonnet` writes the rewrite). `/better on` makes every typed prompt go through the pane
+  first; it starts off and is remembered between sessions.
+- What it does and the commands: [prompt-upgrade/README.md](./prompt-upgrade/README.md).
+
+## work-report
+
+My own mod: `/report` opens a pane with Today, Week, Month and Year tabs showing the tasks Claude
+finished, an estimate of the hours that saved and what they are worth. Written against 0.1.0.
+Nothing to configure, but the figures are estimates from settings you can change.
+
+- **Set the estimate once:** `/report settings` lists the minutes each kind of task saves and the
+  hourly rate; `/report settings rate 75` changes one.
+- **It makes no model calls and sends nothing anywhere.** Counts are kept in the mod's own store on
+  this computer. The store belongs to the installed copy, so a `--plugin-dir` run keeps a separate
+  count.
+- **A chip above the prompt** shows today's count and opens the pane. Other bands above the prompt
+  stack under it.
+- What it counts, how a task is sorted and how the pane narrows:
+  [work-report/README.md](./work-report/README.md).
 
 ## goal-meter
 
@@ -211,7 +243,7 @@ background agent gets a row each. Nothing to configure.
 
 ## Check it worked
 
-- `claude plugin list` shows the six plugins above.
+- `claude plugin list` shows the eight plugins above.
 - `/ctx` opens the context pane, and the band shows above the prompt.
 - Run a few subagents: the progress bar fills and ends in a green Done row; `/agents-info` toggles
   the panel.
@@ -220,6 +252,8 @@ background agent gets a row each. Nothing to configure.
 - In use, the spinner shows a Claude Code pool word (Clauding, Reticulating...) and the turn
   footer an original done word (Baked, Brewed, Sautéed...).
 - A multi-step request makes Claude call `mcp__goal-meter__tasks` with `plan` first.
+- `/better` opens a pane that asks for a rough prompt; `/report` opens the Work Report pane, and a
+  `Work report` chip shows above the prompt.
 - While Claude works, a box above the prompt names the current step and a timer; the triangle
   expands the history.
 
