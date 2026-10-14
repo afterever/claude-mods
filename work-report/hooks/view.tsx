@@ -13,8 +13,10 @@ import { KIND_LABEL, KIND_SHORT, KINDS } from './kinds'
 import { barRow, chartPlan, clip, COLORS, fit, KIND_TONE, padStart, strWidth, tileFace, tilePlan, TITLE } from './layout'
 import type { Line, Tone } from './layout'
 import { chartFor, estimate, hoursText, summaryFor, totalsFor, withCommas } from './report'
+import { barsSvg, chartSvg, drawingWidth, tilesSvg } from './svg'
 
 type El = Elements['terminal']
+type SvgEl = Elements['desktop']['Svg']
 type Press = (e: UiPressArgument) => void
 
 export type Actions = {
@@ -29,6 +31,12 @@ export type Model = {
   settings: Settings
   /** Now, in milliseconds. */
   now: number
+  /**
+   * The vector element, where the surface draws one (the desktop, the editor):
+   * the tiles, bars and chart are then drawings, which no font can put out of
+   * line. Absent on the terminal, which draws them as text.
+   */
+  Svg?: SvgEl
 }
 
 // Far more glyphs than any pane is wide: the box around it clips the rest
@@ -151,7 +159,7 @@ function titleBar(el: El, width: number, left: string, right: string) {
 
 // ── Sections ─────────────────────────────────────────────────────────────
 
-function tilesBlock(el: El, width: number, tasks: number, hours: number, dollars: number) {
+function tilesBlock(el: El, width: number, tasks: number, hours: number, dollars: number, Svg?: SvgEl) {
   const { Box, Text } = el
   const plan = tilePlan(width)
   const hoursNum = hoursText(hours)
@@ -164,6 +172,24 @@ function tilesBlock(el: El, width: number, tasks: number, hours: number, dollars
   const shown = tiles.slice(0, plan.count)
   const hidden = tiles.slice(plan.count)
   const share = plan.count === 3 ? '33%' : plan.count === 2 ? '50%' : '100%'
+  const hiddenLine =
+    hidden.length > 0 &&
+    lineRow(el, [
+      { t: fit(width, [hidden.map(t => `${t.captions[0]} ${t.plain}`).join(' · '), hidden.map(t => `${t.captions[t.captions.length - 1]} ${t.plain}`).join(' · ')]), tone: 'muted' },
+    ])
+  if (Svg) {
+    const art = tilesSvg(
+      drawingWidth(width + 1),
+      shown.map(t => ({ face: t.plain, captions: t.captions, tone: t.tone })),
+      shown.map(t => `${t.captions[0]} ${t.plain}`).join(', '),
+    )
+    return (
+      <Box flexDirection="column" width="100%">
+        <Svg source={art.source} alt={art.alt} />
+        {hiddenLine}
+      </Box>
+    )
+  }
   return (
     <Box flexDirection="column" width="100%">
       <Box flexDirection="row" columnGap={1} width="100%">
@@ -189,15 +215,12 @@ function tilesBlock(el: El, width: number, tasks: number, hours: number, dollars
           )
         })}
       </Box>
-      {hidden.length > 0 &&
-        lineRow(el, [
-          { t: fit(width, [hidden.map(t => `${t.captions[0]} ${t.plain}`).join(' · '), hidden.map(t => `${t.captions[t.captions.length - 1]} ${t.plain}`).join(' · ')]), tone: 'muted' },
-        ])}
+      {hiddenLine}
     </Box>
   )
 }
 
-function kindRows(el: El, width: number, kinds: Record<Kind, number>, hours: Record<Kind, number>) {
+function kindRows(el: El, width: number, kinds: Record<Kind, number>, hours: Record<Kind, number>, Svg?: SvgEl) {
   const isWide = width >= 46
   const names = isWide ? KIND_LABEL : KIND_SHORT
   const max = Math.max(...KINDS.map(k => kinds[k]))
@@ -205,6 +228,20 @@ function kindRows(el: El, width: number, kinds: Record<Kind, number>, hours: Rec
   const hourTexts = KINDS.map(k => `${hoursText(hours[k])}h`)
   const hw = Math.max(...hourTexts.map(t => t.length))
   const showHours = width >= 30
+  if (Svg) {
+    const art = barsSvg(
+      drawingWidth(width + 1),
+      KINDS.map((k, i) => ({
+        label: names[k],
+        count: kinds[k],
+        max,
+        tails: showHours ? [String(kinds[k]), hourTexts[i] ?? ''] : [String(kinds[k])],
+        tone: KIND_TONE[k],
+      })),
+      KINDS.map(k => `${KIND_LABEL[k]} ${kinds[k]}`).join(', '),
+    )
+    return [<Svg source={art.source} alt={art.alt} />]
+  }
   return KINDS.map((k, i) =>
     lineRow(
       el,
@@ -221,13 +258,21 @@ function kindRows(el: El, width: number, kinds: Record<Kind, number>, hours: Rec
 
 const MODEL_ROWS = 5
 
-function modelRows(el: El, width: number, models: Record<string, number>) {
+function modelRows(el: El, width: number, models: Record<string, number>, Svg?: SvgEl) {
   const sorted = Object.entries(models).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
   const top3 = sorted.slice(0, MODEL_ROWS)
   const rest = sorted.slice(MODEL_ROWS).reduce((n, [, c]) => n + c, 0)
   const rows: [string, number][] = rest > 0 ? [...top3, ['Others', rest]] : top3
   const max = Math.max(1, ...rows.map(r => r[1]))
   const cw = String(max).length
+  if (Svg) {
+    const art = barsSvg(
+      drawingWidth(width + 1),
+      rows.map(([name, count]) => ({ label: name, count, max, tails: [String(count)], tone: 'gold' as const })),
+      rows.map(([name, count]) => `${name} ${count}`).join(', '),
+    )
+    return [<Svg source={art.source} alt={art.alt} />]
+  }
   const labelWidth = Math.min(16, Math.max(...rows.map(r => strWidth(r[0]))))
   return rows.map(([name, count]) => lineRow(el, barRow(width, labelWidth, { label: name, count, max, tail: padStart(String(count), cw), tone: 'gold' })))
 }
@@ -273,8 +318,18 @@ export function drawPane(el: El, m: Model, a: Actions) {
   const est = estimate(totals.kinds, m.settings)
   const hours = {} as Record<Kind, number>
   for (const k of KINDS) hours[k] = est.byKind[k].hours
-  const plan = chartPlan(chartFor(m.tab, m.days, m.now), width)
+  const bars = chartFor(m.tab, m.days, m.now)
   const summary = summaryFor(m.tab, m.days, m.now)
+  const chart = m.Svg
+    ? (() => {
+        const { Svg } = m
+        const art = chartSvg(drawingWidth(width + 1), bars, `${m.tab === 'year' ? 'Tasks per month' : 'Tasks per day'}: ${bars.map(b => b.value).join(', ')}`)
+        return [<Svg source={art.source} alt={art.alt} />]
+      })()
+    : (() => {
+        const plan = chartPlan(bars, width)
+        return [...plan.rows.map(line => lineRow(el, line)), lineRow(el, [{ t: plan.axis, tone: 'muted' as const }])]
+      })()
   const note = fit(width, [
     `Hours and dollars are estimates: minutes per task at $${m.settings.rate} an hour. /report settings changes them.`,
     `Estimates: minutes per task at $${m.settings.rate} an hour. /report settings changes them.`,
@@ -285,18 +340,17 @@ export function drawPane(el: El, m: Model, a: Actions) {
   return (
     <Box flexDirection="column" width="100%">
       {header}
-      {tilesBlock(el, width, totals.tasks, est.hours, est.dollars)}
+      {tilesBlock(el, width, totals.tasks, est.hours, est.dollars, m.Svg)}
       {lineRow(el, [{ t: note, tone: 'muted' }])}
       {blank(el)}
       {heading(el, width, 'Where the time went', 'estimate')}
-      {kindRows(el, width, totals.kinds, hours)}
+      {kindRows(el, width, totals.kinds, hours, m.Svg)}
       {blank(el)}
       {heading(el, width, 'Who did the work')}
-      {modelRows(el, width, totals.models)}
+      {modelRows(el, width, totals.models, m.Svg)}
       {blank(el)}
       {heading(el, width, 'Tasks', m.tab === 'year' ? 'per month' : 'per day')}
-      {plan.rows.map(line => lineRow(el, line))}
-      {lineRow(el, [{ t: plan.axis, tone: 'muted' }])}
+      {chart}
       {blank(el)}
       {lineRow(el, [{ t: fit(width, [summary.text, summary.short]), tone: summary.isGood ? 'green' : 'muted' }])}
     </Box>
