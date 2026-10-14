@@ -234,7 +234,9 @@ export const register: Register = on => {
       () => {
         fn().catch(err => $.ui.toast(`Work Report: ${plain(err)}`))
       }
-    return drawPane(el, { width, tab, days, settings, now }, { pickTab: t => press(() => update($, tabAtom, () => t))() })
+    // the terminal's table answers Svg too but draws it empty: its figures are text
+    const Svg = e.surface === 'terminal' ? undefined : (el as unknown as Partial<Elements['desktop']>).Svg
+    return drawPane(el, { width, tab, days, settings, now, ...(Svg ? { Svg } : {}) }, { pickTab: t => press(() => update($, tabAtom, () => t))() })
   })
 
   // The one button: a chip above the prompt that opens the pane. The band is

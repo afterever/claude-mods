@@ -453,14 +453,58 @@ for (const surface of ['terminal', 'desktop'] as const) {
       for (const tab of ['tab-today', 'tab-week', 'tab-month', 'tab-year']) {
         await ui.press({ key: tab })
         const drawn = rows(await ui.drawn())
-        // the check is only worth anything if it saw rows
-        expect(drawn.length).toBeGreaterThan(8)
+        // the check is only worth anything if it saw rows; on the desktop the
+        // figures are drawings, so only the note and the summary are text rows
+        expect(drawn.length).toBeGreaterThan(surface === 'desktop' ? 1 : 8)
         for (const r of drawn) expect(`${tab} @${cols}: ${r.width <= limit ? 'fits' : `wide ${r.width}: ${r.text}`}`).toBe(`${tab} @${cols}: fits`)
       }
       await ui.unmount()
     }
   })
 }
+
+test('the desktop draws the tiles, bars and chart as drawings; the terminal draws them as text', async ($, on) => {
+  world(on, { stored: SAMPLE })
+  await start($)
+
+  const desktop = await mountPane($, 100, 'desktop')
+  const art = await desktop.findAll({ type: 'Svg' })
+  // tiles, the kinds, the models and the chart
+  expect(art).toHaveLength(4)
+  for (const a of art) {
+    expect(String(a.props.source)).toMatch(/^<svg /)
+    expect(String(a.props.alt).length).toBeGreaterThan(0)
+  }
+  // no font-dependent glyph is left in a row of the figures
+  const words = (await desktop.findAll({ type: 'Text' })).map(t => t.text).join('\n')
+  expect(words).not.toMatch(/[█▁▂▃▄▅▆▇┏┓┗┛┃]/)
+  expect((await desktop.findAll({ type: 'Box' })).filter(b => (b.key ?? '').startsWith('tile-'))).toHaveLength(0)
+  // the figures are still said: the kinds with their counts, the models, the tiles
+  const said = art.map(a => String(a.props.alt)).join(' | ')
+  expect(said).toMatch(/Emails 1/)
+  expect(said).toMatch(/Sonnet 5\.5 2/)
+  expect(said).toMatch(/tasks done 3/)
+  await desktop.unmount()
+
+  const terminal = await mountPane($, 100, 'terminal')
+  expect(await terminal.findAll({ type: 'Svg' })).toHaveLength(0)
+  expect(await terminal.find({ text: /█/ })).toBeDefined()
+  await terminal.unmount()
+})
+
+test('the desktop pane keeps working when a tab is picked', async ($, on) => {
+  world(on, { stored: SAMPLE })
+  await start($)
+  const ui = await mountPane($, 72, 'desktop')
+  const sources: string[] = []
+  for (const tab of ['tab-week', 'tab-month', 'tab-year', 'tab-today']) {
+    await ui.press({ key: tab })
+    sources.push((await ui.findAll({ type: 'Svg' })).map(a => String(a.props.source)).join('\n'))
+  }
+  // each tab has its own chart
+  expect(new Set(sources).size).toBe(4)
+  await ui.unmount()
+})
 
 test('a very wide count and long model name still fit', async ($, on) => {
   world(on, {

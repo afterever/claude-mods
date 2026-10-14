@@ -113,8 +113,9 @@ claude --plugin-dir <path to claude-mods>\work-report
 - **A task is claimed, not guessed.** `prompt.submit` arms a typed prompt, `turn.start` claims it by its words, and `turn.complete` records it only if the turn ended with an answer in the main loop. A turn nobody typed is never claimed, so it is never counted.
 - **State** lives in the host's `$.state` (the days, the settings, the tab), so a hot reload keeps it; the days and settings are also kept in the mod's own `$.store`, across sessions. A draw only reads; every change comes from a button, a command or an event. The contract is [`types/index.d.ts`](./types/index.d.ts).
 - **Days are stepped at local noon.** Adding 24 hours to midnight lands on the wrong date across a clock change; noon never does. Today, Week, Month and Year are lists of noons, and the day of the year is counted between two of them.
-- **Rows are built to the width.** The bars and the chart need whole cells, so each row is made to the width the pane reports less one cell, in a one-line box that clips rather than wraps, and the width tests below hold every row to it.
-- **Only the heavy box-drawing set** is used for the big numerals; the half-line glyphs (`╺ ╸ ╻ ╹`) are missing from many fonts. The decimal point is a plain `.` on the bottom row.
+- **Rows are built to the width.** In a terminal the bars and the chart need whole cells, so each row is made to the width the pane reports less one cell, in a one-line box that clips rather than wraps, and the width tests below hold every row to it.
+- **On the desktop the figures are drawings.** The tiles, the bars and the chart are each one SVG, because block and box-drawing characters come from whatever font the page falls back to and then do not line up. A drawing places every mark by its own coordinates: the bars start and end in the same place on every row, and the figures are right-aligned at fixed edges. The headings, rules, note and summary stay text. The terminal, which is always monospace, keeps its text rows.
+- **Only the heavy box-drawing set** is used for the big numerals in a terminal; the half-line glyphs (`╺ ╸ ╻ ╹`) are missing from many fonts. The decimal point is a plain `.` on the bottom row.
 - **The command answers first.** `/report` returns its sentence at once and opens the pane in the background; every form of it is wrapped so a failure comes back as a plain sentence.
 
 ## Layout
@@ -125,11 +126,12 @@ hooks/hooks.json              points at register.tsx
 hooks/register.tsx            events, commands, the pane and the button
 hooks/view.tsx                the pane, drawn from state
 hooks/layout.ts               widths, big numerals, tiles, bars, the chart's text
+hooks/svg.ts                  the tiles, bars and chart as drawings, for the desktop
 hooks/report.ts               totals, the estimate, the streak, chart bars, model names
 hooks/dates.ts                local-noon day stepping, ranges, the day of the year
 hooks/kinds.ts                sorting a task by its tools
 hooks/record.ts               which prompts count, and claiming a turn
-hooks/*.test.ts               kinds, typed prompts, dates, totals, layout and the full flow
+hooks/*.test.ts               kinds, typed prompts, dates, totals, layout, drawings and the full flow
 types/index.d.ts              the mod's $.state contract
 ```
 
@@ -140,7 +142,7 @@ claude plugin validate <path to claude-mods>
 claude plugin test <path to claude-mods>\work-report
 ```
 
-The tests make no model calls and cost nothing. They cover sorting a task by its tools, counting only typed prompts, the streak, adding days together, the day of the year and stepping across clock changes, each tab drawing its own title, dates and chart, the empty state, three then two then one tiles, and that no row of the pane is wider than the pane at narrow and wide widths on both the terminal and the desktop.
+The tests make no model calls and cost nothing. They cover sorting a task by its tools, counting only typed prompts, the streak, adding days together, the day of the year and stepping across clock changes, each tab drawing its own title, dates and chart, the empty state, three then two then one tiles, that on the desktop the tiles, bars and chart are drawings whose rows share one start, one length and one right edge at every width, and that no row of the pane is wider than the pane at narrow and wide widths on both the terminal and the desktop.
 
 Bump `version` in `plugin.json` when you change the mod, or installed copies will not pick the change up.
 
