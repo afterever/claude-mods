@@ -183,7 +183,10 @@ test('each task is sorted by the tools it used', async ($, on) => {
   await finish($, { text: 'how does the cache work', tools: [{ tool: 'Grep' }, { tool: 'Read', file_path: 'src/cache.ts' }] })
   // an answer from what it already knew used no tools at all
   await finish($, { text: 'what is a mutex' })
-  expect(dayOf(w.stored)!.kinds).toEqual({ emails: 1, images: 1, code: 2, documents: 1, research: 2, other: 1 })
+  // the command's own words reach the sorting: ffmpeg is video, git is only code
+  await finish($, { text: 'trim the intro', tools: [{ tool: 'Bash', command: 'ffmpeg -i intro.mov -ss 3 out.mp4' }] })
+  await finish($, { text: 'what changed', tools: [{ tool: 'Bash', command: 'git log --oneline -5' }] })
+  expect(dayOf(w.stored)!.kinds).toEqual({ emails: 1, images: 2, code: 3, documents: 1, research: 2, other: 1 })
 })
 
 test('a coder sees Code and Research, not rows of kinds they never used', async ($, on) => {
@@ -272,7 +275,7 @@ test('/report settings lists the settings, and the rate and the minutes can be c
   const w = world(on)
   await start($)
   const list: any = await $.command.run(cmd('settings'))
-  for (const part of ['Emails 10', 'Code 20', 'Documents 30', 'Images and video 20', 'Research 25', 'Other 10', '$50', 'estimate']) {
+  for (const part of ['Emails 10', 'Code 20', 'Documents 30', 'Images and video 20', 'Research 20', 'Other 10', '$50', 'estimate']) {
     expect(list.text).toContain(part)
   }
 

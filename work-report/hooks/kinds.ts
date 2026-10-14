@@ -2,9 +2,13 @@
 // register module collects the tool uses, this decides.
 import type { Kind } from '../types'
 
-// The order decides a task that touched several kinds: code comes before
-// documents, so a change to a source file and its README is code.
+// The order the rows are stored and shown in; a tie in the pane keeps it.
 export const KINDS: readonly Kind[] = ['emails', 'images', 'code', 'documents', 'research', 'other']
+
+// Which kind wins when a task touched several. Code is first on purpose: a
+// source file that was written says what the task was, and outweighs a
+// screenshot that was looked at or an email that was sent along the way.
+const PRIORITY: readonly Kind[] = ['code', 'emails', 'images', 'documents', 'research']
 
 export const KIND_LABEL: Record<Kind, string> = {
   emails: 'Emails',
@@ -25,8 +29,12 @@ export const KIND_SHORT: Record<Kind, string> = {
   other: 'Other',
 }
 
-/** One tool call of the turn: its name and, for a file tool, the path it worked on. */
-export type ToolUse = { tool: string; path?: string }
+/**
+ * One tool call of the turn: its name, for a file tool the path it worked on,
+ * and for a shell tool the start of its command. Kept in memory until the turn
+ * ends, to be sorted; none of it is stored.
+ */
+export type ToolUse = { tool: string; path?: string; command?: string }
 
 const IMAGE_EXT = new Set([
   'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'heic', 'tif', 'tiff', 'ico', 'psd',
@@ -51,13 +59,28 @@ const CODE_EXT = new Set([
 // The built-in tools that read or write one file by path
 const READ_TOOLS = new Set(['read'])
 const WRITE_TOOLS = new Set(['write', 'edit', 'multiedit', 'notebookedit'])
-// Running a command says little on its own: a task that did only that is code,
-// but any other kind it touched wins (a web search that ran `ls` is research).
+// The weak signals, looked at only when nothing stronger was found, in this
+// order (see classifyTask): writing a file nothing else recognised, or running
+// a command, is code; looking at an image is images; reading or searching
+// files, or using the browser, is research.
 const SHELL_TOOLS = new Set(['bash', 'powershell'])
-// Reading and searching your own files says less still: a task that only did
-// that was looking something up, which is research, but running a command or
-// writing anything makes it that instead.
 const EXPLORE_TOOLS = new Set(['read', 'grep', 'glob', 'notebookread'])
+// A command that works on pictures or video is images, whatever tool ran it
+const MEDIA_COMMAND = /\b(ffmpeg|ffprobe|magick|imagemagick|handbrakecli|yt-dlp|youtube-dl)\b/i
+// A tool of a browser server: navigating and reading pages is looking things up
+const isBrowserWord = (w: string) => w === 'chrome' || w === 'browser'
+
+// What a document tool does, from its name: `read_doc`, `query-docs` and
+// `search_apify_docs` look something up; `update_doc` and `create` write one.
+// A name with a writing verb is a document whatever else it says.
+const LOOKUP_VERBS = new Set([
+  'get', 'read', 'list', 'search', 'query', 'find', 'fetch', 'resolve', 'lookup', 'show', 'view', 'describe', 'download', 'inspect',
+])
+const WRITE_VERBS = new Set([
+  'create', 'update', 'write', 'edit', 'append', 'insert', 'delete', 'remove', 'set', 'batch', 'replace', 'upload', 'add', 'copy',
+  'duplicate', 'move', 'share', 'clear', 'trash', 'import', 'export', 'convert', 'send', 'publish', 'save', 'apply', 'patch',
+  'rename', 'format', 'merge', 'restore', 'generate',
+])
 
 const IMAGE_WORDS = new Set([
   'image', 'images', 'img', 'video', 'videos', 'photo', 'photos', 'picture', 'pictures',
@@ -92,11 +115,17 @@ export function kindOfUse(use: ToolUse): Kind | null {
   if (w.some(isMailWord)) return 'emails'
 
   if (w.some(x => IMAGE_WORDS.has(x))) return 'images'
-  if ((READ_TOOLS.has(name) || WRITE_TOOLS.has(name)) && IMAGE_EXT.has(ext)) return 'images'
+  // writing a picture or video is images; only looking at one is a weak signal (classifyTask)
+  if (WRITE_TOOLS.has(name) && IMAGE_EXT.has(ext)) return 'images'
+  if (SHELL_TOOLS.has(name) && MEDIA_COMMAND.test(use.command ?? '')) return 'images'
 
   if (WRITE_TOOLS.has(name) && CODE_EXT.has(ext)) return 'code'
 
-  if (w.some(x => DOCUMENT_WORDS.has(x))) return 'documents'
+  if (w.some(x => DOCUMENT_WORDS.has(x))) {
+    const isWriting = w.some(x => WRITE_VERBS.has(x))
+    const isLookup = w.some(x => LOOKUP_VERBS.has(x))
+    return isLookup && !isWriting ? 'research' : 'documents'
+  }
   if (WRITE_TOOLS.has(name) && DOCUMENT_EXT.has(ext)) return 'documents'
 
   if (w.some(x => SCRAPE_WORDS.has(x))) return 'research'
@@ -108,10 +137,16 @@ export function kindOfUse(use: ToolUse): Kind | null {
 }
 
 /**
- * One kind for the whole task. When a task touched several, the order of KINDS
- * decides: a task that searched the web and then wrote an email is an email.
- * Two weak signals are looked at only when no kind was found: a task that ran
- * commands is code, and one that only read or searched files is research.
+ * One kind for the whole task. When a task touched several, PRIORITY decides:
+ * a task that searched the web and then wrote an email is an email, and one
+ * that also wrote a source file is code.
+ *
+ * Only when no kind was found are the weak signals looked at, in this order:
+ *   1. a file was written that nothing recognised (a Makefile, a .env), or a
+ *      command was run: code
+ *   2. an image was looked at: images
+ *   3. files were read or searched, or the browser was used: research
+ * Anything else, a task that used no tools included, is other.
  */
 export function classifyTask(uses: readonly ToolUse[]): Kind {
   const seen = new Set<Kind>()
@@ -119,10 +154,12 @@ export function classifyTask(uses: readonly ToolUse[]): Kind {
     const kind = kindOfUse(use)
     if (kind) seen.add(kind)
   }
-  const found = KINDS.find(k => seen.has(k))
+  const found = PRIORITY.find(k => seen.has(k))
   if (found) return found
+
   const names = uses.map(u => u.tool.toLowerCase())
-  if (names.some(n => SHELL_TOOLS.has(n))) return 'code'
-  if (names.some(n => EXPLORE_TOOLS.has(n))) return 'research'
+  if (names.some(n => WRITE_TOOLS.has(n) || SHELL_TOOLS.has(n))) return 'code'
+  if (uses.some(u => READ_TOOLS.has(u.tool.toLowerCase()) && IMAGE_EXT.has(extOf(u.path)))) return 'images'
+  if (names.some(n => EXPLORE_TOOLS.has(n)) || uses.some(u => words(u.tool).some(isBrowserWord))) return 'research'
   return 'other'
 }

@@ -53,8 +53,18 @@ test('writing a source file, or only running commands, makes it code', () => {
   expect(classifyTask([use('PowerShell'), use('Grep')])).toBe('code')
   // reading code to explain it is not writing it
   expect(classifyTask([use('Read', 'src/app.ts'), use('Grep'), use('Glob')])).not.toBe('code')
-  // a file with no extension says nothing
-  expect(classifyTask([use('Edit', 'Makefile')])).toBe('other')
+})
+
+test('writing a file nothing recognised is code, never research', () => {
+  // no extension, or a dotfile: nothing says what it is, but a file was written
+  for (const path of ['Makefile', 'Dockerfile', '.env', '.gitignore', 'LICENSE', 'build/output.log']) {
+    expect(kindOfUse(use('Edit', path))).toBeNull()
+    expect(classifyTask([use('Edit', path)])).toBe('code')
+    // reading around first does not turn it into a lookup
+    expect(classifyTask([use('Grep'), use('Read', 'src/app.ts'), use('Write', path)])).toBe('code')
+  }
+  // a document is still a document
+  expect(classifyTask([use('Grep'), use('Write', 'notes.md')])).toBe('documents')
 })
 
 test('only reading or searching your own files is research, and anything more makes it that instead', () => {
@@ -91,14 +101,77 @@ test('a tool whose name only contains a kind inside another word is not that kin
   expect(kindOfUse(use('mcp__x__pagerduty_list'))).toBeNull()
 })
 
-test('when a task touched several kinds the order emails, images, code, documents, research decides', () => {
+test('when a task touched several kinds the order code, emails, images, documents, research decides', () => {
   expect(classifyTask([use('WebSearch'), use('Write', 'brief.md')])).toBe('documents')
   expect(classifyTask([use('Write', 'brief.md'), use('mcp__x__generate_image')])).toBe('images')
   expect(classifyTask([use('Bash'), use('WebFetch')])).toBe('research')
+  expect(classifyTask([use('mcp__claude_ai_Gmail__send_message'), use('mcp__x__generate_image')])).toBe('emails')
   // a change to the source and to its README is code
   expect(classifyTask([use('Edit', 'README.md'), use('Edit', 'src/app.ts')])).toBe('code')
   // code and a web search: the code is the task
   expect(classifyTask([use('WebSearch'), use('Edit', 'src/app.ts')])).toBe('code')
-  // an image beats code
-  expect(classifyTask([use('Edit', 'src/app.ts'), use('Write', 'public/logo.png')])).toBe('images')
+})
+
+test('a source file that was written outweighs an email sent or an image made along the way', () => {
+  // an email sent mid-task does not turn a coding task into an email
+  expect(classifyTask([use('Edit', 'src/app.ts'), use('mcp__claude_ai_Gmail__send_message')])).toBe('code')
+  // nor does an image written into the project
+  expect(classifyTask([use('Edit', 'src/app.ts'), use('Write', 'public/logo.png')])).toBe('code')
+  // but without a source file they are what they were
+  expect(classifyTask([use('mcp__claude_ai_Gmail__send_message'), use('Write', 'public/logo.png')])).toBe('emails')
+  expect(classifyTask([use('Write', 'public/logo.png')])).toBe('images')
+})
+
+test('looking at a screenshot is a weak signal: images only when nothing else was done', () => {
+  // the picture alone
+  expect(classifyTask([use('Read', 'shots/before.PNG')])).toBe('images')
+  expect(classifyTask([use('Read', 'shots/before.png'), use('Grep')])).toBe('images')
+  // read a screenshot to debug the UI, then changed the code, or ran the tests
+  expect(classifyTask([use('Read', 'shots/bug.png'), use('Edit', 'src/button.tsx')])).toBe('code')
+  expect(classifyTask([use('Read', 'shots/bug.png'), use('Bash')])).toBe('code')
+  // writing one is still strong
+  expect(kindOfUse(use('Read', 'shots/before.png'))).toBeNull()
+  expect(kindOfUse(use('Write', 'shots/after.png'))).toBe('images')
+})
+
+test('a document tool that only looks something up is research; one that writes is a document', () => {
+  // looking things up
+  expect(classifyTask([use('mcp__plugin_context7__query-docs')])).toBe('research')
+  expect(classifyTask([use('mcp__Apify__search-apify-docs')])).toBe('research')
+  expect(classifyTask([use('mcp__Apify__fetch-apify-docs')])).toBe('research')
+  expect(classifyTask([use('mcp__33a75045__read_doc')])).toBe('research')
+  expect(classifyTask([use('mcp__claude_ai_Google_Sheets__get_values')])).toBe('research')
+  expect(classifyTask([use('mcp__claude_ai_Google_Slides__read_presentation')])).toBe('research')
+  // writing them
+  expect(classifyTask([use('mcp__claude_ai_Google_Docs__update_doc')])).toBe('documents')
+  expect(classifyTask([use('mcp__claude_ai_Claude_Docs__batch')])).toBe('documents')
+  expect(classifyTask([use('mcp__claude_ai_Google_Sheets__append_values')])).toBe('documents')
+  // read then write: the writing is the task
+  expect(classifyTask([use('mcp__x__read_doc'), use('mcp__x__update_doc')])).toBe('documents')
+  // a name that says nothing about what it does stays a document
+  expect(classifyTask([use('mcp__x__docs')])).toBe('documents')
+})
+
+test('using the browser is research, and anything more makes it that instead', () => {
+  expect(classifyTask([use('mcp__claude-in-chrome__navigate')])).toBe('research')
+  expect(classifyTask([use('mcp__Claude_Browser__navigate'), use('mcp__Claude_Browser__computer')])).toBe('research')
+  // a browser task that also ran a command, or wrote code
+  expect(classifyTask([use('mcp__claude-in-chrome__navigate'), use('Bash')])).toBe('code')
+  expect(classifyTask([use('mcp__Claude_Browser__navigate'), use('Edit', 'src/app.ts')])).toBe('code')
+  // a desktop-control tool is not the browser
+  expect(classifyTask([use('mcp__computer-use__screenshot')])).toBe('other')
+})
+
+test('a command that works on pictures or video is images, whatever ran it', () => {
+  const run = (tool: string, command: string) => ({ tool, command })
+  expect(classifyTask([run('Bash', 'ffmpeg -i in.mov -vf scale=1280:-1 out.mp4')])).toBe('images')
+  expect(classifyTask([run('PowerShell', 'magick convert a.png -resize 50% b.png')])).toBe('images')
+  expect(classifyTask([run('Bash', 'yt-dlp https://example.com/v')])).toBe('images')
+  // an ordinary command is still only code
+  expect(classifyTask([run('Bash', 'git status')])).toBe('code')
+  expect(classifyTask([run('Bash', 'npm run build')])).toBe('code')
+  // the name alone has to be a whole word: this is not ffmpeg
+  expect(classifyTask([run('Bash', 'echo ffmpegger')])).toBe('code')
+  // and a source file written alongside still makes it code
+  expect(classifyTask([run('Bash', 'ffmpeg -i a.mov b.mp4'), use('Edit', 'render.py')])).toBe('code')
 })

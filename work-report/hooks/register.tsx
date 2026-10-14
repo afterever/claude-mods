@@ -181,7 +181,13 @@ export const register: Register = on => {
     if (active && active.uses.length < MAX_USES) {
       const input = e as unknown as Record<string, unknown>
       const path = [input.file_path, input.path, input.notebook_path].find(v => typeof v === 'string')
-      active.uses.push({ tool: String(e.tool), ...(typeof path === 'string' ? { path } : {}) })
+      // the start of a command is enough to tell ffmpeg from git; it is not kept past the turn
+      const command = typeof input.command === 'string' ? input.command.slice(0, 400) : undefined
+      active.uses.push({
+        tool: String(e.tool),
+        ...(typeof path === 'string' ? { path } : {}),
+        ...(command ? { command } : {}),
+      })
     }
     return next(e)
   }).catch(($, e, next) => next(e))

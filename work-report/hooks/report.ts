@@ -92,7 +92,7 @@ export function shownKinds(kinds: Readonly<Record<Kind, number>>): Kind[] {
 
 export const DEFAULT_SETTINGS: Settings = {
   rate: 50,
-  minutes: { emails: 10, documents: 30, images: 20, code: 20, research: 25, other: 10 },
+  minutes: { emails: 10, documents: 30, images: 20, code: 20, research: 20, other: 10 },
 }
 
 /** Settings as the store gave them back, each value checked, the rest the default. */

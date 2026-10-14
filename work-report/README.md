@@ -55,22 +55,38 @@ One typed request that finishes with an answer is one task.
 
 ### How a task is sorted
 
-By the tools it used. When a task touched several kinds, the first of these wins:
+By the tools it used. A task is one kind. Each kind has **strong** rules and some have **weak** ones, which count only when no strong rule matched.
 
-| Kind | What puts a task there |
-| --- | --- |
-| Emails | Any mail tool: Gmail, Outlook, IMAP, SMTP and the like. |
-| Images and video | Image or video tools, or reading or writing an image or video file (`.png`, `.jpg`, `.svg`, `.mp4`, `.mov` and so on). |
-| Code | Writing a source or config file with `Edit`, `Write`, `MultiEdit` or `NotebookEdit` (`.ts`, `.py`, `.go`, `.rs`, `.json`, `.yml`, `.html`, `.css`, `.sql` and so on). Also a task that only ran commands with `Bash` or `PowerShell`: builds, tests, git. |
-| Documents | Document, slide, spreadsheet or PDF tools, or writing a document file (`.md`, `.docx`, `.pdf`, `.pptx`, `.xlsx`, `.csv` and so on). |
-| Research | Web search, fetching a page, reading a page in the browser, transcripts. Also a task that only read or searched your own files (`Read`, `Grep`, `Glob`): looking something up. |
-| Other | Everything else, including a task that used no tools. |
+**Strong rules.** When a task touched several kinds, the first of these wins:
 
-Two of those are weak signals, looked at only when nothing stronger was found: running a command makes a task Code, and only reading files makes it Research. So a web search that ran `ls` is Research, a change to a source file and its README is Code, and a task that read a file and then ran its tests is Code. A file with no extension (`Makefile`, `Dockerfile`) says nothing.
+| # | Kind | What puts a task there |
+| --- | --- | --- |
+| 1 | Code | Writing a source or config file with `Edit`, `Write`, `MultiEdit` or `NotebookEdit` (`.ts`, `.py`, `.go`, `.rs`, `.json`, `.yml`, `.html`, `.css`, `.sql` and so on). |
+| 2 | Emails | Any mail tool: Gmail, Outlook, IMAP, SMTP and the like. |
+| 3 | Images and video | An image or video tool; writing an image or video file (`.png`, `.jpg`, `.svg`, `.mp4`, `.mov` and so on); or running `ffmpeg`, `magick`, `yt-dlp` and the like. |
+| 4 | Documents | A document, slide, spreadsheet or PDF tool that **writes** (update, create, append, batch and so on); or writing a document file (`.md`, `.docx`, `.pdf`, `.pptx`, `.xlsx`, `.csv` and so on). |
+| 5 | Research | Web search, fetching a page, reading a page in the browser, transcripts; or a document tool that only **looks something up** (`read_doc`, `query-docs`, `search_apify_docs`, `get_values`). |
+
+**Weak rules**, tried in this order, only when no strong rule matched:
+
+| # | Kind | What puts a task there |
+| --- | --- | --- |
+| 6 | Code | Running a command with `Bash` or `PowerShell` (builds, tests, git), or writing a file nothing recognised (`Makefile`, `Dockerfile`, `.env`, `.gitignore`). |
+| 7 | Images and video | Only looking at an image file with `Read`: a screenshot. |
+| 8 | Research | Only reading or searching your own files (`Read`, `Grep`, `Glob`), or using the browser (navigating, clicking). |
+| 9 | Other | Everything else, including a task that used no tools. |
+
+What that means in practice:
+
+- **A source file that was written wins.** A change to code and its README is Code; code plus an email sent along the way is Code; code plus a logo written into the project is Code.
+- **Commands are weak.** A web search that ran `ls` is Research. A task that read a file and then ran its tests is Code.
+- **A screenshot is only a weak signal.** Reading a screenshot to debug a UI and then changing the code is Code. Reading it and nothing else is Images and video.
+- **A documents tool is judged by what it does,** from its name: a lookup is Research, a write is Documents, and a name that says neither is Documents.
+- **A command's own words are read** only to tell media work from the rest (`ffmpeg` is video, `git` is not). The command text is held in memory until the turn ends and is never stored.
 
 The tools of helper agents working inside your request count toward its kind. The model that finished the turn is recorded by its short name ("Sonnet 5.5"), not its id.
 
-Only counts are stored, not the tools, so tasks finished before Code and the file-reading rule existed stay where they were counted (mostly Other). New tasks are sorted by the rules above.
+Only counts are stored, not the tools, so tasks finished before these rules existed stay where they were counted (mostly Other and Research). New tasks are sorted by the rules above.
 
 ### The estimate
 
@@ -80,10 +96,10 @@ Only counts are stored, not the tools, so tasks finished before Code and the fil
 | Code | 20 |
 | Documents | 30 |
 | Images and video | 20 |
-| Research | 25 |
+| Research | 20 |
 | Other | 10 |
 
-Hourly rate: 50. Hours are minutes divided by 60; dollars are hours times the rate. Change any of them with `/report settings`; they are kept between sessions. The Code figure is a guess that covers both a small edit and a long session, so set it to what a coding task is worth to you (`/report settings code 40`).
+Hourly rate: 50. Hours are minutes divided by 60; dollars are hours times the rate. Change any of them with `/report settings`; they are kept between sessions. A kind has one figure whichever rule put a task there, so Code and Research are averages: Code covers a small edit and a long session, Research a web investigation and a quick look through your files. Set them to what a typical task of that kind is worth to you (`/report settings code 40`).
 
 ### The streak
 

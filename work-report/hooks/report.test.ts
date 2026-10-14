@@ -58,17 +58,17 @@ test('totals over a stretch add its days and list tasks per day', () => {
 test('the estimate is minutes per kind, then hours, then dollars at the rate', () => {
   const kinds = { emails: 3, images: 0, code: 5, documents: 2, research: 1, other: 4 }
   const est = estimate(kinds, DEFAULT_SETTINGS)
-  // 3x10 + 5x20 + 2x30 + 1x25 + 4x10 = 255 minutes
+  // 3x10 + 5x20 + 2x30 + 1x20 + 4x10 = 250 minutes
   const near = (n: number) => Math.round(n * 1e6) / 1e6
-  expect(est.minutes).toBe(255)
-  expect(near(est.hours)).toBe(near(255 / 60))
-  expect(near(est.dollars)).toBe(near((255 / 60) * 50))
+  expect(est.minutes).toBe(250)
+  expect(near(est.hours)).toBe(near(250 / 60))
+  expect(near(est.dollars)).toBe(near((250 / 60) * 50))
   expect(est.byKind.documents.minutes).toBe(60)
   expect(est.byKind.code.minutes).toBe(100)
 
   const changed = estimate(kinds, { rate: 75, minutes: { ...DEFAULT_SETTINGS.minutes, emails: 15 } })
-  expect(changed.minutes).toBe(270)
-  expect(near(changed.dollars)).toBe(near((270 / 60) * 75))
+  expect(changed.minutes).toBe(265)
+  expect(near(changed.dollars)).toBe(near((265 / 60) * 75))
 })
 
 test('only the kinds a stretch holds are shown, most first, with other always last', () => {
@@ -84,7 +84,7 @@ test('only the kinds a stretch holds are shown, most first, with other always la
 })
 
 test('the defaults are the ones asked for, and damaged settings fall back to them', () => {
-  expect(DEFAULT_SETTINGS).toEqual({ rate: 50, minutes: { emails: 10, documents: 30, images: 20, code: 20, research: 25, other: 10 } })
+  expect(DEFAULT_SETTINGS).toEqual({ rate: 50, minutes: { emails: 10, documents: 30, images: 20, code: 20, research: 20, other: 10 } })
   expect(normalizeSettings(undefined)).toEqual(DEFAULT_SETTINGS)
   // settings and days saved before the code kind existed are read as they were, code at its default
   expect(normalizeSettings({ rate: 80, minutes: { emails: 12, documents: 30, images: 20, research: 25, other: 10 } })).toEqual({
