@@ -12,7 +12,7 @@ import { daysFor, describeDays, keyOf, sinceWords, stretchName, TAB_NAME } from 
 import { KIND_LABEL, KIND_SHORT, KINDS } from './kinds'
 import { barRow, chartPlan, clip, COLORS, fit, KIND_TONE, padStart, strWidth, tileFace, tilePlan, TITLE } from './layout'
 import type { Line, Tone } from './layout'
-import { chartFor, estimate, hoursText, summaryFor, totalsFor, withCommas } from './report'
+import { chartFor, estimate, hoursText, shownKinds, summaryFor, totalsFor, withCommas } from './report'
 import { barsSvg, chartSvg, drawingWidth, tilesSvg } from './svg'
 
 type El = Elements['terminal']
@@ -223,26 +223,28 @@ function tilesBlock(el: El, width: number, tasks: number, hours: number, dollars
 function kindRows(el: El, width: number, kinds: Record<Kind, number>, hours: Record<Kind, number>, Svg?: SvgEl) {
   const isWide = width >= 46
   const names = isWide ? KIND_LABEL : KIND_SHORT
-  const max = Math.max(...KINDS.map(k => kinds[k]))
+  // only what this stretch holds: a coder is not shown an empty Emails row
+  const shown = shownKinds(kinds)
+  const max = Math.max(1, ...shown.map(k => kinds[k]))
   const cw = String(max).length
-  const hourTexts = KINDS.map(k => `${hoursText(hours[k])}h`)
-  const hw = Math.max(...hourTexts.map(t => t.length))
+  const hourTexts = shown.map(k => `${hoursText(hours[k])}h`)
+  const hw = Math.max(1, ...hourTexts.map(t => t.length))
   const showHours = width >= 30
   if (Svg) {
     const art = barsSvg(
       drawingWidth(width + 1),
-      KINDS.map((k, i) => ({
+      shown.map((k, i) => ({
         label: names[k],
         count: kinds[k],
         max,
         tails: showHours ? [String(kinds[k]), hourTexts[i] ?? ''] : [String(kinds[k])],
         tone: KIND_TONE[k],
       })),
-      KINDS.map(k => `${KIND_LABEL[k]} ${kinds[k]}`).join(', '),
+      shown.map(k => `${KIND_LABEL[k]} ${kinds[k]}`).join(', '),
     )
     return [<Svg source={art.source} alt={art.alt} />]
   }
-  return KINDS.map((k, i) =>
+  return shown.map((k, i) =>
     lineRow(
       el,
       barRow(width, isWide ? 16 : 8, {

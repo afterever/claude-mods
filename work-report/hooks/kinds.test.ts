@@ -28,8 +28,8 @@ test('document, slide and spreadsheet tools, and writing a document file, make i
   expect(classifyTask([use('mcp__claude_ai_Claude_Docs__create')])).toBe('documents')
   expect(classifyTask([use('Write', 'notes/plan.md')])).toBe('documents')
   expect(classifyTask([use('Write', 'report.docx')])).toBe('documents')
-  // reading a document is not writing one
-  expect(classifyTask([use('Read', 'notes/plan.md')])).toBe('other')
+  // reading a document is not writing one: it is looking something up
+  expect(classifyTask([use('Read', 'notes/plan.md')])).toBe('research')
 })
 
 test('web search, page reading and transcripts make it research', () => {
@@ -40,9 +40,48 @@ test('web search, page reading and transcripts make it research', () => {
   expect(classifyTask([use('mcp__x__get_transcript')])).toBe('research')
 })
 
+test('writing a source file, or only running commands, makes it code', () => {
+  expect(classifyTask([use('Edit', 'src/app.ts')])).toBe('code')
+  expect(classifyTask([use('Write', 'C:/proj/server.py')])).toBe('code')
+  expect(classifyTask([use('MultiEdit', 'lib/main.go')])).toBe('code')
+  expect(classifyTask([use('NotebookEdit', 'analysis.ipynb')])).toBe('code')
+  // the files that configure code are code too
+  expect(classifyTask([use('Edit', 'package.json')])).toBe('code')
+  expect(classifyTask([use('Edit', '.github/workflows/ci.yml')])).toBe('code')
+  // a task that did only commands: builds, tests, git
+  expect(classifyTask([use('Bash')])).toBe('code')
+  expect(classifyTask([use('PowerShell'), use('Grep')])).toBe('code')
+  // reading code to explain it is not writing it
+  expect(classifyTask([use('Read', 'src/app.ts'), use('Grep'), use('Glob')])).not.toBe('code')
+  // a file with no extension says nothing
+  expect(classifyTask([use('Edit', 'Makefile')])).toBe('other')
+})
+
+test('only reading or searching your own files is research, and anything more makes it that instead', () => {
+  expect(classifyTask([use('Read', 'src/cache.ts')])).toBe('research')
+  expect(classifyTask([use('Grep'), use('Glob'), use('Read', 'src/cache.ts')])).toBe('research')
+  expect(kindOfUse(use('Grep'))).toBeNull()
+  // ran a command: code
+  expect(classifyTask([use('Read', 'package.json'), use('Bash')])).toBe('code')
+  // wrote something: that kind
+  expect(classifyTask([use('Grep'), use('Edit', 'src/cache.ts')])).toBe('code')
+  expect(classifyTask([use('Read', 'a.md'), use('Write', 'b.md')])).toBe('documents')
+  // a web lookup is research whatever else was read
+  expect(classifyTask([use('Read', 'src/cache.ts'), use('WebFetch')])).toBe('research')
+})
+
+test('running a command is a weak signal: any other kind the task touched wins', () => {
+  expect(kindOfUse(use('Bash'))).toBeNull()
+  expect(classifyTask([use('Bash'), use('WebFetch')])).toBe('research')
+  expect(classifyTask([use('PowerShell'), use('Write', 'notes/plan.md')])).toBe('documents')
+  expect(classifyTask([use('Bash'), use('mcp__claude_ai_Gmail__send_message')])).toBe('emails')
+  // but a source edit is a strong one
+  expect(classifyTask([use('Bash'), use('Edit', 'src/app.ts')])).toBe('code')
+})
+
 test('everything else, and a task with no tools, is other', () => {
   expect(classifyTask([])).toBe('other')
-  expect(classifyTask([use('Bash'), use('Grep'), use('Edit', 'src/app.ts')])).toBe('other')
+  expect(classifyTask([use('mcp__claude_ai_Todoist__add-tasks')])).toBe('other')
   expect(kindOfUse(use('mcp__claude_ai_Todoist__add-tasks'))).toBeNull()
 })
 
@@ -52,8 +91,14 @@ test('a tool whose name only contains a kind inside another word is not that kin
   expect(kindOfUse(use('mcp__x__pagerduty_list'))).toBeNull()
 })
 
-test('when a task touched several kinds the order emails, images, documents, research decides', () => {
+test('when a task touched several kinds the order emails, images, code, documents, research decides', () => {
   expect(classifyTask([use('WebSearch'), use('Write', 'brief.md')])).toBe('documents')
   expect(classifyTask([use('Write', 'brief.md'), use('mcp__x__generate_image')])).toBe('images')
   expect(classifyTask([use('Bash'), use('WebFetch')])).toBe('research')
+  // a change to the source and to its README is code
+  expect(classifyTask([use('Edit', 'README.md'), use('Edit', 'src/app.ts')])).toBe('code')
+  // code and a web search: the code is the task
+  expect(classifyTask([use('WebSearch'), use('Edit', 'src/app.ts')])).toBe('code')
+  // an image beats code
+  expect(classifyTask([use('Edit', 'src/app.ts'), use('Write', 'public/logo.png')])).toBe('images')
 })

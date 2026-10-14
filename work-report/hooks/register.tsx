@@ -70,12 +70,15 @@ async function openOn($: EngineInterface, tab: Tab | null): Promise<void> {
 
 // ── /report settings ─────────────────────────────────────────────────────
 
-const SETTING_ORDER: readonly Kind[] = ['emails', 'documents', 'images', 'research', 'other']
+const SETTING_ORDER: readonly Kind[] = ['emails', 'code', 'documents', 'images', 'research', 'other']
 
 const SETTING_NAMES: Record<string, Kind | 'rate'> = {
   rate: 'rate',
   emails: 'emails',
   email: 'emails',
+  code: 'code',
+  coding: 'code',
+  commands: 'code',
   documents: 'documents',
   document: 'documents',
   docs: 'documents',
@@ -102,7 +105,7 @@ async function settingsCommand($: EngineInterface, args: string[]): Promise<stri
 
   const name = SETTING_NAMES[(args[0] ?? '').toLowerCase()]
   if (!name) {
-    return `I do not know the setting "${args[0]}". The ones you can change are rate, emails, documents, images, research and other. For example: /report settings rate 75.`
+    return `I do not know the setting "${args[0]}". The ones you can change are rate, emails, code, documents, images, research and other. For example: /report settings rate 75.`
   }
   const raw = args[1]
   const value = raw === undefined ? NaN : Number(raw.replace(/^\$/, ''))

@@ -1,5 +1,5 @@
-/** The five kinds a finished task is sorted into, by the tools it used. */
-export type Kind = 'emails' | 'images' | 'documents' | 'research' | 'other'
+/** The six kinds a finished task is sorted into, by the tools it used. */
+export type Kind = 'emails' | 'images' | 'code' | 'documents' | 'research' | 'other'
 
 /** One calendar day: how many tasks of each kind, and how many each model did. */
 export type DayRecord = {

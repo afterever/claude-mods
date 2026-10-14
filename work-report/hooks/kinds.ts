@@ -2,11 +2,14 @@
 // register module collects the tool uses, this decides.
 import type { Kind } from '../types'
 
-export const KINDS: readonly Kind[] = ['emails', 'images', 'documents', 'research', 'other']
+// The order decides a task that touched several kinds: code comes before
+// documents, so a change to a source file and its README is code.
+export const KINDS: readonly Kind[] = ['emails', 'images', 'code', 'documents', 'research', 'other']
 
 export const KIND_LABEL: Record<Kind, string> = {
   emails: 'Emails',
   images: 'Images and video',
+  code: 'Code',
   documents: 'Documents',
   research: 'Research',
   other: 'Other',
@@ -16,6 +19,7 @@ export const KIND_LABEL: Record<Kind, string> = {
 export const KIND_SHORT: Record<Kind, string> = {
   emails: 'Emails',
   images: 'Images',
+  code: 'Code',
   documents: 'Docs',
   research: 'Research',
   other: 'Other',
@@ -33,10 +37,27 @@ const DOCUMENT_EXT = new Set([
   'ppt', 'pptx', 'odp', 'key',
   'xls', 'xlsx', 'ods', 'csv', 'tsv',
 ])
+// Source and the files that configure it. Writing one is code.
+const CODE_EXT = new Set([
+  'ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'vue', 'svelte', 'astro',
+  'py', 'ipynb', 'rb', 'php', 'go', 'rs', 'java', 'kt', 'kts', 'scala', 'swift', 'dart', 'lua', 'r',
+  'c', 'h', 'cc', 'cpp', 'hpp', 'cs', 'm', 'mm',
+  'sh', 'bash', 'zsh', 'ps1', 'bat', 'cmd',
+  'sql', 'graphql', 'proto',
+  'html', 'htm', 'css', 'scss', 'sass', 'less',
+  'json', 'jsonc', 'yaml', 'yml', 'toml', 'ini', 'xml', 'gradle',
+])
 
 // The built-in tools that read or write one file by path
 const READ_TOOLS = new Set(['read'])
 const WRITE_TOOLS = new Set(['write', 'edit', 'multiedit', 'notebookedit'])
+// Running a command says little on its own: a task that did only that is code,
+// but any other kind it touched wins (a web search that ran `ls` is research).
+const SHELL_TOOLS = new Set(['bash', 'powershell'])
+// Reading and searching your own files says less still: a task that only did
+// that was looking something up, which is research, but running a command or
+// writing anything makes it that instead.
+const EXPLORE_TOOLS = new Set(['read', 'grep', 'glob', 'notebookread'])
 
 const IMAGE_WORDS = new Set([
   'image', 'images', 'img', 'video', 'videos', 'photo', 'photos', 'picture', 'pictures',
@@ -73,6 +94,8 @@ export function kindOfUse(use: ToolUse): Kind | null {
   if (w.some(x => IMAGE_WORDS.has(x))) return 'images'
   if ((READ_TOOLS.has(name) || WRITE_TOOLS.has(name)) && IMAGE_EXT.has(ext)) return 'images'
 
+  if (WRITE_TOOLS.has(name) && CODE_EXT.has(ext)) return 'code'
+
   if (w.some(x => DOCUMENT_WORDS.has(x))) return 'documents'
   if (WRITE_TOOLS.has(name) && DOCUMENT_EXT.has(ext)) return 'documents'
 
@@ -87,6 +110,8 @@ export function kindOfUse(use: ToolUse): Kind | null {
 /**
  * One kind for the whole task. When a task touched several, the order of KINDS
  * decides: a task that searched the web and then wrote an email is an email.
+ * Two weak signals are looked at only when no kind was found: a task that ran
+ * commands is code, and one that only read or searched files is research.
  */
 export function classifyTask(uses: readonly ToolUse[]): Kind {
   const seen = new Set<Kind>()
@@ -94,5 +119,10 @@ export function classifyTask(uses: readonly ToolUse[]): Kind {
     const kind = kindOfUse(use)
     if (kind) seen.add(kind)
   }
-  return KINDS.find(k => seen.has(k)) ?? 'other'
+  const found = KINDS.find(k => seen.has(k))
+  if (found) return found
+  const names = uses.map(u => u.tool.toLowerCase())
+  if (names.some(n => SHELL_TOOLS.has(n))) return 'code'
+  if (names.some(n => EXPLORE_TOOLS.has(n))) return 'research'
+  return 'other'
 }

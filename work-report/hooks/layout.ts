@@ -4,7 +4,7 @@
 import type { Kind } from '../types'
 import type { Bar } from './report'
 
-export type Tone = 'text' | 'muted' | 'hair' | 'gold' | 'green' | 'amber' | 'dark' | 'blue' | 'violet' | 'teal' | 'orange'
+export type Tone = 'text' | 'muted' | 'hair' | 'gold' | 'green' | 'amber' | 'dark' | 'blue' | 'violet' | 'teal' | 'orange' | 'pink'
 export type Seg = { t: string; tone: Tone; bold?: boolean }
 export type Line = Seg[]
 
@@ -20,11 +20,13 @@ export const COLORS: Record<Tone, string> = {
   violet: '#BC8CFF',
   teal: '#39C5CF',
   orange: '#F0883E',
+  pink: '#F778BA',
 }
 
 export const KIND_TONE: Record<Kind, Tone> = {
   emails: 'blue',
   images: 'violet',
+  code: 'pink',
   documents: 'teal',
   research: 'orange',
   other: 'muted',

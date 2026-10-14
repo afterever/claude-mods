@@ -14,6 +14,7 @@ import {
   monthTotals,
   normalizeDay,
   normalizeSettings,
+  shownKinds,
   streak,
   summaryFor,
   tasksOf,
@@ -49,29 +50,48 @@ test('totals over a stretch add its days and list tasks per day', () => {
   }
   const week = totalsFor(days, [ago(6), ago(5), ago(4), ago(3), ago(2), ago(1), ago(0)])
   expect(week.tasks).toBe(4)
-  expect(week.kinds).toEqual({ emails: 1, images: 0, documents: 1, research: 0, other: 2 })
+  expect(week.kinds).toEqual({ emails: 1, images: 0, code: 0, documents: 1, research: 0, other: 2 })
   expect(week.models).toEqual({ 'Sonnet 5.5': 3, 'Opus 5.5': 1 })
   expect(week.perDay).toEqual([0, 0, 0, 0, 0, 1, 3])
 })
 
 test('the estimate is minutes per kind, then hours, then dollars at the rate', () => {
-  const kinds = { emails: 3, images: 0, documents: 2, research: 1, other: 4 }
+  const kinds = { emails: 3, images: 0, code: 5, documents: 2, research: 1, other: 4 }
   const est = estimate(kinds, DEFAULT_SETTINGS)
-  // 3x10 + 2x30 + 1x25 + 4x10 = 155 minutes
+  // 3x10 + 5x20 + 2x30 + 1x25 + 4x10 = 255 minutes
   const near = (n: number) => Math.round(n * 1e6) / 1e6
-  expect(est.minutes).toBe(155)
-  expect(near(est.hours)).toBe(near(155 / 60))
-  expect(near(est.dollars)).toBe(near((155 / 60) * 50))
+  expect(est.minutes).toBe(255)
+  expect(near(est.hours)).toBe(near(255 / 60))
+  expect(near(est.dollars)).toBe(near((255 / 60) * 50))
   expect(est.byKind.documents.minutes).toBe(60)
+  expect(est.byKind.code.minutes).toBe(100)
 
   const changed = estimate(kinds, { rate: 75, minutes: { ...DEFAULT_SETTINGS.minutes, emails: 15 } })
-  expect(changed.minutes).toBe(170)
-  expect(near(changed.dollars)).toBe(near((170 / 60) * 75))
+  expect(changed.minutes).toBe(270)
+  expect(near(changed.dollars)).toBe(near((270 / 60) * 75))
+})
+
+test('only the kinds a stretch holds are shown, most first, with other always last', () => {
+  const none = { emails: 0, images: 0, code: 0, documents: 0, research: 0, other: 0 }
+  expect(shownKinds(none)).toEqual([])
+  expect(shownKinds({ ...none, code: 6, research: 2, other: 9 })).toEqual(['code', 'research', 'other'])
+  // the biggest first, whatever the fixed order
+  expect(shownKinds({ ...none, emails: 1, documents: 4, images: 2 })).toEqual(['documents', 'images', 'emails'])
+  // a tie keeps the fixed order: emails, images, code, documents, research
+  expect(shownKinds({ ...none, research: 3, code: 3, emails: 3 })).toEqual(['emails', 'code', 'research'])
+  // other is not drawn when it holds nothing
+  expect(shownKinds({ ...none, other: 0, code: 1 })).toEqual(['code'])
 })
 
 test('the defaults are the ones asked for, and damaged settings fall back to them', () => {
-  expect(DEFAULT_SETTINGS).toEqual({ rate: 50, minutes: { emails: 10, documents: 30, images: 20, research: 25, other: 10 } })
+  expect(DEFAULT_SETTINGS).toEqual({ rate: 50, minutes: { emails: 10, documents: 30, images: 20, code: 20, research: 25, other: 10 } })
   expect(normalizeSettings(undefined)).toEqual(DEFAULT_SETTINGS)
+  // settings and days saved before the code kind existed are read as they were, code at its default
+  expect(normalizeSettings({ rate: 80, minutes: { emails: 12, documents: 30, images: 20, research: 25, other: 10 } })).toEqual({
+    rate: 80,
+    minutes: { emails: 12, documents: 30, images: 20, code: 20, research: 25, other: 10 },
+  })
+  expect(normalizeDay({ kinds: { emails: 2, other: 5 }, models: { A: 7 } })).toEqual({ kinds: { emails: 2, other: 5 }, models: { A: 7 } })
   expect(normalizeSettings({ rate: 'a lot', minutes: { emails: -4, documents: 45 } })).toEqual({
     rate: 50,
     minutes: { ...DEFAULT_SETTINGS.minutes, documents: 45 },

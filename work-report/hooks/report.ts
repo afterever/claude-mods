@@ -73,16 +73,26 @@ export function totalsFor(days: Readonly<Record<string, DayRecord>>, keys: reado
     perDay.push(tasksOf(rec))
     if (rec) sum = mergeDays(sum, rec)
   }
-  const kinds = { emails: 0, images: 0, documents: 0, research: 0, other: 0 } as Record<Kind, number>
+  const kinds = {} as Record<Kind, number>
   for (const k of KINDS) kinds[k] = sum.kinds[k] ?? 0
   return { tasks: KINDS.reduce((n, k) => n + kinds[k], 0), kinds, models: sum.models, perDay }
+}
+
+/**
+ * The kinds a stretch has tasks of, most first. `other` is the catch-all and
+ * stays last however many it holds; a tie keeps the order of KINDS.
+ */
+export function shownKinds(kinds: Readonly<Record<Kind, number>>): Kind[] {
+  const used = KINDS.filter(k => (kinds[k] ?? 0) > 0)
+  const named = used.filter(k => k !== 'other').sort((a, b) => (kinds[b] ?? 0) - (kinds[a] ?? 0))
+  return used.includes('other') ? [...named, 'other'] : named
 }
 
 // ── The estimate ─────────────────────────────────────────────────────────
 
 export const DEFAULT_SETTINGS: Settings = {
   rate: 50,
-  minutes: { emails: 10, documents: 30, images: 20, research: 25, other: 10 },
+  minutes: { emails: 10, documents: 30, images: 20, code: 20, research: 25, other: 10 },
 }
 
 /** Settings as the store gave them back, each value checked, the rest the default. */
