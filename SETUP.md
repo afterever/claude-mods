@@ -158,7 +158,7 @@ B-69`), so a plain page fetch returns just the title.
 | read | `#3CD3FE` | Cyan | Read |
 | write | `#FF9230` | Orange | Edit / Write |
 | run | `#FFD600` | Yellow | Bash / PowerShell |
-| search | `#DB34F2` | Purple | Glob / Grep |
+| search | `#FF6165` | Red, increased contrast | Glob / Grep |
 | web | `#6D7CFF` | Indigo | WebFetch / WebSearch |
 | mcp | `#B78A66` | Brown | MCP tools |
 | ok | `#30D158` | Green | finished call |
@@ -179,7 +179,7 @@ so the skin's words are never drawn.
 mcp__skins__design  action=save  name=cupertino  base=noir
   palette={"user":"#0091FF","fg":"#FFFFFF","muted":"#8E8E93","surface":"#2C2C2E","zebra":"#1C1C1E",
            "ok":"#30D158","err":"#FF4245","warn":"#FF6A00","read":"#3CD3FE","write":"#FF9230",
-           "run":"#FFD600","search":"#DB34F2","web":"#6D7CFF","mcp":"#B78A66","other":"#AEAEB2"}
+           "run":"#FFD600","search":"#FF6165","web":"#6D7CFF","mcp":"#B78A66","other":"#AEAEB2"}
 ```
 
 `save` also applies the skin and overwrites a skin of the same name. `/skin list` then shows
@@ -194,6 +194,10 @@ restart.
   (yellow), `write` (orange) and `err` (red) already sit around it. `#FF6A00` maximises the minimum
   CIE76 distance: 21 from `write`, 34 from `err`. The Apple-sourced alternative that is clearly
   distinct is the increased-contrast pink `#FF8AC4`, rejected as odd for "interrupted".
+- **`search` is the increased-contrast red, close to `err`.** Apple's Purple (`#DB34F2`) rendered
+  as magenta, so `search` took the lighter red `#FF6165`. It is 16 CIE76 from `err` (`#FF4245`),
+  the tightest gap in the palette; the default reds are 5 to 9 away and unusable. Revert to
+  `#DB34F2` if Grep rows and failed calls get confused.
 - **`run` stays yellow** (Terminal/Xcode convention) and `warn` moved, chosen over giving `run` a
   mint or teal, which land 14-29 from `read`.
 - **Unverified:** the HIG page lists no numbers for `label`, `secondaryLabel` or `tertiaryLabel`,
