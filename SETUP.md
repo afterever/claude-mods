@@ -1,7 +1,7 @@
 # Setting up my Claude Code mods on a new computer
 
 One file to reproduce this laptop's Claude Code mod setup elsewhere: which mods to install, the
-one line of global `CLAUDE.md` they rely on, and the local patch and skin that are not in any
+one line of global `CLAUDE.md` they rely on, and the `/skin` setting and skin that are not in any
 repository. Each mod has its own section; when the setup changes, change the section, do not add a
 file.
 
@@ -11,7 +11,7 @@ Paste this into Claude Code on the new computer:
 
 > Read `SETUP.md` in the `afterever/claude-mods` repository and set up my Claude Code mods exactly
 > as it says: add the marketplaces and install the plugins, add the Goal meter bullet to my global
-> `~/.claude/CLAUDE.md` (update in place if it is already there), apply the skins patch, and
+> `~/.claude/CLAUDE.md` (update in place if it is already there), run `/skin words claude`, and
 > rebuild the `cupertino` skin. Show me the diff before changing any file, and run the
 > checks at the end.
 
@@ -24,7 +24,7 @@ Paste this into Claude Code on the new computer:
 | `prompt-upgrade` | `afterever/claude-mods` (this repo) | 0.1.0 | `/better` turns a rough prompt into a great one before it is sent |
 | `work-report` | `afterever/claude-mods` (this repo) | 0.1.0 | `/report` shows what Claude has done for you: tasks, hours saved, what that is worth |
 | `goal-meter` | `nateherkai/claude-code-mods` | 1.0.0 | Task plan shown as a progress bar while a `/goal` runs |
-| `skins` | `hellosverre/claude-skins` | 0.5.1 | Colour scheme and words for the transcript |
+| `skins` | `hellosverre/claude-skins` | 0.5.6 | Colour scheme and words for the transcript |
 | `cache-keeper` | `nateherkai/claude-code-mods` | 1.0.0 | Adds the `session-handoff` skill |
 | `whats-agent-doing` | `tzafrir/whats-agent-doing` | 0.4.3 | Box above the prompt naming the step Claude is on, with a step history |
 
@@ -116,43 +116,30 @@ Add this under the other global instructions:
 
 ## skins
 
-`skins` is third-party. Two things on top of it are mine and live nowhere else: a one-line patch
-to its code, and a made skin called `cupertino`. Apply the patch first, restart, then build the
-skin.
+`skins` is third-party, written against 0.5.6. Two things on top of it are mine and live nowhere
+else: one setting, `/skin words claude`, and a made skin called `cupertino`. Set the words, then
+build the skin.
 
-### Patch 1: empty spinner and done lists mean "use Claude Code's own words"
+### Setting: `/skin words claude` keeps Claude Code's own words
 
 **Why.** A made skin can set `spinner` and `done` words, capped at 12 words of 24 characters.
 Claude Code's own pool is 185 spinner words and 8 done words, so a skin can never carry them all.
-The render code already supports "no words": `pick(active.skin.spinner, e.props.word) ?? e.props.word`
-returns the original word for an empty list. But `resolveSkin` refuses to leave a list empty and
-substitutes the base skin's words ("Thinking", "Done"...). The patch lets an empty list stay empty.
-
-**Where.** `hooks/custom.ts` in the installed plugin, function `resolveSkin`, near line 75:
+Since 0.5.5 the plugin has a global setting for it: `/skin words claude` makes the spinner and the
+turn footer show Claude Code's own word whatever the skin says. `/skin words skin` is the default
+and draws the skin's words. Saved skins keep their words either way.
 
 ```
-~/.claude/plugins/cache/hellosverre-mods/skins/<version>/hooks/custom.ts
+/skin words claude
 ```
 
-**Change.**
-
-```diff
--    spinner: made.spinner.length > 0 ? made.spinner : base.spinner,
--    done: made.done.length > 0 ? made.done : base.done,
-+    // LOCAL PATCH: an empty list stays empty so register.tsx falls back to Claude Code's own words.
-+    spinner: made.spinner,
-+    done: made.done,
-```
-
-- **Written against skins 0.5.1.** On another version, check that the two original lines match
-  before replacing them, and that `register.tsx` still falls back with `?? e.props.word`.
-- **It does not survive an update.** `claude plugin update skins@hellosverre-mods` replaces the
-  cache directory wholesale, so apply it again after every update.
-- **Restart Claude Code after patching.**
-- **Side effect.** It applies to every made skin: one saved without words shows Claude Code's own
-  words instead of its base skin's. Built-in skins are unaffected, since they are returned before
-  this code.
-- **Revert** by reinstalling: `claude plugin uninstall skins@hellosverre-mods`, then install again.
+- **It replaces my old local patch** to `resolveSkin` in `hooks/custom.ts`. That patch is not
+  needed and must not be applied: upstream took the request (issue #37, merged as
+  [hellosverre/claude-skins#45](https://github.com/hellosverre/claude-skins/pull/45)) as this
+  setting instead. A machine that still has the patched cache loses it on
+  `claude plugin update skins@hellosverre-mods`, which replaces the cache directory wholesale.
+- **Nothing to patch after an update.** The setting lives with the plugin's other `/skin`
+  preferences, not in the cache directory.
+- **It applies to every skin, built-in ones too.** `/skin list` shows the current value.
 
 ### The `cupertino` skin
 
@@ -183,14 +170,13 @@ B-69`), so a plain page fetch returns just the title.
 | zebra | `#1C1C1E` | systemGray6 | alternate table rows |
 | other | `#AEAEB2` | systemGray, increased contrast | anything else |
 
-Words: `spinner: []` and `done: []`, so Claude Code's own 185 spinner and 8 done words show. This
-is what Patch 1 is for.
+Words: none set. With `/skin words claude` Claude Code's own 185 spinner and 8 done words show,
+so the skin's words are never drawn.
 
-**Rebuild.** Pass `[]` explicitly: omitting the fields keeps the previous words. `[]` passes
-validation because `every` on an empty array is true and the schema has no `minItems`.
+**Rebuild.**
 
 ```
-mcp__skins__design  action=save  name=cupertino  base=noir  spinner=[]  done=[]
+mcp__skins__design  action=save  name=cupertino  base=noir
   palette={"user":"#0091FF","fg":"#FFFFFF","muted":"#8E8E93","surface":"#2C2C2E","zebra":"#1C1C1E",
            "ok":"#30D158","err":"#FF4245","warn":"#FF6A00","read":"#3CD3FE","write":"#FF9230",
            "run":"#FFD600","search":"#DB34F2","web":"#6D7CFF","mcp":"#B78A66","other":"#AEAEB2"}
@@ -200,7 +186,7 @@ mcp__skins__design  action=save  name=cupertino  base=noir  spinner=[]  done=[]
 `cupertino` as `●`.
 
 **Applying changes.** A palette save takes effect immediately in the running session, no
-restart. Only the Patch 1 code change needs a restart.
+restart.
 
 **Decisions worth remembering.**
 
@@ -247,8 +233,7 @@ background agent gets a row each. Nothing to configure.
 - `/ctx` opens the context pane, and the band shows above the prompt.
 - Run a few subagents: the progress bar fills and ends in a green Done row; `/agents-info` toggles
   the panel.
-- `mcp__skins__design {"action":"show"}` reports `"spinner":[]` and `"done":[]` for `cupertino`. If
-  it still lists noir's words, the unpatched `custom.ts` is the one loaded: patch and restart.
+- `/skin list` shows `words claude`, and `cupertino` as `●`.
 - In use, the spinner shows a Claude Code pool word (Clauding, Reticulating...) and the turn
   footer an original done word (Baked, Brewed, Sautéed...).
 - A multi-step request makes Claude call `mcp__goal-meter__tasks` with `plan` first.
