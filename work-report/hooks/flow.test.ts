@@ -178,7 +178,50 @@ test('each task is sorted by the tools it used', async ($, on) => {
   await finish($, { text: 'draft the proposal', tools: [{ tool: 'WebSearch' }, { tool: 'Write', file_path: 'C:/docs/proposal.docx' }] })
   await finish($, { text: 'what is new in postgres', tools: [{ tool: 'WebSearch' }, { tool: 'WebFetch' }] })
   await finish($, { text: 'fix the bug', tools: [{ tool: 'Grep' }, { tool: 'Edit', file_path: 'src/app.ts' }] })
-  expect(dayOf(w.stored)!.kinds).toEqual({ emails: 1, images: 1, documents: 1, research: 1, other: 1 })
+  // only commands: code too; only reading the code to explain it: research
+  await finish($, { text: 'run the tests', tools: [{ tool: 'Bash', command: 'npm test' }] })
+  await finish($, { text: 'how does the cache work', tools: [{ tool: 'Grep' }, { tool: 'Read', file_path: 'src/cache.ts' }] })
+  // an answer from what it already knew used no tools at all
+  await finish($, { text: 'what is a mutex' })
+  // the command's own words reach the sorting: ffmpeg is video, git is only code
+  await finish($, { text: 'trim the intro', tools: [{ tool: 'Bash', command: 'ffmpeg -i intro.mov -ss 3 out.mp4' }] })
+  await finish($, { text: 'what changed', tools: [{ tool: 'Bash', command: 'git log --oneline -5' }] })
+  expect(dayOf(w.stored)!.kinds).toEqual({ emails: 1, images: 2, code: 3, documents: 1, research: 2, other: 1 })
+})
+
+test('a coder sees Code and Research, not rows of kinds they never used', async ($, on) => {
+  world(on, {
+    stored: {
+      [TODAY]: { kinds: { code: 6, research: 2, other: 4 }, models: { 'Opus 5.5': 12 } },
+    },
+  })
+  await start($)
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await mountPane($, 100, surface)
+    const text = [
+      ...(await ui.findAll({ type: 'Text' })).map(t => t.text),
+      ...(await ui.findAll({ type: 'Svg' })).map(a => String(a.props.alt)),
+    ].join('\n')
+    expect(text).toContain('Code')
+    expect(text).toContain('Research')
+    expect(text).toContain('Other')
+    for (const unused of ['Emails', 'Images and video', 'Documents']) expect(`${surface}: ${text.includes(unused) ? `shows ${unused}` : 'ok'}`).toBe(`${surface}: ok`)
+    // most first, the catch-all last even though it holds more than Research
+    expect(text.indexOf('Code')).toBeLessThan(text.indexOf('Research'))
+    expect(text.indexOf('Research')).toBeLessThan(text.indexOf('Other'))
+    await ui.unmount()
+  }
+})
+
+test('settings written before the code kind came in are read with its default', async ($, on) => {
+  world(on, { stored: { settings: { rate: 80, minutes: { emails: 12, documents: 30, images: 20, research: 25, other: 10 } } } })
+  await start($)
+  const reply = await $.command.run(cmd('settings'))
+  const text = String((reply as { text?: string }).text)
+  // what the person set is kept, and the new kind has its default
+  expect(text).toContain('Emails 12')
+  expect(text).toContain('Code 20')
+  expect(text).toContain('$80')
 })
 
 test('counts are added to what the day already holds, and the day rolls over at midnight', async ($, on) => {
@@ -232,7 +275,7 @@ test('/report settings lists the settings, and the rate and the minutes can be c
   const w = world(on)
   await start($)
   const list: any = await $.command.run(cmd('settings'))
-  for (const part of ['Emails 10', 'Documents 30', 'Images and video 20', 'Research 25', 'Other 10', '$50', 'estimate']) {
+  for (const part of ['Emails 10', 'Code 20', 'Documents 30', 'Images and video 20', 'Research 20', 'Other 10', '$50', 'estimate']) {
     expect(list.text).toContain(part)
   }
 
@@ -243,6 +286,13 @@ test('/report settings lists the settings, and the rate and the minutes can be c
   const emails: any = await $.command.run(cmd('settings emails 15'))
   expect(emails.text).toContain('15')
   expect((w.stored.settings as any).minutes.emails).toBe(15)
+
+  // code answers to a few names
+  for (const name of ['code', 'coding', 'commands']) {
+    const code: any = await $.command.run(cmd(`settings ${name} 35`))
+    expect(code.text).toContain('Code now save 35 minutes')
+    expect((w.stored.settings as any).minutes.code).toBe(35)
+  }
 
   const again: any = await $.command.run(cmd('settings'))
   expect(again.text).toContain('Emails 15')
@@ -320,9 +370,11 @@ test('Today: the title, the three tiles, the kinds, the models, the chart and th
   // three rows of heavy box-drawing numerals in the tasks tile
   expect((await ui.findAll({ type: 'Text' })).filter(t => /^[┏┓┗┛┃━┣┫┻ ]+$/.test(t.text) && t.text.trim() !== '').length).toBeGreaterThanOrEqual(9)
 
-  // one row per kind, one per model, and the chart under its own heading
+  // one row per kind that has a task today, one per model, and the chart under its own heading
   const text = (await ui.findAll({ type: 'Text' })).map(t => t.text).join('\n')
-  for (const kind of ['Emails', 'Images and video', 'Documents', 'Research', 'Other']) expect(text).toContain(kind)
+  for (const kind of ['Emails', 'Research', 'Other']) expect(text).toContain(kind)
+  // the kinds with nothing today are not drawn
+  for (const kind of ['Images and video', 'Documents', 'Code']) expect(text).not.toContain(kind)
   expect(text).toContain('Sonnet 5.5')
   expect(text).toContain('Opus 5.5')
   expect(text).not.toContain('Haiku 5.5')

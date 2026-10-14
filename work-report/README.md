@@ -12,7 +12,7 @@ Hours and dollars are always **estimates**: the minutes you say a task saves, ti
 | `/report today`, `week`, `month`, `year` | Opens the pane on that tab. |
 | `/report settings` | Lists the minutes saved per kind of task and the hourly rate. |
 | `/report settings rate 75` | Sets the hourly rate to 75. |
-| `/report settings emails 15` | Sets the minutes one email task saves to 15. Also `documents`, `images`, `research` and `other`. |
+| `/report settings emails 15` | Sets the minutes one email task saves to 15. Also `code`, `documents`, `images`, `research` and `other`. |
 | `/report help` | One line of usage. |
 
 A **Work report** chip above the prompt, with today's count beside it, opens the pane too. Claude Code has no pressable entry in the status line itself, so the button sits in the band above the prompt and keeps whatever the other mods draw there beneath it.
@@ -31,7 +31,7 @@ Four tabs across the top, the chosen one a gold chip with dark text. The stretch
 Under the title bar:
 
 1. **Three tiles** with big numerals: estimated hours saved, tasks done, estimated worth in dollars. A number too wide for big numerals is shown as plain bold text in its tile.
-2. **Where the time went**: one row per kind, with a coloured bar, the count and the estimated hours.
+2. **Where the time went**: one row per kind **that has a task in the stretch**, biggest first and Other last, with a coloured bar, the count and the estimated hours. A coder sees Code and Research; someone who makes videos sees Images and video and Documents. There is nothing to set: the rows follow what you did.
 3. **Who did the work**: one row per model, with a bar and the count. More than five models: the rest are added up as "Others".
 4. **The chart**, then one summary line.
 
@@ -55,29 +55,51 @@ One typed request that finishes with an answer is one task.
 
 ### How a task is sorted
 
-By the tools it used. When a task touched several kinds, the first of these wins:
+By the tools it used. A task is one kind. Each kind has **strong** rules and some have **weak** ones, which count only when no strong rule matched.
 
-| Kind | What puts a task there |
-| --- | --- |
-| Emails | Any mail tool: Gmail, Outlook, IMAP, SMTP and the like. |
-| Images and video | Image or video tools, or reading or writing an image or video file (`.png`, `.jpg`, `.svg`, `.mp4`, `.mov` and so on). |
-| Documents | Document, slide, spreadsheet or PDF tools, or writing a document file (`.md`, `.docx`, `.pdf`, `.pptx`, `.xlsx`, `.csv` and so on). Reading one does not count. |
-| Research | Web search, reading a page, transcripts. |
-| Other | Everything else, and a task that used no tools. |
+**Strong rules.** When a task touched several kinds, the first of these wins:
+
+| # | Kind | What puts a task there |
+| --- | --- | --- |
+| 1 | Code | Writing a source or config file with `Edit`, `Write`, `MultiEdit` or `NotebookEdit` (`.ts`, `.py`, `.go`, `.rs`, `.json`, `.yml`, `.html`, `.css`, `.sql` and so on). |
+| 2 | Emails | Any mail tool: Gmail, Outlook, IMAP, SMTP and the like. |
+| 3 | Images and video | An image or video tool; writing an image or video file (`.png`, `.jpg`, `.svg`, `.mp4`, `.mov` and so on); or running `ffmpeg`, `magick`, `yt-dlp` and the like. |
+| 4 | Documents | A document, slide, spreadsheet or PDF tool that **writes** (update, create, append, batch and so on); or writing a document file (`.md`, `.docx`, `.pdf`, `.pptx`, `.xlsx`, `.csv` and so on). |
+| 5 | Research | Web search, fetching a page, reading a page in the browser, transcripts; or a document tool that only **looks something up** (`read_doc`, `query-docs`, `search_apify_docs`, `get_values`). |
+
+**Weak rules**, tried in this order, only when no strong rule matched:
+
+| # | Kind | What puts a task there |
+| --- | --- | --- |
+| 6 | Code | Running a command with `Bash` or `PowerShell` (builds, tests, git), or writing a file nothing recognised (`Makefile`, `Dockerfile`, `.env`, `.gitignore`). |
+| 7 | Images and video | Only looking at an image file with `Read`: a screenshot. |
+| 8 | Research | Only reading or searching your own files (`Read`, `Grep`, `Glob`), or using the browser (navigating, clicking). |
+| 9 | Other | Everything else, including a task that used no tools. |
+
+What that means in practice:
+
+- **A source file that was written wins.** A change to code and its README is Code; code plus an email sent along the way is Code; code plus a logo written into the project is Code.
+- **Commands are weak.** A web search that ran `ls` is Research. A task that read a file and then ran its tests is Code.
+- **A screenshot is only a weak signal.** Reading a screenshot to debug a UI and then changing the code is Code. Reading it and nothing else is Images and video.
+- **A documents tool is judged by what it does,** from its name: a lookup is Research, a write is Documents, and a name that says neither is Documents.
+- **A command's own words are read** only to tell media work from the rest (`ffmpeg` is video, `git` is not). The command text is held in memory until the turn ends and is never stored.
 
 The tools of helper agents working inside your request count toward its kind. The model that finished the turn is recorded by its short name ("Sonnet 5.5"), not its id.
+
+Only counts are stored, not the tools, so tasks finished before these rules existed stay where they were counted (mostly Other and Research). New tasks are sorted by the rules above.
 
 ### The estimate
 
 | Kind | Minutes saved per task |
 | --- | --- |
 | Emails | 10 |
+| Code | 20 |
 | Documents | 30 |
 | Images and video | 20 |
-| Research | 25 |
+| Research | 20 |
 | Other | 10 |
 
-Hourly rate: 50. Hours are minutes divided by 60; dollars are hours times the rate. Change any of them with `/report settings`; they are kept between sessions.
+Hourly rate: 50. Hours are minutes divided by 60; dollars are hours times the rate. Change any of them with `/report settings`; they are kept between sessions. A kind has one figure whichever rule put a task there, so Code and Research are averages: Code covers a small edit and a long session, Research a web investigation and a quick look through your files. Set them to what a typical task of that kind is worth to you (`/report settings code 40`).
 
 ### The streak
 
