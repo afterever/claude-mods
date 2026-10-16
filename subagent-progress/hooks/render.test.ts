@@ -48,6 +48,11 @@ async function world($: Engine, on: On, state: Record<string, unknown>, opened: 
     return { value: { isPlaced: true as const } }
   })
   on('ui.close', async () => ({ value: undefined }))
+  // The band beneath the plugin: the engine's, or another mod's box (agent-pulse, say).
+  on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
+    const { Box } = $.ui.resolve(e)
+    return h(Box, { key: 'beneath' })
+  })
   await $.agent.spawn({ subagentType: 'Explore', description: 'seed', tool_use_id: 'seed' } as any)
   isSeeding = false
   opened.length = 0
@@ -178,6 +183,16 @@ test('the band stays an SVG row on desktop', async ($, on) => {
   const ui = await $.ui.mount({ plugin: 'subagent-progress', surface: 'desktop', component: 'AbovePrompt', props: bandProps(100) })
   expect(await ui.find({ type: 'Svg' })).toBeDefined()
   expect(await ui.find({ key: 'subagent-crew' })).toBeDefined()
+})
+
+test('an active bar keeps the band of the mods beneath it, on both surfaces', async ($, on) => {
+  await world($, on, seed())
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ plugin: 'subagent-progress', surface, component: 'AbovePrompt', props: bandProps(100) })
+    expect(await ui.find({ key: 'subagent-crew' })).toBeDefined()
+    expect(await ui.find({ key: 'beneath' })).toBeDefined()
+    await ui.unmount()
+  }
 })
 
 // --- costumes follow the model and effort a subagent runs on (hooks/crew.ts)

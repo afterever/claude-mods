@@ -16,9 +16,8 @@ export type Palette = {
   hex: Record<ActivityPhase, string>
   outcome: Record<ActivityOutcome, string>
   outcomeHex: Record<ActivityOutcome, string>
-  /** The "Claude" word, and the colors its shimmer sweeps through. */
-  brand: string
-  shimmer: readonly string[]
+  /** The colors the turn-end sparkle cycles through. */
+  sparkle: readonly string[]
   /** Amber, orange, red: a step that runs past 30 s, 2 min, 5 min. */
   heat: readonly [string, string, string]
   /** One color per subagent, picked by its name. */
@@ -95,8 +94,7 @@ const PALETTES: Record<PaletteName, Palette> = {
     hex: CLAUDE_HEX,
     outcome: OUTCOME_THEME,
     outcomeHex: OUTCOME_HEX,
-    brand: 'claude',
-    shimmer: ['#d97757', '#e48a66', '#f0a47f', '#fbc8a8', '#ffe6d5', '#fbc8a8', '#f0a47f', '#e48a66'],
+    sparkle: ['#d97757', '#e48a66', '#f0a47f', '#fbc8a8', '#ffe6d5', '#fbc8a8', '#f0a47f', '#e48a66'],
     heat: ['#e0af68', '#ff9e64', 'error'],
     agents: ['#2ec4b6', '#f4a261', '#a78bfa', '#60a5fa', '#f472b6', '#84cc16'],
   },
@@ -105,8 +103,7 @@ const PALETTES: Record<PaletteName, Palette> = {
     hex: NEON_HEX,
     outcome: { ok: '#39ff14', error: '#ff1744', denied: '#ffe600', interrupted: '#6c6f93' },
     outcomeHex: { ok: '#39ff14', error: '#ff1744', denied: '#ffe600', interrupted: '#6c6f93' },
-    brand: '#ff2bd6',
-    shimmer: ['#ff2bd6', '#c03bff', '#7c4dff', '#00e5ff', '#00ffa3', '#39ff14', '#ffe600', '#ff8c00'],
+    sparkle: ['#ff2bd6', '#c03bff', '#7c4dff', '#00e5ff', '#00ffa3', '#39ff14', '#ffe600', '#ff8c00'],
     heat: ['#ffe600', '#ff8c00', '#ff1744'],
     agents: ['#00e5ff', '#ff2bd6', '#39ff14', '#ffe600', '#7c4dff', '#ff8c00'],
   },
@@ -126,8 +123,7 @@ const PALETTES: Record<PaletteName, Palette> = {
     hex: MONO_HEX,
     outcome: OUTCOME_THEME,
     outcomeHex: OUTCOME_HEX,
-    brand: 'text',
-    shimmer: ['#6e6e6e', '#8a8a8a', '#a8a8a8', '#c8c8c8', '#e8e8e8', '#c8c8c8', '#a8a8a8', '#8a8a8a'],
+    sparkle: ['#6e6e6e', '#8a8a8a', '#a8a8a8', '#c8c8c8', '#e8e8e8', '#c8c8c8', '#a8a8a8', '#8a8a8a'],
     heat: ['warning', 'warning', 'error'],
     agents: ['#d0d0d0', '#a8a8a8', '#e8e8e8', '#8a8a8a'],
   },

@@ -28,7 +28,7 @@ An SVG source must not change on every redraw: the 1 s ticker redraws the band, 
 | # | Addition | off | subtle | full | Terminal | Desktop |
 |---|---|---|---|---|---|---|
 | 1 | Animated status glyph per phase | static `●` | ✓ | ✓ | `Client`: braille spinner (tool), pulsing `∴` (thinking), `✎` with flowing dots (writing) | the jellyfish acts the phase |
-| 2 | Shimmer on the "Claude" word | | | ✓ | `Client`, one hex color per letter | gradient sweep in the jellyfish's glow |
+| 2 | ~~Shimmer on the "Claude" word~~ | | | | removed in 1.0.1 with the word itself: the headline is the step alone | |
 | 3 | Breathing border while waiting on you (approval, question) | | | ✓ | the hook redraws at 8 fps during the wait only | the jellyfish's glow breathes |
 | 4 | Flash when a call ends: green ✓, red ✗, yellow ⊘ | | ✓ | ✓ | border in the outcome color for 360 ms | a halo ring expands once |
 | 5 | Palettes (`claude`, `neon`, `mono`) on theme keys and hex | ✓ | ✓ | ✓ | both | both |
@@ -69,6 +69,10 @@ The desktop gets a mascot: a small jellyfish next to the headline that acts out 
 | `sound` | `off`, `approval` | `off` |
 
 A change in the config menu reloads the module with the new `options`; the state atoms survive the reload.
+
+## The question dialog (1.0.1)
+
+The AskUserQuestion dialog takes the prompt's place and covers the band. Its own render site, `ui.render` on `AskUserQuestion`, takes a tree that holds the engine's dialog node once with nothing below it, in 12 rows on the terminal (a row per 40 columns of text) and 48 elsewhere, and no `Client`, size, place or hover. So the box draws a still copy of itself there, above the dialog: the headline and up to three agents, each cut to one row.
 
 ## Alternatives turned down
 

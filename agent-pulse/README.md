@@ -17,12 +17,12 @@ The turn so far, as the timeline strip draws it:
 The box above the prompt names the step Claude is on and how long it has been on it. Click ▸ (or focus the band with `ctrl+x tab` and press Enter) to see every step it has taken. This is the original's behaviour, unchanged; [its README](https://github.com/tzafrir/whats-agent-doing#what-it-shows) has the full table of states.
 
 ```
-╭─────────────────────────────────────────────────────────────────────────╮
-│ ▸ ⠹ Claude: ❯ Find the commit that broke fixed-amount coupons ▃ · 1m 48s │
-│   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━                               │
-│ ├─ ⠼ Find callers of applyCoupon › Searching for "applyCoupon("  34s     │
-│ └─ ⠧ Check the coupon tests › Reading coupon.test.ts  33s                │
-╰─────────────────────────────────────────────────────────────────────────╯
+╭─────────────────────────────────────────────────────────────────╮
+│ ▸ ⠹ ❯ Find the commit that broke fixed-amount coupons ▃ · 1m 48s │
+│   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━                       │
+│ ├─ ⠼ Find callers of applyCoupon › Searching for "applyCoupon("  │
+│ └─ ⠧ Check the coupon tests › Reading coupon.test.ts  33s        │
+╰─────────────────────────────────────────────────────────────────╯
 ```
 
 ## What this fork adds
@@ -33,7 +33,6 @@ Every effect carries meaning: nothing moves just to be busy.
 | --- | --- | --- | --- |
 | Status glyph | Claude is working, and on what kind of step | a spinner per phase: `◐◓◑◒` reading, `∘○◎●` thinking, `⣀⣤⣶⣿` writing, braille for tools | the jellyfish acts out the phase |
 | Jellyfish | The same, at a glance | | bobs, pulses, swings its tentacles; bubbles while thinking, ink while writing, a `!` or `?` while it waits on you, asleep when idle |
-| Shimmer | Claude is at work | a band of light across the "Claude" name | the jellyfish's glow |
 | Breathing border | **You are needed**: an approval or a question | the border fades in and out | the glow breathes yellow |
 | Flash | A call just finished, and how | the border flashes green ✓, red ✗ or yellow ⊘ | a halo ring |
 | Sparkle | The turn is done | `✦ ✧` after the timer | stars around the jellyfish |
@@ -45,6 +44,7 @@ Every effect carries meaning: nothing moves just to be busy.
 | Meters | How much is being written | `▁▂▃▄▅▆▇█` for the reply's words or a call's size | same |
 | Hover cards | The whole label, when the window cuts it | rest the pointer on a row | same |
 | Chime | Claude started waiting for your approval | opt-in | opt-in |
+| Above the question | Claude asked you something: the dialog covers the band | a still copy of the headline and agents above the question | same |
 
 ## Settings
 
@@ -52,7 +52,7 @@ In `/config`, type `Animation` to find the three rows:
 
 | Setting | Values | Default |
 | --- | --- | --- |
-| Animation | `off`: still, but with the colors and charts. `subtle`: the status glyph, the flash, the jellyfish's swim. `full`: adds the shimmer, the breathing border, bubbles, ink and sparkles | `subtle` |
+| Animation | `off`: still, but with the colors and charts. `subtle`: the status glyph, the flash, the jellyfish's swim. `full`: adds the breathing border, bubbles, ink and sparkles | `subtle` |
 | Palette | `claude`: follows your theme with the Claude orange. `neon`: vivid. `mono`: color only for what needs you | `claude` |
 | Sound | `off`, or `approval`: a soft chime when Claude starts waiting for your approval | `off` |
 
@@ -104,7 +104,7 @@ The desktop app starts its own sessions, so there the folder goes in `CLAUDE_COD
 | --- | --- |
 | `hooks/register.tsx` | The hooks, as in the original, plus the settings, the timeline, the flourishes and the chime; it hands the drawing to `draw.tsx` |
 | `hooks/draw.tsx` | The box: one renderer for the terminal, one for the desktop and every surface that draws SVG |
-| `hooks/pulse.tsx` | The terminal's animations, each a fixed-width `Client` on its own frame clock: the spinner, the shimmer, the sparkle |
+| `hooks/pulse.tsx` | The terminal's animations, each a fixed-width `Client` on its own frame clock: the spinner and the sparkle |
 | `hooks/jelly.ts` | SVG for the desktop: the jellyfish, the strip and the bars, animated by CSS |
 | `hooks/palette.ts` | The palettes, timer heat, per-agent colors |
 | `hooks/glyphs.ts` | Tool glyphs, spinners, meters and bars |

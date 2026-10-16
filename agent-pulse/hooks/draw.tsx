@@ -18,6 +18,9 @@ const FLASH_MS = 360
 const SPARKLE_MS = 2000
 const BREATH_MS = 1400
 const HISTORY_BAR_CELLS = 6
+/** Above the question dialog every line counts toward its 12 rows, a row per 40 columns. */
+const QUESTION_LABEL_CHARS = 38
+const QUESTION_AGENT_ROWS = 3
 
 /** Everything a drawing reads, gathered once by the `AbovePrompt` hook. */
 export type View = {
@@ -128,7 +131,7 @@ function elapsedOf(v: View): { text: string; color: string | undefined } {
   return { text: ` · ${durationOf(ms)}`, color: heatOf(v.palette, ms) }
 }
 
-/** The status glyph, the "Claude" word and the sparkle, for the terminal. */
+/** The status glyph and the sparkle, for the terminal. */
 function terminalMarks(v: View, Text: Elements['terminal']['Text'], pulse: PulseOf) {
   const { phase } = v.headline
   const isWorking = phase !== 'idle'
@@ -139,16 +142,12 @@ function terminalMarks(v: View, Text: Elements['terminal']['Text'], pulse: Pulse
     ? <Text color={color}>{isWorking ? '●' : '○'}</Text>
     : pulse(`glyph-${phase}`, { kind: 'spin', frames: [...spinner.frames], ms: spinner.ms, color }, 1)
 
-  const name = v.level === 'full' && isWorking
-    ? pulse('shimmer', { kind: 'shimmer', text: 'Claude', colors: [...v.palette.shimmer], ms: 110 }, 6)
-    : <Text bold color={v.palette.brand}>Claude</Text>
-
   const { beat } = v
   const sparkle = v.level === 'full' && beat?.kind === 'done' && v.nowMs - beat.atMs < SPARKLE_MS
-    ? [pulse(`sparkle-${beat.id}`, { kind: 'sparkle', colors: [...v.palette.shimmer] }, 4)]
+    ? [pulse(`sparkle-${beat.id}`, { kind: 'sparkle', colors: [...v.palette.sparkle] }, 4)]
     : []
 
-  return { glyph, name, sparkle }
+  return { glyph, sparkle }
 }
 
 /**
@@ -159,7 +158,7 @@ export function drawTerminal(ui: Elements['terminal'], v: View, pulse: PulseOf, 
   const { Box, Text, Button } = ui
   const { headline, palette } = v
   const { listed, unlisted, shown, hidden, maxMs, strip } = layoutOf(v)
-  const { glyph, name, sparkle } = terminalMarks(v, Text, pulse)
+  const { glyph, sparkle } = terminalMarks(v, Text, pulse)
   const elapsed = elapsedOf(v)
   const label = printable(headline.label, MAX_LABEL_CHARS)
   const toolGlyph = toolGlyphOf(headline.tool)
@@ -249,8 +248,6 @@ export function drawTerminal(ui: Elements['terminal'], v: View, pulse: PulseOf, 
             <Text> </Text>
             {glyph}
             <Text> </Text>
-            {name}
-            <Text bold>{': '}</Text>
             {toolGlyph === '' ? [] : [<Text color={palette.phase[headline.phase]}>{`${toolGlyph} `}</Text>]}
           </Box>
           <Text wrap="truncate-end">{label}</Text>
@@ -353,7 +350,7 @@ export function drawDesktop(ui: WebElements, v: View, below: RenderElement): Ren
     ? { id: beat.id, color: palette.outcomeHex[beat.outcome] }
     : null
   const sparkle = beat?.kind === 'done' && phase === 'idle'
-    ? { id: beat.id, color: palette.shimmer[3] ?? palette.hex.writing }
+    ? { id: beat.id, color: palette.sparkle[3] ?? palette.hex.writing }
     : null
 
   const jelly = jellySvg({ phase, level: v.level, color: palette.hex[phase], halo, sparkle, size: 44 })
@@ -431,7 +428,7 @@ export function drawDesktop(ui: WebElements, v: View, below: RenderElement): Ren
           <Box key="activity" flexDirection="row" alignItems="center" hover={{ scope: 'headline' }}>
             <Button key="toggle" plain label={v.isOpen ? '▾' : '▸'} onPress={v.onToggle} />
             <Box flexShrink={0}>
-              <Text weight="semibold" color={palette.brand}>{' Claude: '}</Text>
+              <Text> </Text>
               {toolGlyph === '' ? [] : [<Text color={palette.phase[phase]}>{`${toolGlyph} `}</Text>]}
             </Box>
             <Text wrap="truncate-end">{printable(headline.label, MAX_LABEL_CHARS)}</Text>
@@ -486,4 +483,51 @@ function phaseWords(phase: ActivityPhase): string {
     case 'compacting':
       return 'compacting'
   }
+}
+
+/**
+ * The box while the AskUserQuestion dialog holds the prompt: a still copy
+ * of the headline and the agents at work, above the engine's dialog, which
+ * stands once with nothing below it.
+ *
+ * That site takes no `Client`, no size, place or hover, and 12 rows on the
+ * terminal (a row per 40 columns of text), so each line is cut to fit one row.
+ */
+export function drawQuestion(ui: Pick<WebElements, 'Box' | 'Text'>, v: View, dialog: RenderElement): RenderElement {
+  const { Box, Text } = ui
+  const { headline, palette } = v
+  const { phase } = headline
+  const listed = v.working.slice(-QUESTION_AGENT_ROWS)
+  const unlisted = v.working.length - listed.length
+  const elapsed = elapsedOf(v)
+
+  const agentRows = listed.map((agent, i) => {
+    const color = agentColorOf(palette, agent.name)
+    const isLast = i === listed.length - 1 && unlisted === 0
+
+    return (
+      <Text key={`agent-${i}`}>
+        <Text dimColor>{isLast ? '└─ ' : '├─ '}</Text>
+        <Text color={color}>{'◆ '}</Text>
+        {printable(`${agent.name} › ${agent.label}`, QUESTION_LABEL_CHARS - 5)}
+      </Text>
+    )
+  })
+
+  const moreAgents = unlisted > 0 ? [<Text dimColor>{`└─ … ${plural(unlisted, 'more agent')}`}</Text>] : []
+
+  return (
+    <Box flexDirection="column">
+      <Box key="activity" flexDirection="column" borderStyle="round" borderColor={borderOf(v)} paddingX={1} alignSelf="flex-start">
+        <Text>
+          <Text color={palette.phase[phase]}>{phase === 'idle' ? '○ ' : '● '}</Text>
+          {printable(headline.label, QUESTION_LABEL_CHARS - 12)}
+          <Text color={elapsed.color} dimColor={elapsed.color === undefined}>{elapsed.text}</Text>
+        </Text>
+        {agentRows}
+        {moreAgents}
+      </Box>
+      {dialog}
+    </Box>
+  )
 }

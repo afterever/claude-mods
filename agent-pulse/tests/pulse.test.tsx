@@ -44,6 +44,8 @@ function seat(on: On, beneath = { onTool: async () => {} }) {
 
     return <Box key="engine" />
   })
+  // The dialog is the engine's own node, which a tree there must hold once.
+  on('ui.render', { component: 'AskUserQuestion' }, () => ({ type: 'engine', ref: 0 }) as const)
   on('turn.start', ($, e) => ({ turnId: e.turnId }))
   on('turn.complete', ($, e) => ({ text: e.answer }))
   on('classic.PermissionRequest', () => ({}))
@@ -113,7 +115,6 @@ describe('terminal', () => {
     const glyph = 'glyph-requesting'
 
     expect(await ui.find({ key: glyph, type: 'Client' })).toBeDefined()
-    expect(await ui.find({ key: 'shimmer' })).toBeUndefined()
 
     const before = (await ui.find({ type: 'Text', in: glyph }))?.text
     await ui.advance(140)
@@ -123,14 +124,26 @@ describe('terminal', () => {
     expect(after).toBe('◓')
   })
 
-  test('full shimmers the name while working', { options: { animation: 'full' } }, async ($, on) => {
+  test('the headline is the step alone, with no name before it', { options: { animation: 'full' } }, async ($, on) => {
     seat(on)
+
+    for (const surface of SURFACES) {
+      const ui = await $.ui.mount({ ...BAND, surface })
+
+      expect((await ui.find({ key: 'activity' }))?.text ?? '').not.toContain('Claude')
+      await ui.unmount()
+    }
+
     await $.turn.start({ text: 'fix it', turnId: 't1' })
 
-    const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    for (const surface of SURFACES) {
+      const ui = await $.ui.mount({ ...BAND, surface })
+      const headline = (await ui.find({ key: 'activity' }))?.text ?? ''
 
-    expect(await ui.find({ key: 'shimmer', type: 'Client' })).toBeDefined()
-    expect((await ui.find({ type: 'Text', in: 'shimmer' }))?.text).toBe('Claude')
+      expect(headline).toContain('Reading your prompt')
+      expect(headline).not.toContain('Claude')
+      await ui.unmount()
+    }
   })
 
   test('full sparkles once the turn ends', { options: { animation: 'full' } }, async ($, on) => {
@@ -238,6 +251,30 @@ describe('desktop', () => {
     await ui.press({ key: 'toggle' })
 
     expect(await svgOf(ui, /of the longest$/)).toBeDefined()
+  })
+})
+
+describe('the question dialog', () => {
+  test('the box stays in sight above the dialog, on both surfaces', { options: { animation: 'full' } }, async ($, on) => {
+    seat(on)
+    await $.turn.start({ text: 'fix it', turnId: 't1' })
+
+    for (const surface of SURFACES) {
+      const ui = await $.ui.mount({
+        plugin: 'agent-pulse',
+        surface,
+        component: 'AskUserQuestion',
+        props: { tool: 'AskUserQuestion', questions: [{ question: 'Color the output?', header: 'Color', options: [], multiSelect: false }] },
+      })
+      const drawn = await ui.findAll({})
+      const boxAt = drawn.findIndex(node => node.key === 'activity')
+      const dialogAt = drawn.findIndex(node => node.type === 'engine')
+
+      expect(drawn[boxAt]?.text ?? '').toContain('Reading your prompt')
+      expect(dialogAt).toBeGreaterThan(boxAt)
+      expect(await ui.find({ type: 'Client' })).toBeUndefined()
+      await ui.unmount()
+    }
   })
 })
 
