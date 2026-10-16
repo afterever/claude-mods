@@ -24,6 +24,11 @@
       "name": "work-report",
       "source": "./work-report",
       "description": "Shows what Claude has done for you: /report opens a pane with Today, Week, Month and Year tabs of tasks finished, an estimate of the hours that saved you and what that time is worth."
+    },
+    {
+      "name": "agent-pulse",
+      "source": "./agent-pulse",
+      "description": "A box above the prompt that says what Claude is doing right now, alive with color and motion: a spinner per phase, flashes and a breathing border, a timeline of the turn, and a jellyfish on the desktop. Fork of Tzafrir Rehan's whats-agent-doing."
     }
   ]
 }
