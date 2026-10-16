@@ -1051,6 +1051,9 @@ export const register: Register = (on, options) => {
     const f = await read($, flow)
     if (f === null || e.props.hasSurvey) return next(e)
 
+    // The band is one site for every plugin: what the plugins beneath draw
+    // stays, under the bar, so another mod's band is never hidden.
+    const below = await next(e)
     const ui = $.ui.resolve(e)
     const { Box, Text, Button } = ui
     const list = await read($, agents)
@@ -1077,10 +1080,13 @@ export const register: Register = (on, options) => {
       // and their gaps. No floor above the slot: a row wider than it would wrap.
       const width = Math.max(180, Math.min(1600, (e.props.bodyColumns || 100) * 8 - 96))
       return (
-        <Box flexDirection="row" alignItems="center" gap={1}>
-          <Svg source={rowSvg(f, width, isWorking)} alt={`${f.title}: ${label(f)}, ${percent}`} width={width} height={H} />
-          {crewButton}
-          {dismiss}
+        <Box flexDirection="column">
+          <Box flexDirection="row" alignItems="center" gap={1}>
+            <Svg source={rowSvg(f, width, isWorking)} alt={`${f.title}: ${label(f)}, ${percent}`} width={width} height={H} />
+            {crewButton}
+            {dismiss}
+          </Box>
+          {below}
         </Box>
       )
     }
@@ -1093,17 +1099,20 @@ export const register: Register = (on, options) => {
     const width = Math.max(6, Math.min(40, cols - titleW - tail))
     const color = f.isFinished ? 'success' : ACCENT
     return (
-      <Box flexDirection="row" gap={2}>
-        <Box width={titleW} flexShrink={0}>
-          <Text color={color}>{f.isFinished ? '✓' : '●'} </Text>
-          <Text wrap="truncate-end">{f.title}</Text>
+      <Box flexDirection="column">
+        <Box flexDirection="row" gap={2}>
+          <Box width={titleW} flexShrink={0}>
+            <Text color={color}>{f.isFinished ? '✓' : '●'} </Text>
+            <Text wrap="truncate-end">{f.title}</Text>
+          </Box>
+          <Text color={color}>{bar(ratio(f), width)}</Text>
+          <Text bold>{label(f)}</Text>
+          <Text dimColor>{percent}</Text>
+          <Text color="claude">▣</Text>
+          {crewButton}
+          {dismiss}
         </Box>
-        <Text color={color}>{bar(ratio(f), width)}</Text>
-        <Text bold>{label(f)}</Text>
-        <Text dimColor>{percent}</Text>
-        <Text color="claude">▣</Text>
-        {crewButton}
-        {dismiss}
+        {below}
       </Box>
     )
   })

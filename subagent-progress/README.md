@@ -40,6 +40,10 @@ Upstream shows the bar only for `savvy-*` workers or an explicit `progress` repo
 
 ## Changes
 
+### 2.0.1: other mods' bands stay in sight
+
+While a flow was active, the bar took the whole band above the prompt: it never drew what the plugins beneath it draw there, so another mod's box (agent-pulse, say) disappeared under it. The bar now stacks above them.
+
 ### 2.0.0: renamed to subagent-progress, costumes by model and effort
 
 A breaking release: the plugin's name is its tool and settings namespace, so see [Moving from savvy-progress](#moving-from-savvy-progress).
