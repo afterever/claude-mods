@@ -20,6 +20,30 @@ export type ActivityNow = {
   phase: ActivityPhase
   label: string
   sinceMs: number
+  /** The tool at work or being written, for its glyph. */
+  tool?: string
+  /** A one-cell meter of the reply's words or the call's size. */
+  meter?: string
+}
+
+/**
+ * The phases of a turn in order, for the timeline strip: the closed ones
+ * with how long each took, and the one running since `open.sinceMs`.
+ */
+export type ActivityTimeline = {
+  segments: readonly { phase: ActivityPhase; ms: number }[]
+  open: { phase: ActivityPhase; sinceMs: number } | null
+}
+
+/**
+ * The last moment worth a flourish: a call that ended (`flash`) or a turn
+ * that did (`done`). `id` counts up, so each plays once.
+ */
+export type ActivityBeat = {
+  id: number
+  kind: 'flash' | 'done'
+  outcome: ActivityOutcome
+  atMs: number
 }
 
 /**
@@ -43,6 +67,8 @@ export type ActivityEntry = {
   label: string
   durationMs: number | null
   outcome: ActivityOutcome
+  /** A tool call's tool, for its glyph. */
+  tool?: string
 }
 
 declare module 'claude-code' {
@@ -52,6 +78,8 @@ declare module 'claude-code' {
       history: readonly ActivityEntry[]
       agents: readonly ActivityAgent[]
       isExpanded: boolean
+      timeline: ActivityTimeline
+      beat: ActivityBeat | null
     }
   }
 }

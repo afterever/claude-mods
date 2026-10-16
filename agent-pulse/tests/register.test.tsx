@@ -204,7 +204,7 @@ describe('register', () => {
 
     expect(history).toContain('fix the config')
     expect(history).toContain('Thought (4 words)')
-    expect(history).toContain('⊘ Reading app.ts')
+    expect(history).toContain('⊘ ◧ Reading app.ts')
     expect(history).toContain('Wrote the reply (1 word)')
     expect(history).toContain('Done in')
     expect((await ui.find({ key: 'activity' }))?.text).toContain('▾')
@@ -313,8 +313,8 @@ describe('register', () => {
     const history = (await ui.find({ key: 'history' }))?.text ?? ''
 
     expect(await box.read()).toContain('Idle')
-    expect(history).toContain('✓ Agent: Storyboard the video')
-    expect(history).toContain('✗ Agent: Draft the plan')
+    expect(history).toContain('✓ ◆ Agent: Storyboard the video')
+    expect(history).toContain('✗ ◆ Agent: Draft the plan')
   })
 
   test('a named agent is shown by its Agent call description, never its prompt', async ($, on) => {

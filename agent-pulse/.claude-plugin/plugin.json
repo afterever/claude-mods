@@ -18,5 +18,39 @@
     "animation",
     "function-hooks"
   ],
+  "userConfig": {
+    "animation": {
+      "type": "string",
+      "title": "Animation",
+      "description": "How much the box moves: off (still), subtle (spinning status glyph, flashes, a swimming jellyfish on the desktop) or full (adds the shimmer, the breathing border while it waits on you, bubbles, ink and sparkles)",
+      "default": "subtle",
+      "options": [
+        "off",
+        "subtle",
+        "full"
+      ]
+    },
+    "palette": {
+      "type": "string",
+      "title": "Palette",
+      "description": "claude follows your theme with the Claude orange; neon is vivid; mono keeps color for what needs you",
+      "default": "claude",
+      "options": [
+        "claude",
+        "neon",
+        "mono"
+      ]
+    },
+    "sound": {
+      "type": "string",
+      "title": "Sound",
+      "description": "approval plays a soft chime when Claude starts waiting for your approval",
+      "default": "off",
+      "options": [
+        "off",
+        "approval"
+      ]
+    }
+  },
   "types": "./types/index.d.ts"
 }

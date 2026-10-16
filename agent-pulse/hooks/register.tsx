@@ -3,13 +3,19 @@ import type { AgentInfo, EngineInterface, Register, Timer, TurnCompleteReason, T
 
 import type {
   ActivityAgent,
+  ActivityBeat,
   ActivityEntry,
   ActivityNow,
   ActivityOutcome,
-  ActivityPhase,
+  ActivityTimeline,
 } from '../types'
 import { activityOf, partialArgsOf } from './activity-of'
-import { clip, durationOf, oneLine, plural, printable, sizeOf, thoughtOf, wordsAdded } from './text'
+import { drawDesktop, drawTerminal } from './draw'
+import type { PulseOf, View } from './draw'
+import { meterOf } from './glyphs'
+import { levelOf, paletteOf } from './palette'
+import type { Level } from './palette'
+import { clip, durationOf, oneLine, plural, sizeOf, thoughtOf, wordsAdded } from './text'
 
 const IDLE: ActivityNow = {
   phase: 'idle',
@@ -18,16 +24,18 @@ const IDLE: ActivityNow = {
 }
 
 const MAX_HISTORY = 100
-const MAX_HISTORY_ROWS = 12
 const MAX_THOUGHT_CHARS = 70
 const MAX_THOUGHT_BUFFER = 2000
 const MAX_INPUT_HEAD = 4000
 const LARGE_INPUT_CHARS = 1024
-const MAX_LABEL_CHARS = 120
-const MAX_AGENT_NAME_CHARS = 40
-const MAX_AGENT_ROWS = 6
+const MAX_SEGMENTS = 200
 const STREAM_THROTTLE_MS = 250
 const TICK_MS = 1000
+const BREATH_TICK_MS = 125
+const FLASH_MS = 380
+const FULL_REPLY_WORDS = 800
+const FULL_INPUT_CHARS = 64 * 1024
+const CHIME = 'sounds/chime.wav'
 
 const now = atom({ plugin: 'agent-pulse', key: 'now' } as const, IDLE)
 
@@ -46,32 +54,15 @@ const isExpanded = atom(
   false,
 )
 
-const PHASE_COLORS: Record<ActivityPhase, string> = {
-  idle: 'gray',
-  requesting: 'cyan',
-  thinking: 'magenta',
-  writing: 'green',
-  composing: 'blue',
-  tool: 'cyan',
-  agent: 'cyan',
-  approval: 'yellow',
-  question: 'yellow',
-  compacting: 'blue',
-}
+const timeline = atom(
+  { plugin: 'agent-pulse', key: 'timeline' } as const,
+  { segments: [], open: null } as ActivityTimeline,
+)
 
-const OUTCOME_MARKS: Record<ActivityOutcome, { mark: string; color: string }> = {
-  ok: { mark: '✓', color: 'green' },
-  error: { mark: '✗', color: 'red' },
-  denied: { mark: '⊘', color: 'yellow' },
-  interrupted: { mark: '■', color: 'gray' },
-}
-
-const KIND_MARKS: Partial<Record<ActivityEntry['kind'], { mark: string; color: string }>> = {
-  turn: { mark: '›', color: 'white' },
-  thought: { mark: '∴', color: 'magenta' },
-  reply: { mark: '✎', color: 'green' },
-  compact: { mark: '⇣', color: 'blue' },
-}
+const beat = atom(
+  { plugin: 'agent-pulse', key: 'beat' } as const,
+  null as ActivityBeat | null,
+)
 
 /** What the model is doing in the main loop, between and around tool calls. */
 type ModelPhase = 'idle' | 'requesting' | 'thinking' | 'writing' | 'composing' | 'compacting'
@@ -125,11 +116,17 @@ type Live = {
   trailing: Timer | null
   isSweeping: boolean
   ticker: Timer | null
+  /** The redraws of a breathing border while Claude waits on the person. */
+  breath: Timer | null
+  beats: number
+  level: Level
+  isChiming: boolean
 }
 
 /**
- * Registers Agent Pulse: a box above the prompt naming what Claude is
- * doing right now, and, behind its triangle, what it has done.
+ * Registers Agent Pulse: a box above the prompt naming what Claude is doing
+ * right now, and, behind its triangle, what it has done; alive with color
+ * and motion as far as `options.animation` lets it.
  *
  * The model's own stream (`turn.step`) says whether it is reading, thinking
  * (the thought's latest sentence), writing the reply or composing a tool's
@@ -137,8 +134,11 @@ type Live = {
  * one waits for approval, and a subagent's calls show under its Agent call.
  *
  * @param on the engine's registrar
+ * @param options the `userConfig` values: `animation`, `palette`, `sound`
  */
-export const register: Register = on => {
+export const register: Register = (on, options) => {
+  const level = levelOf(options['animation'])
+  const palette = paletteOf(options['palette'])
   const live: Live = {
     calls: new Map(),
     agents: new Map(),
@@ -162,6 +162,10 @@ export const register: Register = on => {
     trailing: null,
     isSweeping: false,
     ticker: null,
+    breath: null,
+    beats: 0,
+    level,
+    isChiming: options['sound'] === 'approval',
   }
 
   on('session.start', async ($, e, next) => {
@@ -183,6 +187,7 @@ export const register: Register = on => {
     live.resultsToReview = 0
     live.lastAction = null
     live.calls.clear()
+    await update($, timeline, () => ({ segments: [], open: null }))
 
     const prompt = oneLine(e.text)
 
@@ -277,8 +282,10 @@ export const register: Register = on => {
         label,
         durationMs: (await $.clock.now()) - startMs,
         outcome,
+        tool: e.tool,
       })
 
+      await pulseBeat($, live, 'flash', outcome)
       await publish($, live)
     }
   })
@@ -296,6 +303,11 @@ export const register: Register = on => {
       if (waiting) {
         waiting.isAwaitingApproval = true
       }
+    }
+
+    if (live.isChiming) {
+      // A chime is a nicety: no sound device, or a refused play, changes nothing.
+      $.audio.play({ asset: CHIME }).catch(() => {})
     }
 
     await publish($, live)
@@ -391,6 +403,7 @@ export const register: Register = on => {
     live.lastTurn = label
     live.turnStartMs = null
     live.calls.clear()
+    await pulseBeat($, live, 'done', outcome)
 
     keepTicking($, live)
     await publish($, live)
@@ -407,118 +420,32 @@ export const register: Register = on => {
     // stays, under the box, so another mod's band is never hidden.
     const below = await next(e)
 
-    const { Box, Text, Button } = $.ui.resolve(e)
+    const view: View = {
+      headline: await read($, now),
+      entries: await read($, history),
+      working: await read($, team),
+      timeline: await read($, timeline),
+      beat: await read($, beat),
+      isOpen: await read($, isExpanded),
+      nowMs: await $.clock.now(),
+      maxRows: e.props.maxRows,
+      bodyColumns: e.props.bodyColumns,
+      level,
+      palette,
+      onToggle: () => void update($, isExpanded, open => !open),
+    }
 
-    const headline = await read($, now)
-    const entries = await read($, history)
-    const working = await read($, team)
-    const isOpen = await read($, isExpanded)
-    const nowMs = await $.clock.now()
-
-    const isWorking = headline.phase !== 'idle'
-    const color = PHASE_COLORS[headline.phase]
-    const elapsed = isWorking ? ` · ${durationOf(nowMs - headline.sinceMs)}` : ''
-
-    // One agent the headline names; more, or one beside the main loop's
-    // work, get a row each.
-    const isTeamListed = working.length > 1 || (working.length === 1 && headline.phase !== 'agent')
-    const listed = isTeamListed ? working.slice(-MAX_AGENT_ROWS) : []
-    const unlisted = isTeamListed ? working.length - listed.length : 0
-
-    const agentRows = listed.map((agent, i) => (
-      <Box key={`agent-${i}`} flexDirection="row">
-        <Box flexShrink={0}>
-          <Text color={PHASE_COLORS.agent}>{'◆ '}</Text>
-        </Box>
-        <Text bold wrap="truncate-end">{printable(agent.name, MAX_AGENT_NAME_CHARS)}</Text>
-        <Text wrap="truncate-end">{` › ${printable(agent.label, MAX_LABEL_CHARS)}`}</Text>
-        <Box flexShrink={0}>
-          <Text dimColor>{`  ${durationOf(nowMs - agent.sinceMs)}`}</Text>
-        </Box>
-      </Box>
-    ))
-
-    const moreAgents = unlisted > 0 ? [<Text dimColor>{`… ${plural(unlisted, 'more agent')}`}</Text>] : []
-
-    const teamBox = isTeamListed
-      ? [
-          <Box key="agents" flexDirection="column">
-            {agentRows}
-            {moreAgents}
-          </Box>,
-        ]
-      : []
-
-    const teamRows = listed.length + moreAgents.length
-    const rows = Math.min(MAX_HISTORY_ROWS, Math.max(1, e.props.maxRows - 4 - teamRows))
-    const shown = entries.slice(-rows)
-    const hidden = entries.length - shown.length
-
-    const historyRows = shown.map((entry, i) => {
-      const { mark, color: markColor } = KIND_MARKS[entry.kind] ?? OUTCOME_MARKS[entry.outcome]
-      const isQuiet = entry.kind === 'thought' || entry.kind === 'end'
-      const took = entry.durationMs === null ? '' : `  ${durationOf(entry.durationMs)}`
-
-      return (
-        <Box key={`row-${i}`} flexDirection="row">
-          <Box flexShrink={0}>
-            <Text color={markColor}>{`${mark} `}</Text>
-          </Box>
-          <Text bold={entry.kind === 'turn'} dimColor={isQuiet} wrap="truncate-end">
-            {printable(entry.label, MAX_LABEL_CHARS)}
-          </Text>
-          <Box flexShrink={0}>
-            <Text dimColor>{took}</Text>
-          </Box>
-        </Box>
+    if (e.surface === 'terminal') {
+      const ui = $.ui.resolve(e)
+      const { Client } = ui
+      const pulse: PulseOf = (key, props, width) => (
+        <Client key={key} module="./pulse.tsx" props={props} width={width} height={1} />
       )
-    })
 
-    const earlier = hidden > 0 ? [<Text dimColor>{`… ${hidden} earlier`}</Text>] : []
-    const empty = entries.length === 0 ? [<Text dimColor>No actions yet</Text>] : []
+      return drawTerminal(ui, view, pulse, below)
+    }
 
-    const body = isOpen
-      ? [
-          <Box key="history" flexDirection="column" marginTop={1}>
-            {earlier}
-            {historyRows}
-            {empty}
-          </Box>,
-        ]
-      : []
-
-    return (
-      <Box flexDirection="column">
-        <Box
-          flexDirection="column"
-          borderStyle="round"
-          borderColor={isWorking ? color : 'gray'}
-          paddingX={1}
-          alignSelf="flex-start"
-        >
-          <Box key="activity" flexDirection="row">
-            <Button
-              key="toggle"
-              plain
-              label={isOpen ? '▾' : '▸'}
-              onPress={() => update($, isExpanded, open => !open)}
-            />
-            {/* On a narrow screen only the label gives way: the rest would wrap. */}
-            <Box flexShrink={0}>
-              <Text color={color}>{isWorking ? ' ● ' : ' ○ '}</Text>
-              <Text bold>Claude: </Text>
-            </Box>
-            <Text wrap="truncate-end">{printable(headline.label, MAX_LABEL_CHARS)}</Text>
-            <Box flexShrink={0}>
-              <Text dimColor>{elapsed}</Text>
-            </Box>
-          </Box>
-          {teamBox}
-          {body}
-        </Box>
-        {below}
-      </Box>
-    )
+    return drawDesktop($.ui.resolve(e), view, below)
   })
 }
 
@@ -539,6 +466,7 @@ function current(live: Live): ActivityNow {
         phase: 'approval',
         label: `Waiting for your approval: ${newest.label}${more}`,
         sinceMs: newest.startMs,
+        tool: newest.tool,
       }
     }
 
@@ -549,8 +477,8 @@ function current(live: Live): ActivityNow {
     const inner = isAgentTool(newest.tool) ? agentUnder(live, newestId)?.label : undefined
 
     return inner === undefined
-      ? { phase: 'tool', label: `${newest.label}${more}`, sinceMs: newest.startMs }
-      : { phase: 'agent', label: `${newest.label} › ${inner}${more}`, sinceMs: newest.startMs }
+      ? { phase: 'tool', label: `${newest.label}${more}`, sinceMs: newest.startMs, tool: newest.tool }
+      : { phase: 'agent', label: `${newest.label} › ${inner}${more}`, sinceMs: newest.startMs, tool: newest.tool }
   }
 
   if (live.phase === 'idle' && live.agents.size > 0) {
@@ -594,6 +522,7 @@ function current(live: Live): ActivityNow {
         phase: 'writing',
         label: `Writing the reply · ${plural(live.replyWords, 'word')}`,
         sinceMs,
+        ...meterField(meterOf(live.replyWords, FULL_REPLY_WORDS)),
       }
     case 'composing': {
       // A call is named once its input says what it does: a file tool by
@@ -611,13 +540,24 @@ function current(live: Live): ActivityNow {
 
       const size = composing.chars >= LARGE_INPUT_CHARS ? ` · ${sizeOf(composing.chars)}` : ''
 
-      return { phase: 'composing', label: `${activityOf(composing.tool, args)}${size}`, sinceMs }
+      return {
+        phase: 'composing',
+        label: `${activityOf(composing.tool, args)}${size}`,
+        sinceMs,
+        tool: composing.tool,
+        ...meterField(meterOf(composing.chars, FULL_INPUT_CHARS)),
+      }
     }
     case 'idle':
       return live.lastTurn === null
         ? IDLE
         : { ...IDLE, label: `Idle · last turn ${live.lastTurn}` }
   }
+}
+
+/** A meter field for the headline, left out while there is nothing to meter. */
+function meterField(meter: string): { meter?: string } {
+  return meter === '' ? {} : { meter }
 }
 
 /**
@@ -646,6 +586,69 @@ async function publish($: EngineInterface, live: Live, isUrgent = true): Promise
 
   await update($, now, () => headline)
   await update($, team, () => working)
+  await follows($, live, headline, nowMs)
+  keepBreathing($, live, headline)
+}
+
+/**
+ * Carries the headline's phase into the turn's timeline: a new phase closes
+ * the running segment and opens its own; the turn's end closes the last.
+ */
+async function follows($: EngineInterface, live: Live, headline: ActivityNow, nowMs: number): Promise<void> {
+  const isTurn = live.turnStartMs !== null
+
+  await update($, timeline, line => {
+    const { open } = line
+
+    if (isTurn ? open?.phase === headline.phase : open === null) {
+      return line
+    }
+
+    const segments = open === null
+      ? line.segments
+      : [...line.segments, { phase: open.phase, ms: Math.max(0, nowMs - open.sinceMs) }].slice(-MAX_SEGMENTS)
+
+    return { segments, open: isTurn ? { phase: headline.phase, sinceMs: nowMs } : null }
+  })
+}
+
+/**
+ * Redraws the box eight times a second while Claude waits on the person at
+ * full animation, so its border breathes; stops when the wait ends.
+ */
+function keepBreathing($: EngineInterface, live: Live, headline: ActivityNow): void {
+  const isWaiting = live.level === 'full' && (headline.phase === 'approval' || headline.phase === 'question')
+
+  if (isWaiting && live.breath === null) {
+    live.breath = $.clock.every(BREATH_TICK_MS, () => $.ui.invalidate('ui.render'))
+  } else if (!isWaiting && live.breath !== null) {
+    live.breath.cancel()
+    live.breath = null
+  }
+}
+
+/**
+ * Marks a moment worth a flourish: a call's end flashes the border, a turn's
+ * end sparkles. The flash is redrawn away once it has shown.
+ */
+async function pulseBeat(
+  $: EngineInterface,
+  live: Live,
+  kind: ActivityBeat['kind'],
+  outcome: ActivityOutcome,
+): Promise<void> {
+  if (live.level === 'off') {
+    return
+  }
+
+  live.beats += 1
+  const beatOf: ActivityBeat = { id: live.beats, kind, outcome, atMs: await $.clock.now() }
+
+  await update($, beat, () => beatOf)
+
+  if (kind === 'flash') {
+    $.clock.after(FLASH_MS, () => $.ui.invalidate('ui.render'))
+  }
 }
 
 /** The agent at work under `agentId`, taken up if its spawn came before a reload. */
@@ -696,6 +699,7 @@ async function finish(
       label: `Agent: ${agent.name}`,
       durationMs: (await $.clock.now()) - agent.startMs,
       outcome,
+      tool: 'Agent',
     })
   }
 
