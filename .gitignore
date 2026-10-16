@@ -7,3 +7,4 @@ prompt-upgrade/tsconfig.json
 prompt-upgrade/.claude-plugin/types/
 work-report/tsconfig.json
 work-report/.claude-plugin/types/
+agent-pulse/.claude-plugin/types/

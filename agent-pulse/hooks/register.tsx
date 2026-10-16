@@ -29,20 +29,20 @@ const MAX_AGENT_ROWS = 6
 const STREAM_THROTTLE_MS = 250
 const TICK_MS = 1000
 
-const now = atom({ plugin: 'whats-agent-doing', key: 'now' } as const, IDLE)
+const now = atom({ plugin: 'agent-pulse', key: 'now' } as const, IDLE)
 
 const history = atom(
-  { plugin: 'whats-agent-doing', key: 'history' } as const,
+  { plugin: 'agent-pulse', key: 'history' } as const,
   [] as readonly ActivityEntry[],
 )
 
 const team = atom(
-  { plugin: 'whats-agent-doing', key: 'agents' } as const,
+  { plugin: 'agent-pulse', key: 'agents' } as const,
   [] as readonly ActivityAgent[],
 )
 
 const isExpanded = atom(
-  { plugin: 'whats-agent-doing', key: 'isExpanded' } as const,
+  { plugin: 'agent-pulse', key: 'isExpanded' } as const,
   false,
 )
 
@@ -128,7 +128,7 @@ type Live = {
 }
 
 /**
- * Registers What's Agent Doing: a box above the prompt naming what Claude is
+ * Registers Agent Pulse: a box above the prompt naming what Claude is
  * doing right now, and, behind its triangle, what it has done.
  *
  * The model's own stream (`turn.step`) says whether it is reading, thinking

@@ -1,21 +1,21 @@
 {
-  "name": "whats-agent-doing",
-  "displayName": "What's Agent Doing",
-  "version": "0.4.3",
-  "description": "A small box above the prompt that always says what the agent is doing right now (reading, thinking, writing, running a tool, waiting for you) and expands to show what it has done.",
+  "name": "agent-pulse",
+  "displayName": "Agent Pulse",
+  "version": "1.0.0",
+  "description": "A box above the prompt that always says what the agent is doing right now, alive with color and motion: an animated status glyph, a glowing jellyfish on the desktop, a timeline of the turn, and a history behind its triangle. Fork of Tzafrir Rehan's whats-agent-doing 0.4.3.",
   "author": {
-    "name": "Tzafrir Rehan"
+    "name": "afterever"
   },
-  "homepage": "https://github.com/tzafrir/whats-agent-doing",
-  "repository": "https://github.com/tzafrir/whats-agent-doing",
+  "homepage": "https://github.com/afterever/claude-mods/tree/master/agent-pulse",
+  "repository": "https://github.com/afterever/claude-mods",
   "license": "MIT",
-  "privacyPolicyUrl": "https://tzafrir.github.io/whats-agent-doing/privacy",
   "keywords": [
     "status",
     "activity",
     "progress",
     "ui",
     "mod",
+    "animation",
     "function-hooks"
   ],
   "types": "./types/index.d.ts"

@@ -47,7 +47,7 @@ export type ActivityEntry = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'whats-agent-doing': {
+    'agent-pulse': {
       now: ActivityNow
       history: readonly ActivityEntry[]
       agents: readonly ActivityAgent[]

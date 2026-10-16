@@ -3,7 +3,7 @@ import { describe, expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
 const BAND = {
-  plugin: 'whats-agent-doing',
+  plugin: 'agent-pulse',
   surface: 'terminal',
   component: 'AbovePrompt',
   props: {
