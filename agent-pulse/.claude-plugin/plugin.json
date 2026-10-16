@@ -1,0 +1,56 @@
+{
+  "name": "agent-pulse",
+  "displayName": "Agent Pulse",
+  "version": "1.0.0",
+  "description": "A box above the prompt that always says what the agent is doing right now, alive with color and motion: an animated status glyph, a glowing jellyfish on the desktop, a timeline of the turn, and a history behind its triangle. Fork of Tzafrir Rehan's whats-agent-doing 0.4.3.",
+  "author": {
+    "name": "afterever"
+  },
+  "homepage": "https://github.com/afterever/claude-mods/tree/master/agent-pulse",
+  "repository": "https://github.com/afterever/claude-mods",
+  "license": "MIT",
+  "keywords": [
+    "status",
+    "activity",
+    "progress",
+    "ui",
+    "mod",
+    "animation",
+    "function-hooks"
+  ],
+  "userConfig": {
+    "animation": {
+      "type": "string",
+      "title": "Animation",
+      "description": "How much the box moves: off (still), subtle (spinning status glyph, flashes, a swimming jellyfish on the desktop) or full (adds the shimmer, the breathing border while it waits on you, bubbles, ink and sparkles)",
+      "default": "subtle",
+      "options": [
+        "off",
+        "subtle",
+        "full"
+      ]
+    },
+    "palette": {
+      "type": "string",
+      "title": "Palette",
+      "description": "claude follows your theme with the Claude orange; neon is vivid; mono keeps color for what needs you",
+      "default": "claude",
+      "options": [
+        "claude",
+        "neon",
+        "mono"
+      ]
+    },
+    "sound": {
+      "type": "string",
+      "title": "Sound",
+      "description": "approval plays a soft chime when Claude starts waiting for your approval",
+      "default": "off",
+      "options": [
+        "off",
+        "approval"
+      ]
+    }
+  },
+  "types": "./types/index.d.ts"
+}
