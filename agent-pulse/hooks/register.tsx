@@ -10,7 +10,7 @@ import type {
   ActivityTimeline,
 } from '../types'
 import { activityOf, partialArgsOf } from './activity-of'
-import { drawDesktop, drawTerminal } from './draw'
+import { drawDesktop, drawQuestion, drawTerminal } from './draw'
 import type { PulseOf, View } from './draw'
 import { meterOf } from './glyphs'
 import { levelOf, paletteOf } from './palette'
@@ -139,6 +139,7 @@ type Live = {
 export const register: Register = (on, options) => {
   const level = levelOf(options['animation'])
   const palette = paletteOf(options['palette'])
+  const look = { level, palette }
   const live: Live = {
     calls: new Map(),
     agents: new Map(),
@@ -419,21 +420,7 @@ export const register: Register = (on, options) => {
     // The band is one site for every plugin: what the plugins beneath draw
     // stays, under the box, so another mod's band is never hidden.
     const below = await next(e)
-
-    const view: View = {
-      headline: await read($, now),
-      entries: await read($, history),
-      working: await read($, team),
-      timeline: await read($, timeline),
-      beat: await read($, beat),
-      isOpen: await read($, isExpanded),
-      nowMs: await $.clock.now(),
-      maxRows: e.props.maxRows,
-      bodyColumns: e.props.bodyColumns,
-      level,
-      palette,
-      onToggle: () => void update($, isExpanded, open => !open),
-    }
+    const view = await viewOf($, look, e.props.maxRows, e.props.bodyColumns)
 
     if (e.surface === 'terminal') {
       const ui = $.ui.resolve(e)
@@ -447,6 +434,36 @@ export const register: Register = (on, options) => {
 
     return drawDesktop($.ui.resolve(e), view, below)
   })
+
+  // The question dialog takes the prompt's place and covers the band, so the
+  // box draws a still copy of itself above the dialog while it is open.
+  on('ui.render', { component: 'AskUserQuestion' }, async ($, e, next) => {
+    const dialog = await next(e)
+
+    return drawQuestion($.ui.resolve(e), await viewOf($, look, 12, 40), dialog)
+  })
+}
+
+/** Everything a drawing reads, at the size its site gives it. */
+async function viewOf(
+  $: EngineInterface,
+  look: Pick<View, 'level' | 'palette'>,
+  maxRows: number,
+  bodyColumns: number,
+): Promise<View> {
+  return {
+    headline: await read($, now),
+    entries: await read($, history),
+    working: await read($, team),
+    timeline: await read($, timeline),
+    beat: await read($, beat),
+    isOpen: await read($, isExpanded),
+    nowMs: await $.clock.now(),
+    maxRows,
+    bodyColumns,
+    ...look,
+    onToggle: () => void update($, isExpanded, open => !open),
+  }
 }
 
 /** The headline as the live view has it. */

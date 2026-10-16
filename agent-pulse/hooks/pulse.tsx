@@ -5,7 +5,6 @@ import type { ClientModule } from 'claude-code'
  * the box's layout never moves under them:
  *
  * - `spin`: the status glyph, cycling `frames` every `ms`
- * - `shimmer`: `text` with a band of light sweeping across it
  * - `sparkle`: a short burst of stars after a turn ends, then nothing
  *
  * Each runs on the surface's frame clock; the hooks never run per frame. A
@@ -14,7 +13,6 @@ import type { ClientModule } from 'claude-code'
  */
 export type PulseProps =
   | { kind: 'spin'; frames: string[]; ms: number; color: string }
-  | { kind: 'shimmer'; text: string; colors: string[]; ms: number }
   | { kind: 'sparkle'; colors: string[] }
 
 type PulseState = { frame: number }
@@ -46,17 +44,6 @@ const Pulse: ClientModule<PulseProps, PulseState> = (props, surface) => {
   switch (props.kind) {
     case 'spin':
       return <Text color={props.color}>{props.frames[frame % props.frames.length] ?? ' '}</Text>
-    case 'shimmer': {
-      const n = props.colors.length
-
-      return (
-        <Text bold>
-          {[...props.text].map((char, i) => (
-            <Text color={props.colors[(((i - frame) % n) + n) % n]}>{char}</Text>
-          ))}
-        </Text>
-      )
-    }
     case 'sparkle': {
       const cells = SPARKLE_FRAMES[Math.min(frame, SPARKLE_FRAMES.length - 1)] ?? '    '
       const n = props.colors.length
