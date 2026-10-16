@@ -1,0 +1,22 @@
+{
+  "name": "whats-agent-doing",
+  "displayName": "What's Agent Doing",
+  "version": "0.4.3",
+  "description": "A small box above the prompt that always says what the agent is doing right now (reading, thinking, writing, running a tool, waiting for you) and expands to show what it has done.",
+  "author": {
+    "name": "Tzafrir Rehan"
+  },
+  "homepage": "https://github.com/tzafrir/whats-agent-doing",
+  "repository": "https://github.com/tzafrir/whats-agent-doing",
+  "license": "MIT",
+  "privacyPolicyUrl": "https://tzafrir.github.io/whats-agent-doing/privacy",
+  "keywords": [
+    "status",
+    "activity",
+    "progress",
+    "ui",
+    "mod",
+    "function-hooks"
+  ],
+  "types": "./types/index.d.ts"
+}

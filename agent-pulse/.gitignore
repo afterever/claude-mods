@@ -1,0 +1,8 @@
+# Written by Claude Code when it loads the plugin from this folder.
+.claude-plugin/types/
+.claude/types/
+node_modules/
+
+# Launch media sources: dependencies and captured frames.
+media-src/node_modules/
+media-src/frames/
