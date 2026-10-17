@@ -142,5 +142,5 @@ waypoints/
   hooks/palette.mjs, pane.mjs     Agent-Pulse's palettes and the roles; when the pane opens and closes
   hooks/plan.mjs, plan.test.ts    the plan, the bar, the ETA, the words Claude reads
   hooks/fmt.mjs, privacy.mjs      time formatting; masking while Recording Mode is on
-  hooks/*.test.ts                 flow, route, palette, draw (band, pane, SVG), auto-open, pulse
+  hooks/*.test.ts                 flow, route, palette, draw (band, pane, SVG), surface, auto-open, pulse
 ```

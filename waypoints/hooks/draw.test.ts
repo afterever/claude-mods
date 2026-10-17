@@ -387,7 +387,7 @@ test('the width follows the columns, clamped; the alt says the numbers', async (
 test('on Desktop the band draws the route as an Svg and a still spinner, with a masked-safe alt', async () => {
   const desktop: any = { ...el, Svg: (p: any) => ({ t: 'Svg', ...p }) }
   const g = midway()
-  const tree = drawBand(desktop, view(g, { level: 'full', mask: () => '•••' }))
+  const tree = drawBand(desktop, view(g, { level: 'full', mask: () => '•••', svg: true }))
   const svgs = all(tree, (x) => x.t === 'Svg')
   expect(svgs).toHaveLength(1)
   expect(svgs[0].alt).toBe('2 of 4 tasks done, task 3 running')
