@@ -27,7 +27,7 @@ Paste this into Claude Code on the new computer:
 | `skins` | `hellosverre/claude-skins` | 0.5.6 | Colour scheme and words for the transcript |
 | `cache-keeper` | `nateherkai/claude-code-mods` | 1.0.0 | Adds the `session-handoff` skill |
 | `agent-pulse` | `afterever/claude-mods` (this repo) | 1.1.0 | Box above the prompt naming the step Claude is on, in color and motion, with a step history |
-| `arsenal` | `afterever/claude-mods` (this repo) | 0.1.0 | Footer button that opens a menu: Prompt Upgrade switch and shortcuts to `/better` and `/report` |
+| `arsenal` | `afterever/claude-mods` (this repo) | 0.1.0 | Button above the prompt that opens a docked menu: Prompt Upgrade switch and shortcuts to `/better` and `/report` |
 
 ## Install
 
@@ -238,8 +238,8 @@ jellyfish on the desktop. Written against 1.1.0. What changed:
 ## arsenal
 
 My own mod, from an idea in a video by the author of AI Made Easy ([tristenobrien.ai](https://tristenobrien.ai/)):
-a `◆ Arsenal ▾` button at the right end of the line under the prompt opens a framed menu above the
-prompt, with a Prompt Upgrade on/off switch and one-press shortcuts to `/better` and `/report`.
+a `◆ Arsenal ▾` button, the last row right above the prompt box, opens a menu pane docked on the
+right, with a Prompt Upgrade on/off switch and one-press shortcuts to `/better` and `/report`.
 `/arsenal` toggles it from the keyboard. Written against 0.1.0. Nothing to configure.
 
 - **It needs `prompt-upgrade` and/or `work-report` installed to show anything.** It lists the
@@ -263,9 +263,9 @@ prompt, with a Prompt Upgrade on/off switch and one-press shortcuts to `/better`
 - A multi-step request makes Claude call `mcp__goal-meter__tasks` with `plan` first.
 - `/better` opens a pane that asks for a rough prompt; `/report` opens the Work Report pane, and a
   `Work report` chip shows above the prompt.
-- A `◆ Arsenal ▾` button shows at the right end of the line under the prompt; pressing it (or
-  `/arsenal`) opens a menu with the Prompt Upgrade switch and the Launch rows, and the bands of
-  `ctx`, `agent-pulse` and `subagent-progress` stay under it.
+- A `◆ Arsenal ▾` button shows as the last row right above the prompt box, under the bands of
+  `ctx`, `agent-pulse` and `subagent-progress`; pressing it (or `/arsenal`) opens a pane docked on
+  the right with the Prompt Upgrade switch and the Launch rows.
 - While Claude works, a box above the prompt names the current step with a spinning glyph and a
   timer, its border flashing as calls end; the triangle expands the history.
 

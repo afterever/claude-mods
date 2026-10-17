@@ -10,7 +10,7 @@ import {
   launchColumns,
   launchItems,
   modelLabel,
-  queuedNote,
+  sentNote,
   reconcile,
   runningFrom,
   sectionTitle,
@@ -138,7 +138,7 @@ test('two columns at 64 cells with both tools, one column below that or with one
 test('titles and notes read as the design draws them', () => {
   expect(sectionTitle('SETTINGS')).toBe('── S E T T I N G S')
   expect(sectionTitle('LAUNCH')).toBe('── L A U N C H')
-  expect(queuedNote('/report today')).toBe('queued: /report today')
+  expect(sentNote('/better on')).toBe('sent: /better on')
   expect(failedNote('/better on', 'no such command')).toBe('/better on failed: no such command')
   expect(failedNote('/better on', 'x'.repeat(200)).length).toBeLessThanOrEqual(80)
 })

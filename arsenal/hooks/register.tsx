@@ -9,23 +9,27 @@ import {
   hasSettings,
   headerNote,
   launchColumns,
-  queuedNote,
   ranNote,
   reconcile,
   runningFrom,
   sameRunning,
   sectionTitle,
+  sentNote,
   toolsFrom,
 } from './menu'
 import type { LaunchItem } from './menu'
 
-// What the drawings read lives in $.state, so a hot reload keeps the menu as
-// it was. None of it is kept in $.store: a new session starts with the menu closed
+// What the drawings read lives in $.state. None of it is kept in $.store, and
+// session.start (which also runs on a hot reload) reads isOpen from the panes
 const isOpenAtom = atom({ plugin: 'arsenal', key: 'isOpen' } as const, false)
 const runningAtom = atom({ plugin: 'arsenal', key: 'running' } as const, null)
 const NO_TOOLS: ArsenalTools = { better: false, report: false }
 const toolsAtom = atom({ plugin: 'arsenal', key: 'tools' } as const, NO_TOOLS)
 const noteAtom = atom({ plugin: 'arsenal', key: 'note' } as const, '')
+
+// The menu is a pane, docked at the right in fullscreen like the tools' own
+const PANE = 'arsenal'
+const PANE_ARGS = { id: PANE, title: 'Arsenal', closeOnEscape: true, columns: 48, rows: 14 } as const
 
 const COLORS = {
   accent: '#F2A65A',
@@ -46,7 +50,7 @@ async function refreshTools($: EngineInterface) {
     const names = (await $.command.list()).map(c => c.name)
     await update($, toolsAtom, () => toolsFrom(names))
   } catch {
-    // no rows is the quiet answer: the button is not drawn
+    // no rows is the quiet answer: the launcher is not drawn
   }
 }
 
@@ -63,14 +67,25 @@ async function refreshModel($: EngineInterface) {
   }
 }
 
-async function setOpen($: EngineInterface, value: boolean) {
-  await update($, isOpenAtom, () => value)
+async function openMenu($: EngineInterface) {
+  await refreshModel($)
+  await update($, isOpenAtom, () => true)
+  const { isPlaced } = await $.ui.open(PANE_ARGS)
+  if (!isPlaced) {
+    await update($, isOpenAtom, () => false)
+    $.ui.toast('Arsenal needs a wider window to open.')
+  }
+}
+
+async function closeMenu($: EngineInterface) {
+  await update($, isOpenAtom, () => false)
+  await $.ui.close({ id: PANE })
 }
 
 async function toggleMenu($: EngineInterface) {
-  const open = (await read($, isOpenAtom)) === true
-  if (!open) await refreshModel($)
-  await setOpen($, !open)
+  if (!hasRows(await read($, toolsAtom))) return
+  if ((await read($, isOpenAtom)) === true) await closeMenu($)
+  else await openMenu($)
 }
 
 /**
@@ -91,37 +106,32 @@ async function readAuto($: EngineInterface): Promise<boolean> {
 // ── Presses ──────────────────────────────────────────────────────────────
 
 /**
- * Runs a tool's own slash command, as if typed. The engine queues it until the
- * session is idle, so a press during a turn leaves a "queued" note, and a
- * Launch row keeps the menu open until the command has run so that the note
- * is on screen. With the session idle the menu closes first and a failure is
- * a toast, since the note is no longer in view.
+ * Runs a tool's own slash command, as if typed. A Launch row closes the menu
+ * first, so the tool's own pane takes the dock; a failure is then a toast,
+ * since the note is out of view. The switch keeps the menu open and says what
+ * it sent and how that went in the note line.
  */
-async function press($: EngineInterface, command: string, args: string, o: { isWorking: boolean; closes: boolean }) {
+async function press($: EngineInterface, command: string, args: string, closes: boolean) {
   const line = commandLine(command, args)
-  if (o.closes && !o.isWorking) await setOpen($, false)
-  if (o.isWorking) await say($, queuedNote(line))
+  if (closes) await closeMenu($)
+  else await say($, sentNote(line))
   try {
     await $.command.run({ command, args })
-    await say($, ranNote(line))
-    if (o.closes && o.isWorking) await setOpen($, false)
+    if (!closes) await say($, ranNote(line))
   } catch (err) {
     const failed = failedNote(line, plain(err))
-    await say($, failed)
-    if (o.closes && !o.isWorking) $.ui.toast(failed)
+    if (closes) $.ui.toast(failed)
+    else await say($, failed)
   }
 }
 
 // ── Drawings ─────────────────────────────────────────────────────────────
 
-type Surface = { isWorking: boolean; bodyColumns: number }
-
-function drawMenu($: EngineInterface, e: Parameters<typeof $.ui.resolve>[0], s: Surface, view: { tools: ArsenalTools; auto: boolean; header: string; note: string }) {
+function drawMenu($: EngineInterface, e: Parameters<typeof $.ui.resolve>[0], bodyColumns: number, view: { tools: ArsenalTools; auto: boolean; header: string; note: string }) {
   const { Box, Button, Text } = $.ui.resolve(e)
   const { tools, auto } = view
-  // the frame takes two cells and its padding two
-  const inner = Math.max(20, s.bodyColumns - 4)
-  const columns = launchColumns(tools, s.bodyColumns)
+  const inner = Math.max(20, bodyColumns)
+  const columns = launchColumns(tools, bodyColumns)
   const columnWidth = columns.length > 1 ? Math.floor(inner / columns.length) : inner
 
   const launchRow = (item: LaunchItem) => (
@@ -130,12 +140,12 @@ function drawMenu($: EngineInterface, e: Parameters<typeof $.ui.resolve>[0], s: 
       plain
       hotkey={item.hotkey}
       label={`${item.glyph} ${item.label}`}
-      onPress={() => press($, item.command, item.args, { isWorking: s.isWorking, closes: true })}
+      onPress={() => press($, item.command, item.args, true)}
     />
   )
 
   return (
-    <Box key="arsenal-menu" flexDirection="column" borderStyle="round" borderColor={COLORS.accent} paddingX={1}>
+    <Box key="arsenal-menu" flexDirection="column">
       <Box justifyContent="space-between">
         <Text bold color={COLORS.accent}>
           ◆  A R S E N A L
@@ -152,19 +162,14 @@ function drawMenu($: EngineInterface, e: Parameters<typeof $.ui.resolve>[0], s: 
                 {auto ? '● ' : '○ '}
               </Text>
               <Text bold>Prompt Upgrade</Text>
-              <Text dimColor>{'  upgrade every prompt first'}</Text>
             </Box>
-            <Button
-              key="arsenal-auto"
-              plain
-              hotkey="p"
-              onPress={() => press($, 'better', auto ? 'off' : 'on', { isWorking: s.isWorking, closes: false })}
-            >
+            <Button key="arsenal-auto" plain hotkey="p" onPress={() => press($, 'better', auto ? 'off' : 'on', false)}>
               <Text backgroundColor={auto ? COLORS.teal : COLORS.off} color={auto ? COLORS.dark : COLORS.light}>
                 {auto ? ' ● On ' : ' ○ Off '}
               </Text>
             </Button>
           </Box>
+          <Text dimColor>{'  upgrade every prompt first'}</Text>
         </Box>
       ) : null}
       <Text dimColor>{sectionTitle('LAUNCH')}</Text>
@@ -175,10 +180,7 @@ function drawMenu($: EngineInterface, e: Parameters<typeof $.ui.resolve>[0], s: 
           </Box>
         ))}
       </Box>
-      <Box justifyContent="space-between">
-        <Text dimColor>{view.note || ' '}</Text>
-        <Button key="arsenal-close" plain role="dismiss" label="✕" onPress={() => setOpen($, false)} />
-      </Box>
+      <Text dimColor>{view.note || ' '}</Text>
     </Box>
   )
 }
@@ -194,10 +196,12 @@ export const register: Register = on => {
         immediate: true,
       })
     } catch {
-      // the footer button still works without the command
+      // the launcher still works without the command
     }
     try {
-      await update($, isOpenAtom, () => false)
+      // a hot reload leaves an open pane open
+      const isOpen = (await $.ui.panes()).some(p => p.id === PANE)
+      await update($, isOpenAtom, () => isOpen)
       await say($, '')
     } catch {
       // a menu that stays as it was is still a menu
@@ -243,40 +247,49 @@ export const register: Register = on => {
     return {}
   }).catch(() => ({ text: 'Arsenal could not do that right now.' }))
 
-  // The engine's own line, its pills live, and the button at the right end
-  on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
-    const line = await next(e)
+  // A close by the person (Esc, the pane's mark) turns the launcher's arrow
+  // back; an unload (hot reload, exit) is not a close they asked for
+  on('ui.close', async ($, e, next) => {
+    const r = await next(e)
+    if (e.id === PANE && e.origin.kind !== 'unload') {
+      try {
+        await update($, isOpenAtom, () => false)
+      } catch {
+        // the arrow is only a label
+      }
+    }
+    return r
+  })
+
+  // The launcher is the band's last row, against the prompt box: no mod draws
+  // between the box and the status line, and the hint line under that sits
+  // below a tall status line. Every band mod installed here draws its own rows
+  // first and the mods beneath it after, so the last row stays the launcher
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (e.props.hasSurvey) return next(e)
     const tools = await read($, toolsAtom)
-    if (!hasRows(tools)) return line
+    if (!hasRows(tools)) return next(e)
     const open = (await read($, isOpenAtom)) === true
+    const below = await next(e)
     const { Box, Button } = $.ui.resolve(e)
     return (
-      <Box flexDirection="row" justifyContent="space-between">
-        {line}
-        <Button key="arsenal-toggle" variant="primary" label={open ? '◆ Arsenal ▴' : '◆ Arsenal ▾'} onPress={() => toggleMenu($)} />
+      <Box flexDirection="column">
+        {below}
+        <Box key="arsenal-launcher" justifyContent="flex-end">
+          <Button key="arsenal-toggle" variant="primary" label={open ? '◆ Arsenal ▴' : '◆ Arsenal ▾'} onPress={() => toggleMenu($)} />
+        </Box>
       </Box>
     )
   })
 
-  // Closed, or a survey is up: the band is whatever the mods beneath draw.
-  // Open: the menu above their bands, which stay in view
-  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    if (e.props.hasSurvey) return next(e)
+  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const tools = await read($, toolsAtom)
-    if (!hasRows(tools) || (await read($, isOpenAtom)) !== true) return next(e)
-    const below = await next(e)
-    const { Box } = $.ui.resolve(e)
     const view = {
       tools,
       auto: await readAuto($),
       header: headerNote((await read($, runningAtom)) ?? null),
       note: (await read($, noteAtom)) ?? '',
     }
-    return (
-      <Box flexDirection="column">
-        {drawMenu($, e, { isWorking: e.props.isWorking, bodyColumns: e.props.bodyColumns }, view)}
-        {below}
-      </Box>
-    )
+    return drawMenu($, e, Math.max(20, e.props.bodyColumns || PANE_ARGS.columns), view)
   })
 }

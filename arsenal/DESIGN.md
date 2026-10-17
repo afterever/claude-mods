@@ -28,49 +28,60 @@ not a person's name.
   header shows the model and effort in use, and that is all: arsenal only watches, it never
   rewrites.
 - **The status mods keep their bands.** ctx, subagent-progress and agent-pulse are not in the
-  menu. When the menu is open it draws above their bands and keeps them below it
-  (`await next(e)`), so it hides none of them.
-- **Quiet when closed.** All it shows when closed is one button at the right end of the hint line.
+  menu. arsenal draws its launcher after their bands (`await next(e)` first), so it hides none of
+  them.
+- **Quiet when closed.** All it shows when closed is one button, the band's last row.
 
-## Where it draws (verified)
+## Where it draws (as released in 0.1.0, verified live)
 
 ```
- ╭─ ◆  A R S E N A L ───────────── … ─╮ [-]   ← (1) AbovePrompt band: the menu
- │  …                                  │
- ╰─────────────────────────────────────╯
-   (ctx / agent-pulse / subagent-progress bands, drawn by next(e), stay here)
- ──────────────────────────────────────────
- > the prompt box
- ──────────────────────────────────────────
- ? for shortcuts                  [◆ Arsenal ▾]  ← (2) PromptHint: the footer button
- Opus 5.5 · ctx 34% · …                          ← (3) statusLine (claude-hud): NOT ours
+   (ctx / cache-keeper / work-report / agent-pulse … bands, drawn by next(e))
+                                   [ ◆ Arsenal ▾ ]   ← (1) AbovePrompt band: the launcher, last row
+ ──────────────────────────────────────────────
+ > the prompt box                                     ┌ Arsenal ───────┐
+ ──────────────────────────────────────────────       │ ◆ A R S E N A L│ ← (2) Pane: the menu,
+ [Opus 5.5 ◑ high] | …                                │ …              │   docked right in
+ … (claude-hud statusLine rows)                       └────────────────┘   fullscreen
+ ⏵⏵ auto mode on (shift+tab to cycle)            ← PromptHint: left to the engine
 ```
 
 - **The `statusLine` is not the place.** It is a shell command set in `settings.json` (claude-hud
   owns it here), it only prints text, and it has no click handlers.
-- **The footer button is a `ui.render` hook on `PromptHint`.** The hook takes the engine's own
-  line from `await next(e)` and puts it in a row with a `Button` at the right end. **Verified:**
-  the engine accepts this tree, the engine's pills (`? for shortcuts`, the agents pill) stay
-  live, and a mouse click on the button presses it.
-- **The menu is a `ui.render` hook on `AbovePrompt`.** In the reference screenshot the `[-]` at the
-  top right is the mark the engine draws beside this band, so his menu was a band too. The
-  engine adds `[-]` (collapse) by itself.
+- **Nothing a mod draws can sit between the prompt box and the statusLine.** The engine has 15
+  render sites (`RenderComponent`) and none is there. `$.ui.status` lines are text only and are
+  drawn at the very bottom.
+- **The launcher is the last row of the `AbovePrompt` band**, right against the prompt box's top
+  rule. The design first put it on the hint line (`PromptHint`), and the probe showed that works
+  and can be clicked. In the live check, though, the hint line sits under the 10 rows of
+  claude-hud's statusLine, and the engine hands the hint over as an opaque node
+  (`{ type: 'engine', ref: 1 }`), so the button wrapped onto a row of its own at the very bottom
+  of the terminal. See "The live check" below.
+- **The menu is a `Pane`** (`$.ui.open({ id: 'arsenal' })`), docked on the right in fullscreen
+  like ctx's, prompt-upgrade's and work-report's panes, and placed above the prompt otherwise. The
+  design first drew it in the band. That put it in the middle of the screen, between the
+  transcript and the prompt, unlike the person's other mods.
 
 ## The menu
 
 ```
-╭──────────────────────────────────────────────────────────╮
-│ ◆  A R S E N A L                        Opus 5.5 · High   │
-│ ───────────────────────────────────────────────────────── │
-│ ── S E T T I N G S                                        │
-│ ○ Prompt Upgrade    upgrade every prompt first  [ ○ Off ] │
-│ ── L A U N C H                                            │
-│ ✦ Upgrade a prompt           ▤ Today's report             │
-│ ◷ Prompt history             ▥ This week's report         │
-│                              ⚙ Report settings            │
-│                                                      ✕    │
-╰──────────────────────────────────────────────────────────╯
+┌ Arsenal ─────────────────────────────────┐
+│ ◆  A R S E N A L          Opus 5.5 · High │
+│ ──────────────────────────────────────── │
+│ ── S E T T I N G S                       │
+│ ○ Prompt Upgrade                ○ Off    │
+│   upgrade every prompt first             │
+│ ── L A U N C H                           │
+│ u: ✦ Upgrade a prompt                    │
+│ h: ◷ Prompt history                      │
+│ t: ▤ Today's report                      │
+│ w: ▥ This week's report                  │
+│ s: ⚙ Report settings                     │
+│ ran: /better off                         │
+└──────────────────────────────────────────┘
 ```
+
+The pane asks for 48 columns, which gives one Launch column. From 64 columns (a dock the person
+dragged wider) the Launch rows split into two columns.
 
 ### Header
 
@@ -121,30 +132,52 @@ One row for now:
   `register.tsx`).
 - Two columns, prompt-upgrade items on the left and work-report items on the right, when
   `e.props.bodyColumns >= 64`. Below that, one column.
-- `$.command.run` is "queued and run once the session is idle". A press during a turn therefore
-  waits for the turn to end. Show it in the menu's note line (`queued: /report today`) instead of
-  doing nothing visible.
+- `$.command.run` is "queued and run once the session is idle". A Launch press during a turn
+  therefore closes the menu, and the tool opens once the turn ends. (0.1.0 as built by Sonnet
+  kept the menu open with a `queued:` note during a turn. A `Pane` has no `isWorking` prop, so
+  the note went when the menu became a pane.)
 
 ### Which rows show
 
 At `session.start`, read `$.command.list()` (**verified**: it returns all 212 names, `better` and
 `report` among them) and keep only the rows whose command exists. A section left with no rows is
-not drawn. If no rows are left at all, the footer button is not drawn either.
+not drawn. If no rows are left at all, the launcher is not drawn either, and `/arsenal` opens
+nothing.
 
 ### Opening and closing
 
-- The footer button toggles the menu: label `◆ Arsenal ▾` when closed, `◆ Arsenal ▴` when open,
-  `variant="primary"` (try the orange of the reference with `backgroundColor`; see the ButtonProps
-  doc).
-- `/arsenal` toggles it too, for the keyboard (register in `session.start`, answer in a
+- The launcher toggles the pane: label `◆ Arsenal ▾` when closed, `◆ Arsenal ▴` when open,
+  `variant="primary"`.
+- `/arsenal` toggles it too, for the keyboard (registered in `session.start`, answered in a
   `command.run` hook with `{ command: 'arsenal' }`, `immediate: true` so it works mid-turn).
-- Each Launch item closes the menu after running (during a turn: once it has run; see "What building changed"). A `✕` button (`role="dismiss"`) closes it. The
-  engine's `[-]` collapses it.
-- Hotkeys while the band is focused (ctrl+x tab or a click): `p` Prompt Upgrade toggle, `u`
-  upgrade, `h` history, `t` today, `w` week, `s` settings. Keep the hotkeys away from other mods'
-  band buttons (subagent-progress uses `a`). Grep the other mods for `hotkey=` before choosing.
-- Yield when `e.props.hasSurvey`: return `next(e)` untouched.
+- A Launch row closes the pane **first** and then runs its command, so the tool's own pane takes
+  the dock rather than opening as a second tab. A failure is then a toast. The Prompt Upgrade
+  switch keeps the pane open and writes `sent: /better on`, then `ran: /better on` (or why it
+  failed) in the note line.
+- The pane's own close mark, Esc (`closeOnEscape`) and ctrl+x x close it. A `ui.close` hook turns
+  the launcher's arrow back down for any close but an `unload`. If the surface cannot place the
+  pane, the arrow stays down and a toast says "Arsenal needs a wider window to open."
+- Hotkeys while the pane is focused: `p` Prompt Upgrade toggle, `u` upgrade, `h` history,
+  `t` today, `w` week, `s` settings.
+- The launcher yields to a survey (`e.props.hasSurvey`): it returns `next(e)` untouched.
 - `isOpen` is session state, not saved in `$.store`. A new session starts with the menu closed.
+  `session.start` also runs on a hot reload, so it reads `isOpen` from `$.ui.panes()`: a pane left
+  open by the reload keeps its arrow up.
+
+### Staying the band's last row
+
+No API lets a plugin choose where its hook sits in the `AbovePrompt` chain. Each hook only decides
+where the tree of the plugins beneath it (`await next(e)`) goes in its own tree. So the launcher is
+last exactly when every band mod above arsenal in the chain draws its own rows first and `next(e)`
+after them. On 2026-10-17 all seven other installed band mods did: ctx, subagent-progress,
+agent-pulse, work-report (this repo), skins, cache-keeper and goal-meter (`[mine, below]`).
+
+- A band mod that follows that rule never lands under the launcher, whether the engine seats it
+  above arsenal (its rows, then arsenal's tree, launcher last) or beneath it (inside arsenal's
+  `below`).
+- A mod that draws `next(e)` first and its own rows after can land under the launcher, if it is
+  seated above arsenal. **Every new band mod in this repo draws its own rows first.**
+- `render.test.ts` checks arsenal's side: its launcher comes after the tree beneath it.
 
 ## Architecture
 
@@ -154,7 +187,7 @@ not drawn. If no rows are left at all, the footer button is not drawn either.
 arsenal/
   .claude-plugin/plugin.json   name, version 0.1.0, description, author afterever, MIT, types
   hooks/hooks.json             { "modules": ["./register.tsx"] }
-  hooks/register.tsx           the hooks: session.start, command.register, turn.step, command.run, two ui.render
+  hooks/register.tsx           the hooks: session.start, command.register, turn.step, command.run, ui.close, ui.render (band, pane)
   hooks/menu.ts                pure: rows from the command list, labels, layout columns
   hooks/menu.test.ts           unit tests of menu.ts
   hooks/render.test.ts         the hooks in the engine's test kit (see Testing)
@@ -179,7 +212,7 @@ declare module 'claude-code' {
       isOpen: boolean
       running: ArsenalRunning | null
       tools: ArsenalTools
-      /** One line under the menu: what the last press ran or queued, or why it failed. */
+      /** One line under the menu: what the switch sent or ran, or why a press failed. */
       note: string
     }
   }
@@ -205,15 +238,15 @@ A contract may export types and nothing else. `export {}` fails `claude plugin v
 
 | Event | What arsenal does |
 |---|---|
-| `session.start` | register `/arsenal`, read `$.command.list()` into `tools`, read `$.session.model()` into `running`, set `isOpen` false |
+| `session.start` | register `/arsenal`, read `$.command.list()` into `tools`, read `$.session.model()` into `running`, set `isOpen` from `$.ui.panes()` |
 | `turn.step` | main loop only (no `e.agentId`): update `running` from `e.model` / `e.effort`, then `return yield* next(e)` unchanged (it is a streaming event: an `async function*`) |
 | `command.register` | `await next(e)`, then mark `better` / `report` present in `tools` if that is the command registered |
-| `command.run` `{ command: 'arsenal' }` | toggle `isOpen`, answer `{ text: '' }` or a short line |
-| `ui.render` `PromptHint` | `await next(e)`, then a row: that line, then the button at the right end |
-| `ui.render` `AbovePrompt` | closed or `hasSurvey` → `next(e)`; open → the menu, with `await next(e)` under it |
+| `command.run` `{ command: 'arsenal' }` | toggle the pane, answer `{}` |
+| `ui.close` | for `arsenal`, any origin but `unload`: `isOpen` false |
+| `ui.render` `AbovePrompt` | `hasSurvey` or no rows → `next(e)`; else `await next(e)`, then the launcher row |
+| `ui.render` `Pane` `{ requestId: 'arsenal' }` | the menu, at the pane's `bodyColumns` |
 
-Draw the same on `desktop` (both components are raised on terminal and desktop). There is no
-`Svg` version for 0.1.0.
+Both draw the same on `desktop`. There is no `Svg` version for 0.1.0.
 
 ## The probe that proved it (reference code)
 
@@ -270,18 +303,20 @@ is one, value `opus`; there is no effort row), and 212 commands including `bette
   `better` and `report` being present, and the switch from two columns to one at 64.
 - **Render tests** (`render.test.ts`) run the hooks in the engine's test kit, the way ctx's and
   work-report's do, and check that:
-  - when closed, the band is the plugins-beneath tree and nothing else, and the footer has the
-    button;
-  - when open, the menu is drawn above `next(e)`'s tree;
+  - the band is the plugins-beneath tree, then the launcher, in that order, and the hint line is
+    left to the engine;
+  - the launcher opens and closes the pane (`ui.open` / `ui.close`), and so does `/arsenal`;
+  - an unplaced pane leaves the arrow down with a toast, and a pane left open by a hot reload
+    keeps it up;
   - `hasSurvey` yields;
-  - a Launch press calls `command.run` with the right command and args and closes the menu;
+  - a Launch press closes the pane, then calls `command.run` with the right command and args;
   - the Prompt Upgrade pill follows `prompt-upgrade.auto`;
   - `turn.step` with an `agentId` changes nothing, and without one updates the header;
   - `turn.step` passes `e` on unchanged.
-- **Live check** (`claude --plugin-dir arsenal`): open and close the menu from the button, with
-  `/arsenal` and with `✕`. Toggle Prompt Upgrade and watch the pill follow. Run every Launch item.
-  Press during a turn and see the "queued" note. Check that the agent-pulse, subagent-progress
-  and ctx bands still show under the open menu. Make the terminal narrow and see one column.
+- **Live check** (`claude --plugin-dir arsenal`): the launcher is the last row above the prompt
+  box. It opens the pane docked right, and the pane closes from the launcher, `/arsenal`, Esc
+  and its close mark. Toggle Prompt Upgrade and watch the pill follow. Run every Launch item.
+  Check that the other mods' bands stay above the launcher.
 
 Before release: `claude plugin test arsenal`, `claude plugin validate arsenal`, and
 `tsc -p arsenal` (once the engine has laid `.claude-plugin/types/`).
@@ -361,18 +396,34 @@ by reading the API types.
 - **Plain Buttons draw their hotkey** (`u: ✦ Upgrade a prompt`), per the `plain` prop's doc. Not seen
   on screen yet; check the width of the two columns in the live pass.
 
-### Still to do by hand: the live check
+### The live check (2026-10-17, Opus 5.5, hot-reloaded in the design session)
 
-Everything above was verified without a terminal screen: the tests drive the engine's own hooks and
-trees, but "the kit exercises the plugin's hooks and the description they return, not any surface's
-paint". Run the live check in "Testing" (`claude --plugin-dir arsenal`) before releasing, and add
-these: the footer button shows once `prompt-upgrade` or `work-report` registers late; the pill's
-colours read well; the plain buttons' hotkey prefix fits the two columns at 64 cells; `/report today`
-from a narrow terminal shows work-report's own toast and nothing from arsenal.
+The tests drive the engine's own hooks and trees, but "the kit exercises the plugin's hooks and the
+description they return, not any surface's paint". So the person ran it in a real terminal
+(fullscreen, claude-hud as statusLine, the other mods of this repo plus skins, cache-keeper and
+goal-meter installed).
+
+- **Seen working:** the Prompt Upgrade pill follows `/better on|off` both ways; every Launch row
+  opens the right pane; the header says `Opus 5.5`; the status mods' bands stay in view.
+- **The button moved from the hint line to the band.** On the hint line the button drew on a row
+  of its own at the very bottom of the terminal, under the 10 rows of claude-hud and under
+  "auto mode on". A dump of the `PromptHint` hook showed why: the engine hands its hint over as an
+  opaque `{ type: 'engine', ref: 1 }` (props `hint: "(shift+tab to cycle)"`), so a row of
+  `[line, Button]` cannot share the engine's row. The person wanted the button next to the prompt
+  box. The band's last row is the only clickable site that touches it.
+- **The menu moved from the band to a docked pane.** Drawn in the band, the open menu sat in the
+  middle of the screen. The person's other mods open docked panes on the right, so arsenal does
+  too. With that, the band's `✕` and the menu's own border went (the pane's frame and close mark
+  replace them), and so did the `queued:` note (see LAUNCH).
+- **Not unit-tested:** the kit's `$` has no `ui.close` at run time (the types declare it), so the
+  arrow turning back after Esc rests on the same hook ctx ships, and on the live check.
 
 ## Alternatives turned down
 
 - **A statusLine entry.** It is text only, with no click, and claude-hud owns it.
+- **The button on the hint line (`PromptHint`).** It works, but under a tall statusLine it is far
+  from the prompt box, and it cannot share the engine's row (see "The live check").
+- **The menu in the band.** It opens mid-screen, unlike the person's other mods' docked panes.
 - **Model and effort pickers, Auto Model and a helper-agent model.** These were in the reference
   screenshot. The person never switches model or effort mid-session, and an automatic picker that
   chooses wrong costs money.

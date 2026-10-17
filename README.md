@@ -9,7 +9,7 @@ Personal [Claude Code mods](https://code.claude.com/docs): plugins of function h
 | [`prompt-upgrade`](./prompt-upgrade) | `/better` turns a rough prompt into a great one before it is sent: a pane asks up to three quick questions, rewrites the prompt and shows original and upgrade side by side, and nothing runs until you press Run. Optional automatic mode. Idea and spec from [tristenobrien.ai](https://tristenobrien.ai/); how to use it: [prompt-upgrade/README.md](./prompt-upgrade/README.md). |
 | [`work-report`](./work-report) | `/report` shows what Claude has done for you: tasks finished, an estimate of the hours that saved you and what that time is worth, in a pane with Today, Week, Month and Year tabs. Counts only, kept in the mod's own store; no model calls. How to use it: [work-report/README.md](./work-report/README.md). |
 | [`agent-pulse`](./agent-pulse) | A box above the prompt that says what Claude is doing right now, in plain English, alive with color and motion: a spinner per phase, a border that flashes when a call ends and breathes while Claude waits on you, a timeline of the turn, and a jellyfish on the desktop. Fork of Tzafrir Rehan's whats-agent-doing; what changed: [agent-pulse/README.md](./agent-pulse/README.md). Why: [agent-pulse/DESIGN.md](./agent-pulse/DESIGN.md). |
-| [`arsenal`](./arsenal) | A menu for the tool mods: a `◆ Arsenal ▾` button under the prompt opens a framed menu with a Prompt Upgrade on/off switch and one-press shortcuts to `/better` and `/report`. A remote control, so every row runs a command the tool already has; it shows the model and effort but never changes them. Needs `prompt-upgrade` and/or `work-report` to show rows. Idea from [tristenobrien.ai](https://tristenobrien.ai/); how to use it: [arsenal/README.md](./arsenal/README.md). Why: [arsenal/DESIGN.md](./arsenal/DESIGN.md). |
+| [`arsenal`](./arsenal) | A menu for the tool mods: a `◆ Arsenal ▾` button right above the prompt box opens a menu pane, docked on the right, with a Prompt Upgrade on/off switch and one-press shortcuts to `/better` and `/report`. A remote control, so every row runs a command the tool already has; it shows the model and effort but never changes them. Needs `prompt-upgrade` and/or `work-report` to show rows. Idea from [tristenobrien.ai](https://tristenobrien.ai/); how to use it: [arsenal/README.md](./arsenal/README.md). Why: [arsenal/DESIGN.md](./arsenal/DESIGN.md). |
 
 ## Install (each computer)
 
@@ -123,8 +123,8 @@ arsenal/
   DESIGN.md                       why it is built the way it is, and what was verified
   .claude-plugin/plugin.json      name, version, state contract
   hooks/hooks.json                points at register.tsx
-  hooks/register.tsx              the mod: footer button, menu band, /arsenal, header
+  hooks/register.tsx              the mod: launcher in the band, menu pane, /arsenal, header
   hooks/menu.ts, menu.test.ts     model and effort labels, which rows, the columns
-  hooks/render.test.ts            the button and menu drawn on terminal and desktop, presses
+  hooks/render.test.ts            the launcher and pane drawn on terminal and desktop, presses
   types/index.d.ts                the mod's state contract
 ```

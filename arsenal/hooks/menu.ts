@@ -151,6 +151,7 @@ const NOTE_LIMIT = 80
 
 const clip = (text: string) => (text.length > NOTE_LIMIT ? `${text.slice(0, NOTE_LIMIT - 1)}…` : text)
 
-export const queuedNote = (line: string) => clip(`queued: ${line}`)
+/** Said while the switch's command is on its way: run now, or once a turn ends. */
+export const sentNote = (line: string) => clip(`sent: ${line}`)
 export const ranNote = (line: string) => clip(`ran: ${line}`)
 export const failedNote = (line: string, why: string) => clip(`${line} failed: ${why}`)

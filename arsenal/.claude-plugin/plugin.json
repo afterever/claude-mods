@@ -1,7 +1,7 @@
 {
   "name": "arsenal",
   "version": "0.1.0",
-  "description": "A menu for the tool mods in this repo: a button under the prompt opens a framed menu with a Prompt Upgrade switch and one-press shortcuts to /better and /report. A remote control, so every row runs a command the tool already has.",
+  "description": "A menu for the tool mods in this repo: a button right above the prompt box opens a menu pane, docked on the right, with a Prompt Upgrade switch and one-press shortcuts to /better and /report. A remote control, so every row runs a command the tool already has.",
   "author": {
     "name": "afterever"
   },

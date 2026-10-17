@@ -15,7 +15,7 @@ declare module 'claude-code' {
       isOpen: boolean
       running: ArsenalRunning | null
       tools: ArsenalTools
-      /** One line under the menu: what the last press ran or queued, or why it failed. */
+      /** One line under the menu: what the switch sent or ran, or why a press failed. */
       note: string
     }
   }
