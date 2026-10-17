@@ -88,7 +88,7 @@ not a person's name.
   `effortLabel`: `low` → `Low`, `medium` → `Medium`, `high` → `High`, `xhigh` → `XHigh`,
   `max` → `Max`, a number `n` → `effort n`. Until the first request of the session, or for a model
   without effort, show the model alone.
-- The `turn.step` hook must only read: `return next(e)` unchanged, so it never alters the request.
+- The `turn.step` hook must only read: it passes `e` down unchanged (`return yield* next(e)`), so it never alters the request.
 
 ### SETTINGS
 
@@ -138,7 +138,7 @@ not drawn. If no rows are left at all, the footer button is not drawn either.
   doc).
 - `/arsenal` toggles it too, for the keyboard (register in `session.start`, answer in a
   `command.run` hook with `{ command: 'arsenal' }`, `immediate: true` so it works mid-turn).
-- Each Launch item closes the menu after running. A `✕` button (`role="dismiss"`) closes it. The
+- Each Launch item closes the menu after running (during a turn: once it has run; see "What building changed"). A `✕` button (`role="dismiss"`) closes it. The
   engine's `[-]` collapses it.
 - Hotkeys while the band is focused (ctrl+x tab or a click): `p` Prompt Upgrade toggle, `u`
   upgrade, `h` history, `t` today, `w` week, `s` settings. Keep the hotkeys away from other mods'
@@ -154,12 +154,12 @@ not drawn. If no rows are left at all, the footer button is not drawn either.
 arsenal/
   .claude-plugin/plugin.json   name, version 0.1.0, description, author afterever, MIT, types
   hooks/hooks.json             { "modules": ["./register.tsx"] }
-  hooks/register.tsx           the hooks: session.start, turn.step, command.run, two ui.render
+  hooks/register.tsx           the hooks: session.start, command.register, turn.step, command.run, two ui.render
   hooks/menu.ts                pure: rows from the command list, labels, layout columns
   hooks/menu.test.ts           unit tests of menu.ts
   hooks/render.test.ts         the hooks in the engine's test kit (see Testing)
   types/index.d.ts             the $.state contract
-  tsconfig.json                { "extends": "./.claude-plugin/types/tsconfig.json" }
+  tsconfig.json                { "extends": "./.claude-plugin/types/tsconfig.json" }  (engine-written, git-ignored)
   README.md                    in the style of the other mods' READMEs
   DESIGN.md                    this file
 ```
@@ -206,7 +206,8 @@ A contract may export types and nothing else. `export {}` fails `claude plugin v
 | Event | What arsenal does |
 |---|---|
 | `session.start` | register `/arsenal`, read `$.command.list()` into `tools`, read `$.session.model()` into `running`, set `isOpen` false |
-| `turn.step` | main loop only: update `running` from `e.model` / `e.effort`; `return next(e)` unchanged |
+| `turn.step` | main loop only (no `e.agentId`): update `running` from `e.model` / `e.effort`, then `return yield* next(e)` unchanged (it is a streaming event: an `async function*`) |
+| `command.register` | `await next(e)`, then mark `better` / `report` present in `tools` if that is the command registered |
 | `command.run` `{ command: 'arsenal' }` | toggle `isOpen`, answer `{ text: '' }` or a short line |
 | `ui.render` `PromptHint` | `await next(e)`, then a row: that line, then the button at the right end |
 | `ui.render` `AbovePrompt` | closed or `hasSurvey` → `next(e)`; open → the menu, with `await next(e)` under it |
@@ -301,16 +302,73 @@ This is a new mod, so it goes on a branch and through a PR (repo `CLAUDE.md`). T
    prompt-upgrade and/or work-report to show any rows.
 6. PR titled like the earlier ones ("Add arsenal 0.1.0: …").
 
-## Open questions to settle while building
+## Open questions, settled while building 0.1.0
 
-- What exactly does `$.session.model()` return: an alias (`opus`), an id or a display name?
-  `modelLabel` has to handle whichever it is.
-- Does a `dependencies` entry for an uninstalled plugin block loading? (See "Reading another mod's
-  state".)
-- Does a `Button` in `PromptHint` accept `backgroundColor`, or only `variant`? The orange pill may
-  have to be `variant="primary"`.
-- Does a Launch item that opens a pane (`/better`, `/report …`) work when the session is narrow?
-  Those mods toast "needs room" themselves, so arsenal should not repeat that.
+Settled on 2026-10-17 (Sonnet 5.5), with a throwaway probe mod run headlessly
+(`claude -p "/probe" --plugin-dir …`, which answers a plugin's slash command without a model call) and
+by reading the API types.
+
+- **What does `$.session.model()` return?** A **resolved id**, never an alias. Started with
+  `--model opus` it gave `claude-opus-5-5`; with `--model sonnet[1m]` it gave `claude-sonnet-5-5[1m]`;
+  with no flag, the session's default in the same form. So `modelLabel` strips `[1m]` and turns the id
+  into `Opus 5.5`. It still accepts an alias (`opus` → `Opus`), because that costs one line and the
+  `/config` row for `model` holds one. `reconcile` treats an alias and an id of one family as the same
+  model, so opening the menu does not throw away the effort of the last request.
+- **Does a `dependencies` entry for an uninstalled plugin block loading?** **Yes.** With
+  `"dependencies": ["no-such-plugin-xyz"]` the plugin did not load (`/arsenal` was absent from
+  `$.command.list()` and its state stayed at version 0); the same copy without the entry loaded.
+  arsenal therefore declares no dependency and reads `prompt-upgrade.auto` the second way, inside a
+  `try`. Validate lists it as "state of other plugins, not checked", which is a note, not an error.
+- **Does a `Button` in `PromptHint` accept `backgroundColor`?** **No.** `ButtonProps` has no colour
+  props, only `variant`, `plain`, `dimColor` and `hover`. The footer button is `variant="primary"`
+  (the surface draws it in its accent colour; the orange of the reference is not reachable). The
+  `● On` / `○ Off` pill is a `Text` with `backgroundColor`, given as the *child* of a `plain`
+  `Button`, which the types allow ("children of strings and `Text`").
+- **Does a Launch item that opens a pane work when the session is narrow?** Not tested in a live
+  terminal (it needs the TUI). Read from the code: both tools handle it themselves.
+  prompt-upgrade toasts "Prompt Upgrade needs a wider window. Your prompt is back in the box." and
+  work-report toasts "Work Report needs a wider window to open." when `$.ui.open` is not placed.
+  arsenal runs the command and adds nothing, as designed. Part of the live check below.
+
+### What building changed in this design
+
+- **`turn.step` streams.** Its hook is an `async function*` that ends in `return yield* next(e)`;
+  a plain `return next(e)` is a type error. arsenal's hook reads `e.model` and `e.effort` before
+  `yield*` and passes `e` down unchanged.
+- **The tools are read twice.** `$.command.list()` at `session.start` can run before a tool's own
+  `session.start` has registered its command, so a `command.register` hook (`await next(e)`, then
+  mark `better` or `report` present) keeps `tools` current. In the headless probe `tools` was written
+  three times and ended `{ better: true, report: true }`.
+- **Launch rows during a turn keep the menu open.** The design closed the menu on every Launch press
+  and also wanted a `queued:` note in the menu, which cannot both be seen. Now: with the session
+  idle the menu closes first (a failure then is a toast, because the note is out of view); during a
+  turn it stays open with `queued: /report today` and closes once the command has run. The Prompt
+  Upgrade switch never closes it.
+- **A model change since the last request drops the effort.** Each time the menu opens, `reconcile`
+  compares `$.session.model()` with the last `turn.step`. Same model: keep model and effort.
+  Another model: show `/model`'s answer alone, because the effort of the old model means nothing.
+- **Button keys are unique.** The settings section's `Box` and the Report settings button were both
+  `arsenal-settings`, which made `find` return the Box; the Box is `arsenal-settings-section`.
+- **`$.state.get` must be called on its noun** (`($.state as any).get(…)`), not detached
+  (`const get = $.state.get`), or it loses its receiver. In the test kit a `state.get` hook answers
+  `{ value: { value, version } }`: the outer `value` is the op wrapper that `$.state.get` unwraps.
+- **A hook that throws is skipped, not turned into a rejection.** To test a failing
+  `$.command.run`, leave `command.run` unanswered; the engine then rejects with "no implementation".
+- **The test kit's `$` has no `command.register`**, so the late-registration hook is covered by
+  `claude plugin validate` and the live check, not by `render.test.ts`.
+- **`tsconfig.json` is the engine's file** (written when it loads a mod) and is git-ignored with
+  `.claude-plugin/types/`, as in the other mods.
+- **Plain Buttons draw their hotkey** (`u: ✦ Upgrade a prompt`), per the `plain` prop's doc. Not seen
+  on screen yet; check the width of the two columns in the live pass.
+
+### Still to do by hand: the live check
+
+Everything above was verified without a terminal screen: the tests drive the engine's own hooks and
+trees, but "the kit exercises the plugin's hooks and the description they return, not any surface's
+paint". Run the live check in "Testing" (`claude --plugin-dir arsenal`) before releasing, and add
+these: the footer button shows once `prompt-upgrade` or `work-report` registers late; the pill's
+colours read well; the plain buttons' hotkey prefix fits the two columns at 64 cells; `/report today`
+from a narrow terminal shows work-report's own toast and nothing from arsenal.
 
 ## Alternatives turned down
 

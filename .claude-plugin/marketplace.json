@@ -29,6 +29,11 @@
       "name": "agent-pulse",
       "source": "./agent-pulse",
       "description": "A box above the prompt that says what Claude is doing right now, alive with color and motion: a spinner per phase, flashes and a breathing border, a timeline of the turn, and a jellyfish on the desktop. Fork of Tzafrir Rehan's whats-agent-doing."
+    },
+    {
+      "name": "arsenal",
+      "source": "./arsenal",
+      "description": "A menu for the tool mods in this repo: a button under the prompt opens a framed menu with a Prompt Upgrade switch and one-press shortcuts to /better and /report. A remote control, so every row runs a command the tool already has. Idea from https://tristenobrien.ai/."
     }
   ]
 }
