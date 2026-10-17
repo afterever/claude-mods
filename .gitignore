@@ -8,3 +8,5 @@ prompt-upgrade/.claude-plugin/types/
 work-report/tsconfig.json
 work-report/.claude-plugin/types/
 agent-pulse/.claude-plugin/types/
+arsenal/tsconfig.json
+arsenal/.claude-plugin/types/

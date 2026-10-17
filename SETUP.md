@@ -27,6 +27,7 @@ Paste this into Claude Code on the new computer:
 | `skins` | `hellosverre/claude-skins` | 0.5.6 | Colour scheme and words for the transcript |
 | `cache-keeper` | `nateherkai/claude-code-mods` | 1.0.0 | Adds the `session-handoff` skill |
 | `agent-pulse` | `afterever/claude-mods` (this repo) | 1.1.0 | Box above the prompt naming the step Claude is on, in color and motion, with a step history |
+| `arsenal` | `afterever/claude-mods` (this repo) | 0.1.0 | Button above the prompt that opens a docked menu: Prompt Upgrade switch and shortcuts to `/better` and `/report` |
 
 ## Install
 
@@ -40,6 +41,7 @@ claude plugin install subagent-progress@afterever-mods
 claude plugin install prompt-upgrade@afterever-mods
 claude plugin install work-report@afterever-mods
 claude plugin install agent-pulse@afterever-mods
+claude plugin install arsenal@afterever-mods
 claude plugin install goal-meter@nateherk-mods
 claude plugin install cache-keeper@nateherk-mods
 claude plugin install skins@hellosverre-mods
@@ -233,9 +235,25 @@ jellyfish on the desktop. Written against 1.1.0. What changed:
 - **Needs function hooks,** which are early access: it loads in a terminal or the desktop app's
   Code tab, not in Claude chat or Cowork, and its API may change between releases.
 
+## arsenal
+
+My own mod, from an idea in a video by the author of AI Made Easy ([tristenobrien.ai](https://tristenobrien.ai/)):
+a `◆ Arsenal ▾` button, the last row right above the prompt box, opens a menu pane docked on the
+right, with a Prompt Upgrade on/off switch and one-press shortcuts to `/better` and `/report`.
+`/arsenal` toggles it from the keyboard. Written against 0.1.0. Nothing to configure.
+
+- **It needs `prompt-upgrade` and/or `work-report` installed to show anything.** It lists the
+  session's commands and keeps only the rows whose command exists; with neither tool there is no
+  button. Install those two first, or restart Claude Code after installing them.
+- **It is a remote control.** Every row runs a slash command the tool already has, and it never
+  writes another mod's state. It shows the model and effort in its header and never changes them.
+- **It makes no model calls and keeps nothing between sessions.**
+- What it does, the keys and the rows: [arsenal/README.md](./arsenal/README.md); why:
+  [arsenal/DESIGN.md](./arsenal/DESIGN.md).
+
 ## Check it worked
 
-- `claude plugin list` shows the eight plugins above.
+- `claude plugin list` shows the nine plugins above.
 - `/ctx` opens the context pane, and the band shows above the prompt.
 - Run a few subagents: the progress bar fills and ends in a green Done row; `/agents-info` toggles
   the panel.
@@ -245,6 +263,9 @@ jellyfish on the desktop. Written against 1.1.0. What changed:
 - A multi-step request makes Claude call `mcp__goal-meter__tasks` with `plan` first.
 - `/better` opens a pane that asks for a rough prompt; `/report` opens the Work Report pane, and a
   `Work report` chip shows above the prompt.
+- A `◆ Arsenal ▾` button shows as the last row right above the prompt box, under the bands of
+  `ctx`, `agent-pulse` and `subagent-progress`; pressing it (or `/arsenal`) opens a pane docked on
+  the right with the Prompt Upgrade switch and the Launch rows.
 - While Claude works, a box above the prompt names the current step with a spinning glyph and a
   timer, its border flashing as calls end; the triangle expands the history.
 
