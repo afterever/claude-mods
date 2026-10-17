@@ -1,4 +1,4 @@
 {
-  "description": "Goal Meter hooks module",
+  "description": "Waypoints hooks module",
   "modules": ["./register.mjs"]
 }

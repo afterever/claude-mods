@@ -1,25 +1,26 @@
-// Goal Meter: a progress bar for /goal, built from Claude's own task plan.
+// Waypoints: a progress bar for /goal, built from Claude's own task plan.
+// (A fork of Nate Herk's goal-meter 1.0.0.)
 // - /goal starts it. The mod asks Claude to plan the goal as sized tasks (S, M, L)
-//   with the mod's tool, mcp__goal-meter__tasks, then mark each task started and
+//   with the mod's tool, mcp__waypoints__tasks, then mark each task started and
 //   done. Claude Code stopped shipping a task-list tool after 2.1.229, so the mod
 //   brings its own. A plan made outside a /goal shows the same way.
 // - The band above the prompt: the bar (finished work out of the plan, weighted
 //   by size), elapsed time, the ETA at this goal's own pace, what's running and
 //   who runs it, the next tasks, and the goal check's latest "not met yet" reason.
 // - The footer: "◎ goal 69% · ~15m" in every view, terminal and Desktop.
-// - /goals: a pane with this chat's whole task list and every other chat's goal.
-//   /goals hide|show (the band), /goals strict on|off, /goals clear.
-// - Each chat writes ~/.claude/mods-data/goal-meter/<session>.json for /goals.
+// - /waypoints: a pane with this chat's whole task list and every other chat's goal.
+//   /waypoints hide|show (the band), /waypoints strict on|off, /waypoints clear.
+// - Each chat writes ~/.claude/mods-data/waypoints/<session>.json for /waypoints.
 //   The mod sends no model requests of its own.
 
 import { minutes, clock, clip, bar, basename } from './fmt.mjs'
 import { makeMasker } from './privacy.mjs'
 import { newGoal, applyAction, progress, eta, parseCheck, isStopWord, normalizeTasks, TOOL_SPEC, instruction, nudge, strictDeny } from './plan.mjs'
 
-const DIR = '/.claude/mods-data/goal-meter'
-const PANE = 'goal-meter'
+const DIR = '/.claude/mods-data/waypoints'
+const PANE = 'waypoints'
 const RECENT_MS = 10 * 60000 // a finished goal stays on screen this long
-const OTHERS_MS = 12 * 3600000 // other chats' goals shown in /goals
+const OTHERS_MS = 12 * 3600000 // other chats' goals shown in /waypoints
 const REOPEN_MS = 5 * 60000 // a goal closed on its tasks reopens if Claude carries on this soon
 const NUDGE_AFTER = 4 // tool calls into a goal with no plan before the reminder
 const WRITERS = new Set(['Edit', 'Write', 'NotebookEdit', 'MultiEdit'])
@@ -29,8 +30,8 @@ let sessionId = ''
 let home = ''
 let cwd = ''
 let now = 0
-let toolName = 'mcp__goal-meter__tasks'
-let commandName = 'goals'
+let toolName = 'mcp__waypoints__tasks'
+let commandName = 'waypoints'
 let settings = { strict: false }
 let hidden = false
 let nudged = false
@@ -114,14 +115,14 @@ async function readRecording($) {
 }
 
 async function registerCommand($) {
-  const spec = { name: 'goals', description: 'Goal meter: this chat\'s goal task list and every chat\'s goal (/goals hide|show|strict on|off|clear)', argumentHint: '[hide|show|strict on|off|clear]', immediate: true }
+  const spec = { name: 'waypoints', description: 'Waypoints: this chat\'s goal task list and every chat\'s goal (/waypoints hide|show|strict on|off|clear)', argumentHint: '[hide|show|strict on|off|clear]', immediate: true }
   try {
     await $.command.register(spec)
-    return 'goals'
+    return 'waypoints'
   } catch {
     try {
-      await $.command.register({ ...spec, name: 'goal-meter' })
-      return 'goal-meter'
+      await $.command.register({ ...spec, name: 'waypoints-mod' })
+      return 'waypoints-mod'
     } catch {
       return null
     }
@@ -164,7 +165,7 @@ async function serveTool($, e) {
   const action = String(e.action || 'show').toLowerCase()
   const first = normalizeTasks(e.tasks)[0]
   if (!G || (G.status !== 'running' && (action === 'plan' || action === 'add'))) {
-    if (!first) return { result: `Goal meter: no plan in this chat yet. Call action "plan" with the tasks first, each { "title": "...", "size": "S" | "M" | "L" }.` }
+    if (!first) return { result: `Waypoints: no plan in this chat yet. Call action "plan" with the tasks first, each { "title": "...", "size": "S" | "M" | "L" }.` }
     // a plan outside /goal: tracked the same way, named after its first task
     G = newGoal({ sessionId, condition: first.title, now, cwd, kind: 'plan' })
     hidden = false
@@ -252,7 +253,7 @@ export function register(on) {
       const reg = await $.tool.register(TOOL_SPEC)
       if (reg && reg.tool) toolName = reg.tool
     } catch (err) {
-      $.ui.log(`goal-meter: the task tool did not register (${err && err.message ? err.message : err})`)
+      $.ui.log(`waypoints: the task tool did not register (${err && err.message ? err.message : err})`)
     }
     commandName = (await registerCommand($)) || commandName
     await restore($)
@@ -385,7 +386,7 @@ export function register(on) {
     return r
   })
 
-  on('command.run', { command: ['goals', 'goal-meter'] }, async ($, e) => {
+  on('command.run', { command: ['waypoints', 'waypoints-mod'] }, async ($, e) => {
     now = await $.clock.now()
     const [key, value] = String(e.args || '').trim().toLowerCase().split(/\s+/)
     if (key === 'strict') {
@@ -407,7 +408,7 @@ export function register(on) {
     const surface = await $.session.surface()
     if (!surface) return { text: plainText() }
     paneOpen = true
-    await $.ui.open({ id: PANE, title: 'Goal meter', focus: true, closeOnEscape: true })
+    await $.ui.open({ id: PANE, title: 'Waypoints', focus: true, closeOnEscape: true })
     return {}
   })
 
@@ -548,7 +549,7 @@ function drawBand($, el, width) {
   const stats = statsLine(g, p)
   if (stats) rows.push(Text({ dimColor: true, wrap: 'truncate-end', children: [stats] }))
   if (!g.planAt && g.status === 'running') {
-    rows.push(Text({ dimColor: true, wrap: 'truncate-end', children: [nudged ? 'No plan yet: reminded Claude to plan with the goal meter' : 'Waiting for Claude\'s task plan…'] }))
+    rows.push(Text({ dimColor: true, wrap: 'truncate-end', children: [nudged ? 'No plan yet: reminded Claude to plan with Waypoints' : 'Waiting for Claude\'s task plan…'] }))
   } else if (g.status === 'running') {
     // a window on the list: the last two done, everything running, the next ones
     const tasks = visibleTasks(g)
@@ -570,7 +571,7 @@ async function openPane($) {
   now = await $.clock.now()
   await loadOthers($)
   paneOpen = true
-  await $.ui.open({ id: PANE, title: 'Goal meter', focus: true, closeOnEscape: true })
+  await $.ui.open({ id: PANE, title: 'Waypoints', focus: true, closeOnEscape: true })
 }
 
 function otherRow(el, g, width) {

@@ -1,4 +1,4 @@
-// Goal Meter's plan: the task list Claude keeps through the mod's own tool, and
+// Waypoints' plan: the task list Claude keeps through the mod's own tool, and
 // what the bar, the ETA, and the goal check read from it. Pure functions: no mods
 // API calls here, so the harness tests can drive them directly.
 
@@ -136,7 +136,7 @@ export function listText(goal) {
 // One call of the task tool. Returns { ok, text } and changes the goal in place.
 export function applyAction(goal, input, { now, by = '' } = {}) {
   const action = String(input.action || 'show').toLowerCase()
-  const fail = (msg) => ({ ok: false, text: `Goal meter: ${msg}\n${listText(goal)}` })
+  const fail = (msg) => ({ ok: false, text: `Waypoints: ${msg}\n${listText(goal)}` })
   if (action === 'plan' || action === 'add') {
     const list = normalizeTasks(input.tasks)
     if (!list.length) return fail(`"${action}" needs tasks: [{ "title": "...", "size": "S" | "M" | "L" }].`)
@@ -193,7 +193,7 @@ export function parseCheck(text) {
 export const TOOL_SPEC = {
   name: 'tasks',
   description:
-    'Goal meter: the task plan the user watches as a progress bar while a /goal runs. ' +
+    'Waypoints: the task plan the user watches as a progress bar while a /goal runs. ' +
     'Call action "plan" first with every task needed to meet the goal, in order, each sized S, M, or L. ' +
     'Call "start" with a task id when you begin it (set "by" to a subagent\'s short name when one does it) and "done" when it is finished. ' +
     'Call "add" for work you discover or when the goal check says the goal is not met yet, and "drop" for a task no longer needed. ' +
@@ -225,7 +225,7 @@ export const TOOL_SPEC = {
 
 export function instruction(tool) {
   return (
-    `Goal meter is on for this goal: the user watches your progress as a bar built from your task plan. ` +
+    `Waypoints is on for this goal: the user watches your progress as a bar built from your task plan. ` +
     `Before you start the work, call ${tool} (load it with ToolSearch if it is deferred) with action "plan" and every task needed to meet the goal, in order, each sized S, M, or L. ` +
     `Call "start" with a task's id when you begin it and "done" when it is finished. ` +
     `If you find more work, or the goal check says the goal is not met yet, call "add" with the new tasks. ` +
@@ -234,9 +234,9 @@ export function instruction(tool) {
 }
 
 export function nudge(tool) {
-  return `Reminder from the goal meter: this /goal has no task plan yet, so the user's progress bar is empty. Call ${tool} with action "plan" now (every task to meet the goal, in order, sized S, M, or L), then mark tasks as you go.`
+  return `Reminder from Waypoints: this /goal has no task plan yet, so the user's progress bar is empty. Call ${tool} with action "plan" now (every task to meet the goal, in order, sized S, M, or L), then mark tasks as you go.`
 }
 
 export function strictDeny(tool) {
-  return `Goal meter (strict): plan the goal before changing files. Call ${tool} with action "plan" first, then retry this.`
+  return `Waypoints (strict): plan the goal before changing files. Call ${tool} with action "plan" first, then retry this.`
 }
