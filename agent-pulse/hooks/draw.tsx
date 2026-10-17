@@ -4,7 +4,7 @@ import type { ActivityAgent, ActivityBeat, ActivityEntry, ActivityNow, ActivityO
 import { barOf, SPINNERS, toolGlyphOf } from './glyphs'
 import { barSvg, jellySvg, stripSvg } from './jelly'
 import type { Level, Palette } from './palette'
-import { agentColorOf, heatOf, mix } from './palette'
+import { agentColorOf, heatOf, mix, shadeOf, shimmerOf } from './palette'
 import type { PulseProps } from './pulse'
 import { durationOf, plural, printable } from './text'
 
@@ -50,10 +50,11 @@ const OUTCOME_MARKS: Record<ActivityOutcome, string> = {
   interrupted: '■',
 }
 
-const KIND_MARKS: Partial<Record<ActivityEntry['kind'], { mark: string; color: string }>> = {
-  turn: { mark: '›', color: 'text' },
-  reply: { mark: '✎', color: 'success' },
-  compact: { mark: '⇣', color: 'planMode' },
+/** A kind's mark, in its phase's color, or the text's color with none. */
+const KIND_MARKS: Partial<Record<ActivityEntry['kind'], { mark: string; phase: ActivityPhase | null }>> = {
+  turn: { mark: '›', phase: null },
+  reply: { mark: '✎', phase: 'writing' },
+  compact: { mark: '⇣', phase: 'compacting' },
 }
 
 /** What both surfaces lay out the same way: which agents and rows show. */
@@ -100,7 +101,13 @@ function markOf(v: View, entry: ActivityEntry): { mark: string; color: string } 
     return { mark: '∴', color: v.palette.phase.thinking }
   }
 
-  return KIND_MARKS[entry.kind] ?? { mark: OUTCOME_MARKS[entry.outcome], color: v.palette.outcome[entry.outcome] }
+  const kind = KIND_MARKS[entry.kind]
+
+  if (kind !== undefined) {
+    return { mark: kind.mark, color: kind.phase === null ? 'text' : v.palette.phase[kind.phase] }
+  }
+
+  return { mark: OUTCOME_MARKS[entry.outcome], color: v.palette.outcome[entry.outcome] }
 }
 
 /** The border's color: a call's flash, the breath of a wait, or the phase. */
@@ -115,7 +122,8 @@ function borderOf(v: View): string {
   if (level === 'full' && (phase === 'approval' || phase === 'question')) {
     const wave = (Math.sin(((nowMs - sinceMs) / BREATH_MS) * 2 * Math.PI) + 1) / 2
 
-    return mix(mix(palette.hex[phase], '#000000', 0.6), palette.hex[phase], wave)
+    // From a dimmed glow up to the bright core: a hue shift as well as a breath.
+    return mix(mix(palette.glow[phase], '#000000', 0.6), palette.hex[phase], wave)
   }
 
   return phase === 'idle' ? 'inactive' : palette.phase[phase]
@@ -140,7 +148,7 @@ function terminalMarks(v: View, Text: Elements['terminal']['Text'], pulse: Pulse
 
   const glyph = v.level === 'off' || !isWorking
     ? <Text color={color}>{isWorking ? '●' : '○'}</Text>
-    : pulse(`glyph-${phase}`, { kind: 'spin', frames: [...spinner.frames], ms: spinner.ms, color }, 1)
+    : pulse(`glyph-${phase}`, { kind: 'spin', frames: [...spinner.frames], ms: spinner.ms, colors: shimmerOf(v.palette, phase) }, 1)
 
   const { beat } = v
   const sparkle = v.level === 'full' && beat?.kind === 'done' && v.nowMs - beat.atMs < SPARKLE_MS
@@ -167,9 +175,7 @@ export function drawTerminal(ui: Elements['terminal'], v: View, pulse: PulseOf, 
     ? [
         <Box key="strip" flexDirection="row">
           <Text dimColor>{'  '}</Text>
-          {stripCells(strip, Math.max(10, Math.min(48, v.bodyColumns - 12))).map((run, i) => (
-            <Text key={`strip-${i}`} color={palette.phase[run.phase]}>{'━'.repeat(run.cells)}</Text>
-          ))}
+          {stripCells(strip, Math.max(10, Math.min(48, v.bodyColumns - 12))).flatMap((run, i) => stripRun(Text, palette, run, i))}
         </Box>,
       ]
     : []
@@ -179,7 +185,7 @@ export function drawTerminal(ui: Elements['terminal'], v: View, pulse: PulseOf, 
     const isLast = i === listed.length - 1 && unlisted === 0
     const mark = v.level === 'off'
       ? <Text color={color}>◆</Text>
-      : pulse(`agent-glyph-${i}`, { kind: 'spin', frames: [...SPINNERS.agent.frames], ms: SPINNERS.agent.ms, color }, 1)
+      : pulse(`agent-glyph-${i}`, { kind: 'spin', frames: [...SPINNERS.agent.frames], ms: SPINNERS.agent.ms, colors: [color] }, 1)
 
     return (
       <Box key={`agent-${i}`} flexDirection="row">
@@ -297,6 +303,25 @@ function card(
 }
 
 /**
+ * One run of the terminal's strip: a `Text` for a flat palette, or a cell
+ * each shading from the phase's core to its glow.
+ */
+function stripRun(
+  Text: Elements['terminal']['Text'],
+  palette: Palette,
+  run: { phase: ActivityPhase; cells: number },
+  i: number,
+): RenderElement[] {
+  if (palette.hex[run.phase] === palette.glow[run.phase]) {
+    return [<Text key={`strip-${i}`} color={palette.phase[run.phase]}>{'━'.repeat(run.cells)}</Text>]
+  }
+
+  return Array.from({ length: run.cells }, (_, cell) => (
+    <Text key={`strip-${i}-${cell}`} color={shadeOf(palette, run.phase, run.cells === 1 ? 0 : cell / (run.cells - 1))}>━</Text>
+  ))
+}
+
+/**
  * The strip as runs of cells: each cell takes the phase at its middle in
  * time, and neighbours of one phase join into one run.
  */
@@ -353,10 +378,10 @@ export function drawDesktop(ui: WebElements, v: View, below: RenderElement): Ren
     ? { id: beat.id, color: palette.sparkle[3] ?? palette.hex.writing }
     : null
 
-  const jelly = jellySvg({ phase, level: v.level, color: palette.hex[phase], halo, sparkle, size: 44 })
+  const jelly = jellySvg({ phase, level: v.level, color: palette.hex[phase], glow: palette.glow[phase], halo, sparkle, size: 44 })
 
   const stripRow = strip.length > 0
-    ? [<Svg key="strip" source={stripSvg(strip, p => palette.hex[p], width, v.level)} alt={`The turn so far: ${stripAlt(strip)}`} width={width} height={6} />]
+    ? [<Svg key="strip" source={stripSvg(strip, p => palette.hex[p], width, v.level, p => palette.glow[p])} alt={`The turn so far: ${stripAlt(strip)}`} width={width} height={6} />]
     : []
 
   const agentRows = listed.map((agent, i) => {

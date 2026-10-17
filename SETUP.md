@@ -26,7 +26,7 @@ Paste this into Claude Code on the new computer:
 | `goal-meter` | `nateherkai/claude-code-mods` | 1.0.0 | Task plan shown as a progress bar while a `/goal` runs |
 | `skins` | `hellosverre/claude-skins` | 0.5.6 | Colour scheme and words for the transcript |
 | `cache-keeper` | `nateherkai/claude-code-mods` | 1.0.0 | Adds the `session-handoff` skill |
-| `agent-pulse` | `afterever/claude-mods` (this repo) | 1.0.1 | Box above the prompt naming the step Claude is on, in color and motion, with a step history |
+| `agent-pulse` | `afterever/claude-mods` (this repo) | 1.1.0 | Box above the prompt naming the step Claude is on, in color and motion, with a step history |
 
 ## Install
 
@@ -215,14 +215,14 @@ end-of-session summary. Nothing to configure.
 My fork of Tzafrir Rehan's `whats-agent-doing` 0.4.3, imported with its history and renamed: a
 box above the prompt that names the step Claude is on in plain English and how long it has been on
 it, with color, motion and small charts added on the terminal and the desktop app's Code tab, and a
-jellyfish on the desktop. Written against 1.0.1. What changed:
+jellyfish on the desktop. Written against 1.1.0. What changed:
 [agent-pulse/README.md](./agent-pulse/README.md); why: [agent-pulse/DESIGN.md](./agent-pulse/DESIGN.md).
 
 **Do not install `whats-agent-doing` next to it,** or two boxes show. Remove it first with
 `claude plugin uninstall whats-agent-doing@tzafrir`, and the `tzafrir` marketplace with it.
 
 - **Set it in `/config`:** type `Animation` to find its three rows. Mine are **Animation `full`**,
-  Palette `claude`, Sound `off`. `subtle` is the default and calmer; `off` keeps the colors and
+  Palette `ember` (the default since 1.1.0), Sound `off`. `subtle` is the default and calmer; `off` keeps the colors and
   charts but stills everything.
 - **Expand the history:** click the triangle, or focus the box with `ctrl+x tab` and press Enter.
   Collapse the whole band with `ctrl+x ctrl+a`.
