@@ -5,6 +5,8 @@ import type { AgentRun, Flow, Panel, Phase, PlannedTask } from '../types'
 import { AUTO_TITLE, isCounted, isSavvyType, onFinish, onSpawn, openKey, startsBatch } from './auto'
 import { COSTUME_COLOR, bareType, costumeOf, plannedCostume, plannedProfile } from './crew'
 import type { Costume } from './crew'
+import { resolveLook } from './palette'
+import type { Look } from './palette'
 
 const flow = atom({ plugin: 'subagent-progress', key: 'flow' } as const, null)
 const agents = atom({ plugin: 'subagent-progress', key: 'agents' } as const, [])
@@ -99,6 +101,11 @@ const STRINGS = {
 // Module scope is fine here: session.start sets it again on every (re)load.
 let lang: Lang = 'en'
 const tr = () => STRINGS[lang]
+
+// The terminal look's palette and animation level; register() and session.start set it again on every (re)load.
+let look: Look = { palette: 'ember', level: 'subtle' }
+// The `palette` and `animation` options, for refreshLook to read; register() sets them.
+let configured: { palette?: unknown; animation?: unknown } = {}
 
 const isRussian = (v: unknown): boolean => typeof v === 'string' && /^(ru|russian|рус)/i.test(v.trim())
 
@@ -628,10 +635,30 @@ async function autoOpen($: EngineInterface, key: string): Promise<void> {
   void $.ui.open({ id: PANE, title: tr().pane })
 }
 
+// This mod's own setting, or 'follow' Agent-Pulse's /config rows (ember / subtle without it).
+async function refreshLook($: EngineInterface): Promise<void> {
+  let rows: unknown = []
+  try {
+    rows = await $.config.list()
+  } catch {
+    // No rows: follow falls back to ember / subtle.
+  }
+  const next = resolveLook(configured, rows)
+  if (next.palette === look.palette && next.level === look.level) return
+  look = next
+  $.ui.invalidate('ui.render')
+}
+
 export const register: Register = (on, options) => {
+  configured = options
+  look = resolveLook(options, [])
+
   on('session.start', async ($, e, next) => {
     const started = await next(e)
     lang = await detectLang($, options.language)
+    await refreshLook($)
+    // The fallback for a change of Agent-Pulse's that never reached config.set.
+    $.clock.every(15_000, () => void refreshLook($))
     await $.tool.register({
       name: 'progress',
       description:
@@ -704,6 +731,14 @@ export const register: Register = (on, options) => {
       })()
     })
     return started
+  })
+
+  // Another plugin's /config change that this mod follows: the new value is in the rows once it went through.
+  // Literals, so the engine can read the matcher off the source.
+  on('config.set', { key: ['agent-pulse.palette', 'agent-pulse.animation'] }, async ($, e, next) => {
+    const result = await next(e)
+    if (result.deny === undefined) await refreshLook($)
+    return result
   })
 
   on('command.run', { command: 'agents-info' }, async $ => {
