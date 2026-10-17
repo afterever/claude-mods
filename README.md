@@ -35,17 +35,17 @@ Pick up new versions with `claude plugin marketplace update afterever-mods` and 
 
 ## Develop
 
-Edit a mod in place and load it from disk, which hot-reloads on save:
+From the root of this repo, edit a mod in place and load it from disk, which hot-reloads on save:
 
 ```
-claude --plugin-dir C:\github\claude-mods\ctx
+claude --plugin-dir .\ctx
 ```
 
 Check a mod before committing:
 
 ```
-claude plugin validate C:\github\claude-mods
-claude plugin test C:\github\claude-mods\ctx
+claude plugin validate .
+claude plugin test .\ctx
 ```
 
 Claude Code writes `<mod>/.claude-plugin/types/` and `<mod>/tsconfig.json` each time it loads a mod. They are regenerated and git-ignored.
@@ -68,6 +68,7 @@ ctx/
   hooks/compact.ts, compact.test.ts  keep instructions and the auto-compact warning
   hooks/cost.ts, cost.test.ts     per-turn spend, learned prices, carrying and compaction costs
   hooks/render.test.ts            the pane, band and footer drawn on terminal and desktop
+  hooks/version.ts                a copy of the version for the pane footer; bump it with plugin.json
   types/index.d.ts                the mod's $.state contract
 subagent-progress/
   README.md                       what it does and what changed from savvy-progress
@@ -101,6 +102,7 @@ work-report/
   hooks/dates.ts, dates.test.ts   local-noon day stepping, ranges, day of the year
   hooks/report.ts, report.test.ts totals, the estimate, the streak, chart bars
   hooks/layout.ts, layout.test.ts widths, big numerals, tiles, bars, the chart
+  hooks/svg.ts, svg.test.ts       the tiles, bars and chart as drawings on the desktop
   hooks/flow.test.ts              the whole flow, with the engine's events stubbed
   types/index.d.ts                the mod's state contract
 agent-pulse/
@@ -143,4 +145,5 @@ waypoints/
   hooks/plan.mjs, plan.test.ts    the plan, the bar, the ETA, the words Claude reads
   hooks/fmt.mjs, privacy.mjs      time formatting; masking while Recording Mode is on
   hooks/*.test.ts                 flow, route, palette, draw (band, pane, SVG), surface, auto-open, pulse
+  test-runs/                      TEST-RUN-<version>.md: what each release was checked on screen, and what was not
 ```
