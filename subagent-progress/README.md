@@ -4,7 +4,7 @@ A Claude Code mod: a progress bar above the prompt and a live panel of subagents
 
 - **Progress bar**: the flow's title, phase, finished agents out of started, and a button with the crew size that opens the panel (`a` presses it while the band holds the focus). It appears when a subagent of any type starts, or when something reports progress. When the work ends it turns into a green **Done** row that stays until you dismiss it with ✕.
 - **Agents panel** (`/agents-info` toggles it): running, finished and planned subagents with model, effort, task progress, context, estimated cost and time. It opens by itself whenever a new batch of subagent work starts. **Collapse** shrinks it to one line per agent.
-- **Costumes**: working crabs walk, and each costume animates its own prop. `prefers-reduced-motion` stops them. The crabs are SVG, so they draw on the desktop; the terminal gets text rows in the costume's color.
+- **Costumes**: working crabs walk, and each costume animates its own prop. On the desktop the crabs are SVG and `prefers-reduced-motion` stops them. In the terminal each card has a small half-block crab beside it (6×2 cells) in the same costumes and colors, and the `animation` setting controls its motion (see [Terminal look](#terminal-look)).
 
 ## Costumes
 
@@ -38,7 +38,27 @@ Upstream shows the bar only for `savvy-*` workers or an explicit `progress` repo
 - An orchestrated flow (the `progress` tool, or a `savvy-*` worker) is never touched by this: its counters stay the orchestrator's. Once an explicit report arrives it takes the flow over.
 - The costumes follow model and effort, not agent names (2.0.0).
 
+## Terminal look
+
+The desktop gets SVG crabs; the terminal draws its own:
+
+- **A crab per agent.** In the panel's full view a 6×2-cell crab (two pixels to a cell, drawn in half blocks) stands beside each agent's name and model, wearing its costume. A running crab walks and its prop moves; finished, failed and planned crabs stand still and dim. A pane narrower than 24 columns drops the crab and keeps the plain `▣` layout. At most the 8 newest running agents animate.
+- **Compact lines spin.** A running agent's `●` is a braille spinner in its costume's color; there is no crab at one row (a crab that small was unreadable).
+- **The band's bar is shaded** from the palette's core color to its glow along its length, and its last filled cell pulses while agents run. When the work ends at `full`, a sparkle runs along it once, then it settles into the green Done row. A flow that was already finished when Claude Code started does not sparkle.
+- **A glyph per agent** replaces the old `▣` in the band: a spinner while running, then `✓`, `✗` or a dim `○` for planned, in the agent's costume color, up to 8 and then `+n`.
+- **Context heat.** For a worker that reports no steps, the context bar turns amber from 70% and red from 90%.
+
+It needs a font with block elements and braille, as Cascadia and Nerd Fonts have. Why it is built this way, and what the spike on a live terminal showed: [DESIGN.md](./DESIGN.md).
+
 ## Changes
+
+### 2.1.0: the terminal gets crabs and motion
+
+The desktop drawings are unchanged; this release is the terminal. See [Terminal look](#terminal-look).
+
+- **Crabs in the panel**, **spinners in compact lines**, a **shaded, pulsing band bar** with a one-time finish sparkle, a **glyph per agent** in the band in place of `▣`, and **heat** on the context bar.
+- **Two settings**, `palette` and `animation`, both `follow` by default: they take `agent-pulse`'s palette and animation level (ember and subtle when it is not installed), so the mods agree. Set your own to stop following. The palette colors the band's bar, its head, the sparkle and the heat; the crabs, spinners and glyphs keep their costume colors. `animation`: `off` keeps the terminal still, `subtle` walks the crabs and pulses the bar, `full` also moves their props and plays the finish sparkle. It does not reach the desktop, which keeps its own motion and `prefers-reduced-motion`.
+- 75 tests (was 46): the sprite, the palette and `follow`, the card, compact, the band's glyphs, shading and sparkle, and a check that the desktop draws no terminal-only element.
 
 ### 2.0.1: other mods' bands stay in sight
 
@@ -83,10 +103,16 @@ Cost is a rough estimate from token counts and a built-in per-model price table 
 
 ## Settings
 
-`language`: `auto` (default), `en` or `ru`. `auto` follows Claude Code's `language` setting, then the system locale, and falls back to English. Set it in `/config`, or, for a mod loaded by hand, in `~/.claude/settings.json`:
+All three are in `/config` under this mod.
+
+- `language`: `auto` (default), `en` or `ru`. `auto` follows Claude Code's `language` setting, then the system locale, and falls back to English.
+- `palette`: `follow` (default), `ember`, `claude`, `neon` or `mono`. `follow` uses `agent-pulse`'s palette, or `ember` when it is not installed. Colors the terminal band's bar, head and sparkle and the context heat.
+- `animation`: `follow` (default), `off`, `subtle` or `full`. `follow` uses `agent-pulse`'s level, or `subtle` without it. Terminal only. `off` keeps the crabs, spinners and bar still; `subtle` walks the crabs and pulses the bar; `full` also moves their props and plays the finish sparkle.
+
+For a mod loaded by hand, set them in `~/.claude/settings.json`:
 
 ```json
-{ "pluginConfigs": { "subagent-progress": { "options": { "language": "ru" } } } }
+{ "pluginConfigs": { "subagent-progress": { "options": { "language": "ru", "palette": "neon", "animation": "full" } } } }
 ```
 
 ## Install

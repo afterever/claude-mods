@@ -5,7 +5,7 @@ import type { AgentRun, Flow, Panel, Phase, PlannedTask } from '../types'
 import { AUTO_TITLE, isCounted, isSavvyType, onFinish, onSpawn, openKey, startsBatch } from './auto'
 import { COSTUME_COLOR, bareType, costumeOf, plannedCostume, plannedProfile } from './crew'
 import type { Costume } from './crew'
-import { resolveLook } from './palette'
+import { paletteOf, resolveLook, shadeOf, shimmerOf } from './palette'
 import type { Look } from './palette'
 
 const flow = atom({ plugin: 'subagent-progress', key: 'flow' } as const, null)
@@ -282,12 +282,30 @@ ${CRAB_CSS}${crab(W - CRAB_W + 1, 0, 'other', false, isWorking, 0.8)}
 
 // Text bar for the terminal, in eighths of a cell: a 6-cell bar still moves in ~2% steps.
 const EIGHTHS = ['', '▏', '▎', '▍', '▌', '▋', '▊', '▉']
-const bar = (fraction: number, width: number): string => {
+const barCells = (fraction: number, width: number): string[] => {
   const eighths = Math.round(Math.max(0, Math.min(1, fraction)) * width * 8)
   const full = Math.floor(eighths / 8)
   const part = EIGHTHS[eighths % 8]
-  return '█'.repeat(full) + part + '░'.repeat(Math.max(0, width - full - (part ? 1 : 0)))
+  return [...Array<string>(full).fill('█'), ...(part ? [part] : []), ...Array<string>(Math.max(0, width - full - (part ? 1 : 0))).fill('░')]
 }
+
+const bar = (fraction: number, width: number): string => barCells(fraction, width).join('')
+
+// The terminal look (DESIGN.md): the spinner's frames, and how many crabs, crew glyphs and spinners to draw.
+const SPIN = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+const SPIN_MS = 100
+const MAX_CREW = 8
+const MAX_ANIMATED = 8
+// Narrower than this the card drops its crab and keeps the old text layout.
+const CRAB_MIN_COLS = 24
+// The context bar of a worker that reports no steps turns amber from here, then red.
+const HEAT_AT = [70, 90] as const
+
+// A render that sees the flow go from running to finished counts one finish, which keys the sparkle so it plays once.
+let isFlowSeenRunning = false
+let finishSeq = 0
+// The finish the sparkle plays for, 0 when this flow did not finish in sight.
+let sweepKey = 0
 
 // ---------------------------------------------------------------------------
 // Agents panel: every subagent of the session, plus the tasks the flow planned.
@@ -614,6 +632,8 @@ const compactSvg = (W: number, list: AgentRun[], planned: Planned[], t: ReturnTy
 // --- terminal drawing: the same rows in text.
 
 const STATUS_GLYPH: Record<string, string> = { running: '●', done: '✓', failed: '✗', planned: '◷' }
+// The band's crew row says planned with an open circle; the panel keeps its clock.
+const CREW_GLYPH: Record<string, string> = { ...STATUS_GLYPH, planned: '○' }
 
 // Opens the agents pane, or closes it when it is up; true when it ends up open.
 async function togglePane($: EngineInterface): Promise<boolean> {
@@ -652,6 +672,9 @@ async function refreshLook($: EngineInterface): Promise<void> {
 export const register: Register = (on, options) => {
   configured = options
   look = resolveLook(options, [])
+  // A (re)load has seen no flow run yet, so a flow already finished does not sparkle.
+  isFlowSeenRunning = false
+  sweepKey = 0
 
   on('session.start', async ($, e, next) => {
     const started = await next(e)
@@ -975,37 +998,75 @@ export const register: Register = (on, options) => {
       )
     }
 
-    // Terminal: the same content in text rows.
+    // Terminal: the same content in text rows, with a crab beside each card (DESIGN.md).
     const cols = Math.max(24, e.props.bodyColumns || 40)
     const barW = Math.max(6, Math.min(20, cols - 34))
+    const palette = paletteOf(look.palette)
+    const Client = 'Client' in ui ? ui.Client : undefined
+    // The crab needs room beside the text; on a narrower pane the old glyph layout stays.
+    const hasCrab = Client !== undefined && (e.props.bodyColumns || 40) >= CRAB_MIN_COLS
+    // Only the newest running agents walk and spin: a big batch must not start a clock per agent.
+    const walking = new Set(running.slice(0, MAX_ANIMATED).map(a => a.id))
+    // A crab is always this one Client, a still one included (it starts no clock). Its key names the mode,
+    // so an agent that finishes gets a fresh instance instead of a timer left running.
+    const crabOf = (id: string, costume: Costume, isRunning: boolean) =>
+      Client && (
+        <Client
+          key={`crab-${id}-${isRunning ? 'run' : 'still'}`}
+          module="./crab.tsx"
+          props={{ costume, accent: colorOf(costume), running: isRunning, dim: !isRunning, level: look.level }}
+          width={6}
+          height={2}
+        />
+      )
     // Theme keys, so done and failed follow the person's theme; running keeps the costume's color.
     const statusColor = (a: AgentRun, color: string) => (a.status === 'failed' ? 'error' : a.status === 'done' ? 'success' : color)
-    // The bar shows steps when the worker reports them, else its context fill in grey.
+    // The bar shows steps when the worker reports them, else its context fill in grey, amber then red as it fills.
     const runBar = (a: AgentRun, color: string, width: number) => {
       const progress = progressOf(a)
-      return progress === null ? <Text dimColor>{bar(ctxOf(a) / 100, width)}</Text> : <Text color={color}>{bar(progress, width)}</Text>
+      if (progress !== null) return <Text color={color}>{bar(progress, width)}</Text>
+      const ctx = ctxOf(a)
+      const heat = ctx >= HEAT_AT[1] ? palette.heat[2] : ctx >= HEAT_AT[0] ? palette.heat[0] : undefined
+      return heat ? <Text color={heat}>{bar(ctx / 100, width)}</Text> : <Text dimColor>{bar(ctx / 100, width)}</Text>
     }
     const row = (a: AgentRun) => {
-      const color = colorOf(costumeOf(a))
+      const costume = costumeOf(a)
+      const color = colorOf(costume)
       const model = a.effort ? `${modelName(a.model)} · ${a.effort}` : modelName(a.model)
       // Steps and their free-text note go last: a cut line loses them, not the time and cost.
       const steps = a.stepTotal ? ` · ${a.stepDone ?? 0}/${a.stepTotal}${a.stepNote ? ' ' + a.stepNote : ''}` : ''
+      const name = (
+        <Box flexDirection="row" gap={1}>
+          {!hasCrab && <Text color={color}>▣</Text>}
+          <Text bold wrap="truncate-end">
+            {a.description || a.type}
+          </Text>
+          <Text color={statusColor(a, color)}>{STATUS_GLYPH[a.status]}</Text>
+        </Box>
+      )
+      const type = (
+        <Text dimColor wrap="truncate-end">
+          {hasCrab ? '' : '  '}
+          {bareType(a.type)} · {model}
+          {a.round > 1 ? ` · ${s.round} ${a.round}` : ''}
+        </Text>
+      )
       return (
         <Box key={a.id} flexDirection="column">
-          <Box flexDirection="row" gap={1}>
-            <Text color={color}>▣</Text>
-            <Text bold wrap="truncate-end">
-              {a.description || a.type}
-            </Text>
-            <Text color={statusColor(a, color)}>{STATUS_GLYPH[a.status]}</Text>
-          </Box>
-          <Text dimColor wrap="truncate-end">
-            {'  '}
-            {bareType(a.type)} · {model}
-            {a.round > 1 ? ` · ${s.round} ${a.round}` : ''}
-          </Text>
+          {hasCrab ? (
+            <Box flexDirection="row" gap={1}>
+              {crabOf(a.id, costume, a.status === 'running' && walking.has(a.id))}
+              <Box flexDirection="column" flexGrow={1} flexShrink={1}>
+                {name}
+                {type}
+              </Box>
+            </Box>
+          ) : (
+            name
+          )}
+          {!hasCrab && type}
           <Text wrap="truncate-end">
-            {'  '}
+            {hasCrab ? '' : '  '}
             {runBar(a, color, barW)}
             <Text dimColor>
               {' '}
@@ -1016,13 +1077,23 @@ export const register: Register = (on, options) => {
         </Box>
       )
     }
-    // Compact: one line per agent, the bar only where it fits.
+    // Compact: one line per agent, the bar only where it fits. A running agent's glyph is a spinner.
     const lineBarW = cols >= 40 ? Math.min(10, cols - 30) : 0
     const line = (a: AgentRun) => {
       const color = colorOf(costumeOf(a))
       return (
         <Box key={a.id} flexDirection="row" gap={1}>
-          <Text color={statusColor(a, color)}>{STATUS_GLYPH[a.status]}</Text>
+          {Client && a.status === 'running' && walking.has(a.id) && look.level !== 'off' ? (
+            <Client
+              key={`spin-${a.id}`}
+              module="./pulse.tsx"
+              props={{ kind: 'spin', frames: SPIN, ms: SPIN_MS, colors: [color] }}
+              width={1}
+              height={1}
+            />
+          ) : (
+            <Text color={statusColor(a, color)}>{STATUS_GLYPH[a.status]}</Text>
+          )}
           <Box flexGrow={1} flexShrink={1}>
             <Text wrap="truncate-end">{a.description || a.type}</Text>
           </Box>
@@ -1064,18 +1135,33 @@ export const register: Register = (on, options) => {
             {finished.length > 0 && toggleDone}
             {!p.isDoneCollapsed && finished.map(row)}
             {planned.length > 0 && <Text dimColor>{s.planned} · {planned.length}</Text>}
-            {planned.map(pl => (
-              <Box key={`plan-${pl.n}`} flexDirection="column">
-                <Text dimColor wrap="truncate-end">
-                  <Text color={colorOf(plannedCostume(pl))}>▢</Text> {pl.n}. {pl.title}
-                </Text>
-                <Text dimColor wrap="truncate-end">
-                  {'  '}
-                  {[pl.tier, profileLabel(pl)].filter(Boolean).join(' · ')}
-                  {pl.after.length ? ` · ${s.after} ${pl.after.join(', ')}` : ''}
-                </Text>
-              </Box>
-            ))}
+            {planned.map(pl => {
+              const meta = `${[pl.tier, profileLabel(pl)].filter(Boolean).join(' · ')}${pl.after.length ? ` · ${s.after} ${pl.after.join(', ')}` : ''}`
+              // A still, dim crab replaces the leading ▢.
+              return hasCrab ? (
+                <Box key={`plan-${pl.n}`} flexDirection="row" gap={1}>
+                  {crabOf(`plan-${pl.n}`, plannedCostume(pl), false)}
+                  <Box flexDirection="column" flexGrow={1} flexShrink={1}>
+                    <Text dimColor wrap="truncate-end">
+                      {pl.n}. {pl.title}
+                    </Text>
+                    <Text dimColor wrap="truncate-end">
+                      {meta}
+                    </Text>
+                  </Box>
+                </Box>
+              ) : (
+                <Box key={`plan-${pl.n}`} flexDirection="column">
+                  <Text dimColor wrap="truncate-end">
+                    <Text color={colorOf(plannedCostume(pl))}>▢</Text> {pl.n}. {pl.title}
+                  </Text>
+                  <Text dimColor wrap="truncate-end">
+                    {'  '}
+                    {meta}
+                  </Text>
+                </Box>
+              )
+            })}
           </Box>
         )}
       </Box>
@@ -1085,6 +1171,19 @@ export const register: Register = (on, options) => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const f = await read($, flow)
     if (f === null || e.props.hasSurvey) return next(e)
+
+    // A render that sees the flow go from running to finished keys the sparkle once; a flow already
+    // finished when the module loads (a resume, a reload) never does, and a new flow clears it.
+    if (f.isFinished) {
+      if (isFlowSeenRunning) {
+        isFlowSeenRunning = false
+        finishSeq += 1
+        sweepKey = finishSeq
+      }
+    } else {
+      isFlowSeenRunning = true
+      sweepKey = 0
+    }
 
     // The band is one site for every plugin: what the plugins beneath draw
     // stays, under the bar, so another mod's band is never hidden.
@@ -1127,12 +1226,91 @@ export const register: Register = (on, options) => {
     }
 
     const cols = e.props.bodyColumns
+    const palette = paletteOf(look.palette)
+    const Client = 'Client' in ui ? ui.Client : undefined
+    const isMoving = look.level !== 'off' && Client !== undefined
+
+    // One glyph per agent in its costume's color, running ones first as in the panel: a spinner while it
+    // runs, ✓ and ✗ in the theme's colors, a dim ○ while planned. At most MAX_CREW, then `+n`.
+    const crewGlyphs = [
+      ...list.filter(a => a.status === 'running').reverse().map(a => ({ id: a.id, kind: 'running' as const, color: colorOf(costumeOf(a)) })),
+      ...list.filter(a => a.status !== 'running').reverse().map(a => ({ id: a.id, kind: a.status, color: a.status === 'done' ? 'success' : 'error' })),
+      ...plannedOf(f, list).map(p => ({ id: `plan-${p.n}`, kind: 'planned' as const, color: colorOf(plannedCostume(p)) })),
+    ]
+    const shown = crewGlyphs.slice(0, MAX_CREW)
+    const more = crewGlyphs.length - shown.length
+    const crewW = shown.length + (more > 0 ? `+${more}`.length : 0)
+    const glyphRow = shown.length > 0 && (
+      <Box key="subagent-glyphs" flexDirection="row">
+        {shown.map(g =>
+          g.kind === 'running' && isMoving && Client ? (
+            <Client
+              key={`spin-${g.id}`}
+              module="./pulse.tsx"
+              props={{ kind: 'spin', frames: SPIN, ms: SPIN_MS, colors: [g.color] }}
+              width={1}
+              height={1}
+            />
+          ) : (
+            <Text key={g.id} color={g.color} dimColor={g.kind === 'planned'}>
+              {CREW_GLYPH[g.kind]}
+            </Text>
+          ),
+        )}
+        {more > 0 && <Text dimColor>{`+${more}`}</Text>}
+      </Box>
+    )
+
     const titleW = Math.max(8, Math.min(30, f.title.length + 2, Math.floor(cols / 3)))
-    // What follows the bar, measured: label, percent, the crew button (`a: ×N`), ▣ and ✕,
+    // What follows the bar, measured: label, percent, the crew glyphs, the crew button (`a: ×N`) and ✕,
     // and the row's six gaps of 2. The bar takes what is left.
-    const tail = label(f).length + percent.length + `a: ×${crew}`.length + 2 + 12
+    const tail = label(f).length + percent.length + crewW + `a: ×${crew}`.length + 1 + 12
     const width = Math.max(6, Math.min(40, cols - titleW - tail))
-    const color = f.isFinished ? 'success' : ACCENT
+    const color = f.isFinished ? palette.outcome.ok : palette.phase.agent
+
+    // The bar keeps the eighths glyphs but takes its color per cell: shaded core to glow along its length
+    // (positions, so a cell keeps its color as the bar fills), the dim ░ beyond, solid once the flow is done.
+    const cells = barCells(ratio(f), width)
+    const filled = cells.indexOf('░') === -1 ? cells.length : cells.indexOf('░')
+    const cell = (c: string, i: number) =>
+      c === '░' ? (
+        <Text key={`b${i}`} dimColor>
+          {c}
+        </Text>
+      ) : (
+        <Text key={`b${i}`} color={f.isFinished ? palette.outcome.ok : shadeOf(palette, 'agent', i / Math.max(1, width - 1))}>
+          {c}
+        </Text>
+      )
+    const isPulsing = !f.isFinished && isMoving && (isWorking || f.running > 0) && filled > 0
+    const isSweeping = f.isFinished && sweepKey > 0 && look.level === 'full' && Client !== undefined
+    const barEl = (
+      <Box key="subagent-bar" flexDirection="row" flexShrink={0}>
+        {isSweeping && Client ? (
+          <Client
+            key={`sweep-${sweepKey}`}
+            module="./pulse.tsx"
+            props={{ kind: 'sweep', chars: cells, done: cells.map(() => palette.outcome.ok), colors: [...palette.sparkle] }}
+            width={width}
+            height={1}
+          />
+        ) : isPulsing && Client ? (
+          <>
+            {filled > 1 && <Text>{cells.slice(0, filled - 1).map(cell)}</Text>}
+            <Client
+              key="head"
+              module="./pulse.tsx"
+              props={{ kind: 'spin', frames: [cells[filled - 1] ?? '█'], ms: SPIN_MS, colors: shimmerOf(palette, 'agent') }}
+              width={1}
+              height={1}
+            />
+            {filled < cells.length && <Text>{cells.slice(filled).map((c, i) => cell(c, filled + i))}</Text>}
+          </>
+        ) : (
+          <Text>{cells.map(cell)}</Text>
+        )}
+      </Box>
+    )
     return (
       <Box flexDirection="column">
         <Box flexDirection="row" gap={2}>
@@ -1140,10 +1318,10 @@ export const register: Register = (on, options) => {
             <Text color={color}>{f.isFinished ? '✓' : '●'} </Text>
             <Text wrap="truncate-end">{f.title}</Text>
           </Box>
-          <Text color={color}>{bar(ratio(f), width)}</Text>
+          {barEl}
           <Text bold>{label(f)}</Text>
           <Text dimColor>{percent}</Text>
-          <Text color="claude">▣</Text>
+          {glyphRow}
           {crewButton}
           {dismiss}
         </Box>

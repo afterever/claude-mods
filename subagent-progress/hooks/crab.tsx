@@ -114,9 +114,9 @@ const Crab: ClientModule<CrabProps, State> = (props, surface) => {
   return (
     <Box flexDirection="column">
       {cellsOf(props.costume, props.accent, frame, props.level).map((row, r) => (
-        <Text key={r}>
+        <Text key={`r${r}`}>
           {row.map((c, x) => (
-            <Text key={x} color={c.fg} backgroundColor={c.bg} dimColor={props.dim}>
+            <Text key={`c${x}`} color={c.fg} backgroundColor={c.bg} dimColor={props.dim}>
               {c.ch}
             </Text>
           ))}
