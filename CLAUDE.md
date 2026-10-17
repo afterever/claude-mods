@@ -8,3 +8,10 @@
   any change to a mod's code under `hooks/`. This is how `subagent-progress` 2.0.0 and
   `prompt-upgrade` 0.1.0 landed.
 - **If unsure which one it is, treat it as larger** and use a branch.
+
+## Mods that draw in the band
+
+- **A band (`AbovePrompt`) hook draws its own rows first and `await next(e)` after them**
+  (`[mine, below]`, never `[below, mine]`). The band is shared, and no API orders the plugins'
+  hooks, so this habit is the only thing that keeps `arsenal`'s launcher as the last row against
+  the prompt box. See "Staying the band's last row" in `arsenal/DESIGN.md`.
