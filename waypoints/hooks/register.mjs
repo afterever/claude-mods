@@ -20,7 +20,7 @@
 
 import { minutes, clip, bar, basename } from './fmt.mjs'
 import { makeMasker } from './privacy.mjs'
-import { newGoal, applyAction, progress, eta, parseCheck, isStopWord, normalizeTasks, TOOL_SPEC, instruction, standing, nudge, strictDeny } from './plan.mjs'
+import { newGoal, applyAction, progress, eta, parseCheck, isStopWord, normalizeTasks, planSubject, TOOL_SPEC, instruction, standing, nudge, strictDeny } from './plan.mjs'
 import { rolesOf, resolveLook } from './palette.mjs'
 import { drawBand, drawPane, statsLine, label, FULL_MS } from './draw.mjs'
 import { createAutoPane } from './pane.mjs'
@@ -233,8 +233,8 @@ async function serveTool($, e) {
   const first = normalizeTasks(e.tasks)[0]
   if (!G || (G.status !== 'running' && (action === 'plan' || action === 'add'))) {
     if (!first) return { result: `Waypoints: no plan in this chat yet. Call action "plan" with the tasks first, each { "title": "...", "size": "S" | "M" | "L" }.` }
-    // a plan outside /goal: tracked the same way, named after its first task
-    G = newGoal({ sessionId, condition: first.title, now, cwd, kind: 'plan' })
+    // a plan outside /goal: tracked the same way, named after its goal line, else its first task
+    G = newGoal({ sessionId, condition: planSubject(e), now, cwd, kind: 'plan' })
     hidden = false
   }
   const by = e.by ? String(e.by) : e.agentId ? agentNames.get(e.agentId) || 'agent' : ''
