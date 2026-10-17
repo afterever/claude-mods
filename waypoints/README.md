@@ -8,11 +8,31 @@ Waypoints is a fork of Nate Herk's [goal-meter](https://github.com/nateherkai/cl
 
 Claude plans the work as tasks sized S, M or L with the mod's own tool, `mcp__waypoints__tasks`, then marks each one started and done. Everything on screen comes from that list.
 
-- **The band above the prompt:** the bar (finished work out of the plan, weighted by size), elapsed time, the ETA at this goal's own pace, what is running and who runs it, the next tasks, and the goal check's latest "not met yet" reason.
+- **The band above the prompt:** the plan drawn as a **route**, a line of nodes and legs, each leg as long as its task is big (S, M or L). Finished legs are solid and shaded, the node a task starts from pulses while it runs, the last node is the destination `◎`. Under it: what is running and who runs it, the next task, and the goal check's latest "not met yet" reason. In the header: tasks done, the percentage and the ETA at this goal's own pace.
 - **The footer:** `◎ goal 69% · ~15m`, in every view.
-- **The pane:** `/waypoints` opens this chat's whole task list and every other chat's goal from the last 12 hours.
+- **The pane:** `/waypoints` opens this chat's whole task trail (every task, how long each took, who is running which) and every other chat's goal from the last 12 hours, each with its own small route. It also **opens by itself** when a plan starts, without taking the keys from your prompt.
+- **Claude Desktop:** the route is a drawn line instead of characters, with the same states and its own motion.
 
-The ETA appears after two tasks are done. The mod makes no model calls of its own.
+```
+◎ Goal: Add band to Settings type…               3 of 6 · 50% · ~2m   all tasks g
+●━━━━━━━━●━━━━●━━━━━━━━◉┄┄┄┄┄┄┄┄○┄┄┄┄○┄┄┄┄┄┄┄┄◎ +2
+⠋ M  Tests: normalize, command, band on/off           ◆ reviewer · 1m
+  next ○ S  README, version bump, marketplace.json
+```
+
+The ETA appears after two tasks are done. When a goal finishes the full band stays for 8 seconds, then collapses to one row; three minutes after the finish the band goes, and a pane that Waypoints opened closes with it (a pane you opened yourself stays). The mod makes no model calls of its own.
+
+## Settings
+
+In `/config`, under Waypoints:
+
+| Setting | Values | Default |
+| --- | --- | --- |
+| Palette | `follow`, `ember`, `claude`, `neon`, `mono` | `follow` |
+| Animation | `follow`, `off`, `subtle`, `full` | `follow` |
+| Pane | `auto`, `off` | `auto` |
+
+`follow` takes [Agent-Pulse](../agent-pulse)'s own palette or animation, so the two bands never disagree, and falls back to `ember` / `subtle` when Agent-Pulse is not installed. Pick a value to stop following. Colour and shape show at every animation level; `off` keeps everything still, `subtle` pulses the running task, `full` also breathes the node and sweeps the route when the plan finishes. `Pane: off` opens the pane only when you ask (`/waypoints` or `g`). A window narrower than 144 columns leaves an unasked pane waiting until it widens; `g` and `/waypoints` open it at any width.
 
 ## When Claude plans
 
@@ -39,6 +59,16 @@ The standing line is the one thing the global `CLAUDE.md` bullet used to do. If 
 | `/waypoints clear` | Stops tracking this chat's goal. |
 
 In the band, the **all tasks** button (or `g`) opens the pane.
+
+## What changed in 2.0
+
+Only how it looks and when the pane opens; what Claude is told and the tool it plans with are the same as in 1.1, and the data files are unchanged, so chats still on 1.1 appear in your pane.
+
+- The one-row bar is now the route; the stats row moved into the pane.
+- The pane shows every task as a trail with duration bars, instead of a window of six rows with `+n more`.
+- The pane opens when a plan starts (`Pane` setting) and closes with the band.
+- Fixed hex palettes copied from Agent-Pulse replace the theme keys 1.1 drew in (`cyan`, `green`), which a skin can remap, so the colours no longer depend on your theme unless you pick `claude` or `mono`.
+- The band stays three minutes after a finish instead of ten.
 
 ## What changed from goal-meter
 

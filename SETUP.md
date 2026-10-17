@@ -21,7 +21,7 @@ Paste this into Claude Code on the new computer:
 | `subagent-progress` | `afterever/claude-mods` (this repo) | 2.0.1 | Progress bar and live panel for subagent work |
 | `prompt-upgrade` | `afterever/claude-mods` (this repo) | 0.1.0 | `/better` turns a rough prompt into a great one before it is sent |
 | `work-report` | `afterever/claude-mods` (this repo) | 0.3.0 | `/report` shows what Claude has done for you: tasks, hours saved, what that is worth |
-| `waypoints` | `afterever/claude-mods` (this repo) | 1.1.0 | Task plan shown as a progress bar for a `/goal` or any multi-step work; replaces `goal-meter` |
+| `waypoints` | `afterever/claude-mods` (this repo) | 2.0.0 | Task plan shown as a route above the prompt for a `/goal` or any multi-step work, with a pane that opens by itself; replaces `goal-meter` |
 | `skins` | `hellosverre/claude-skins` | 0.5.6 | Colour scheme and words for the transcript |
 | `cache-keeper` | `nateherkai/claude-code-mods` | 1.0.0 | Adds the `session-handoff` skill |
 | `agent-pulse` | `afterever/claude-mods` (this repo) | 1.1.0 | Box above the prompt naming the step Claude is on, in color and motion, with a step history |
@@ -98,9 +98,13 @@ Nothing to configure, but the figures are estimates from settings you can change
 
 My own mod, a fork of Nate Herk's `goal-meter` 1.0.0 (renamed; imported with its history). It gives
 Claude one tool, `mcp__waypoints__tasks`, that holds the task plan the bar shows, and `/waypoints`
-opens the pane. Written against 1.1.0. Nothing to configure and nothing to add to the global
-`~/.claude/CLAUDE.md`: the mod puts one line in the system prompt asking Claude to plan work of 3 or
-more steps, and a `/goal` asks for a plan on its own. `/waypoints auto off` removes the line.
+opens the pane. Written against 2.0.0. Nothing to add to the global `~/.claude/CLAUDE.md`: the mod
+puts one line in the system prompt asking Claude to plan work of 3 or more steps, and a `/goal` asks
+for a plan on its own. `/waypoints auto off` removes the line.
+
+- **Settings** (`/config` → Waypoints): Palette and Animation default to `follow`, which takes
+  Agent-Pulse's own values (`ember` / `subtle` without it); Pane defaults to `auto`, which opens the
+  pane when a plan starts and never takes the prompt's keys. The pane waits below 144 columns.
 
 - **Coming from `goal-meter`:** `claude plugin uninstall goal-meter@nateherk-mods`, delete the
   **Goal meter** bullet from the global `CLAUDE.md` (it names a tool that no longer exists), and open

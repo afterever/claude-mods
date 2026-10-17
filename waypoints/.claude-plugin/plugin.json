@@ -1,14 +1,51 @@
 {
   "name": "waypoints",
   "displayName": "Waypoints",
-  "version": "1.1.0",
-  "description": "A progress bar for /goal and any multi-step work, built from Claude's own task plan: tasks done out of the plan, elapsed time, an ETA at the goal's own pace, and every chat's goal in /waypoints. Claude is asked to plan by the mod itself. Fork of Nate Herk's goal-meter 1.0.0.",
+  "version": "2.0.0",
+  "description": "A route for /goal and any multi-step work, built from Claude's own task plan: the plan drawn as a line of nodes and legs above the prompt, an ETA at the goal's own pace, a pane that opens by itself with the whole task trail, and every chat's goal in /waypoints. Follows Agent-Pulse's palette and animation. Claude is asked to plan by the mod itself. Fork of Nate Herk's goal-meter 1.0.0.",
   "author": {
     "name": "afterever"
   },
   "homepage": "https://github.com/afterever/claude-mods/tree/master/waypoints",
   "repository": "https://github.com/afterever/claude-mods",
   "license": "MIT",
+  "userConfig": {
+    "palette": {
+      "type": "string",
+      "title": "Palette",
+      "description": "follow uses Agent-Pulse's palette (ember when it is not installed); ember is Claude's warm orange range, claude follows your theme, neon is bioluminescent sea colors, mono keeps color for what needs you",
+      "default": "follow",
+      "options": [
+        "follow",
+        "ember",
+        "claude",
+        "neon",
+        "mono"
+      ]
+    },
+    "animation": {
+      "type": "string",
+      "title": "Animation",
+      "description": "follow uses Agent-Pulse's level (subtle when it is not installed); off keeps everything still, subtle pulses the running task, full also breathes the node and sweeps the route when the plan finishes",
+      "default": "follow",
+      "options": [
+        "follow",
+        "off",
+        "subtle",
+        "full"
+      ]
+    },
+    "pane": {
+      "type": "string",
+      "title": "Pane",
+      "description": "auto opens the Waypoints pane when a plan starts (it never takes the keys from the prompt, and waits on a narrow window); off opens it only when you ask with /waypoints or g",
+      "default": "auto",
+      "options": [
+        "auto",
+        "off"
+      ]
+    }
+  },
   "keywords": [
     "goal",
     "progress",

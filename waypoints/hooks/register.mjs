@@ -4,25 +4,30 @@
 //   with the mod's tool, mcp__waypoints__tasks, then mark each task started and
 //   done. Claude Code stopped shipping a task-list tool after 2.1.229, so the mod
 //   brings its own. A plan made outside a /goal shows the same way.
-// - The band above the prompt: the bar (finished work out of the plan, weighted
-//   by size), elapsed time, the ETA at this goal's own pace, what's running and
-//   who runs it, the next tasks, and the goal check's latest "not met yet" reason.
+// - The band above the prompt: the route (the plan as nodes and legs, weighted by
+//   size), the ETA at this goal's own pace, what's running and who runs it, the next
+//   task, and the goal check's latest "not met yet" reason. The drawing is in draw.mjs.
 // - The footer: "◎ goal 69% · ~15m" in every view, terminal and Desktop.
-// - /waypoints: a pane with this chat's whole task list and every other chat's goal.
+// - /waypoints: a pane with this chat's whole task trail and every other chat's goal.
+//   It opens by itself when a plan starts (userConfig pane: auto|off).
 //   /waypoints hide|show (the band), /waypoints strict on|off, /waypoints auto on|off,
 //   /waypoints clear.
+// - The look (userConfig palette, animation) follows Agent-Pulse's by default.
 // - A standing line in the system prompt asks Claude to plan any multi-step work,
 //   not only a /goal; /waypoints auto off removes it.
 // - Each chat writes ~/.claude/mods-data/waypoints/<session>.json for /waypoints.
 //   The mod sends no model requests of its own.
 
-import { minutes, clock, clip, bar, basename } from './fmt.mjs'
+import { minutes, clip, bar, basename } from './fmt.mjs'
 import { makeMasker } from './privacy.mjs'
 import { newGoal, applyAction, progress, eta, parseCheck, isStopWord, normalizeTasks, TOOL_SPEC, instruction, standing, nudge, strictDeny } from './plan.mjs'
+import { rolesOf, resolveLook } from './palette.mjs'
+import { drawBand, drawPane, statsLine, label, FULL_MS } from './draw.mjs'
+import { createAutoPane } from './pane.mjs'
 
 const DIR = '/.claude/mods-data/waypoints'
 const PANE = 'waypoints'
-const RECENT_MS = 10 * 60000 // a finished goal stays on screen this long
+const RECENT_MS = 3 * 60000 // a finished goal stays on screen this long
 const OTHERS_MS = 12 * 3600000 // other chats' goals shown in /waypoints
 const REOPEN_MS = 5 * 60000 // a goal closed on its tasks reopens if Claude carries on this soon
 const NUDGE_AFTER = 4 // tool calls into a goal with no plan before the reminder
@@ -41,7 +46,11 @@ let hidden = false
 let nudged = false
 let callsWithoutPlan = 0
 let pendingGoal = null
-let paneOpen = false
+let paneUp = false // the pane is open (placed or waiting), from $.ui.panes() and ui.close
+const autoPane = createAutoPane() // when the pane opens and closes by itself
+let options = { palette: 'follow', animation: 'follow', pane: 'auto' }
+let look = { palette: 'ember', level: 'subtle' }
+let roles = rolesOf('ember')
 let others = []
 let transcriptPath = ''
 const agentNames = new Map()
@@ -55,10 +64,6 @@ function goalFile(id) {
 
 function isRecent(g) {
   return g && g.status !== 'running' && g.endedAt && now - g.endedAt < RECENT_MS
-}
-
-function visibleTasks(g) {
-  return g.tasks.filter((t) => !t.replaced && t.status !== 'dropped')
 }
 
 async function save($) {
@@ -118,6 +123,59 @@ async function readRecording($) {
   mask = rec.on ? makeMasker({ strict: rec.strict }) : (s) => s
 }
 
+// The palette and animation to draw with: this mod's own setting, or 'follow' Agent-Pulse's row
+async function refreshLook($) {
+  let rows = []
+  try {
+    rows = await $.config.list()
+  } catch {
+    // no rows: follow falls back to ember / subtle
+  }
+  const next = resolveLook(options, rows)
+  if (next.palette === look.palette && next.level === look.level) return
+  look = next
+  roles = rolesOf(next.palette)
+  $.ui.invalidate('ui.render')
+}
+
+// Whether the pane is open: the engine's own record, which survives a reload
+async function refreshPanes($) {
+  try {
+    paneUp = (await $.ui.panes()).some((p) => p.id === PANE)
+  } catch {
+    // keep the last answer
+  }
+}
+
+// The first plan of a goal opens the pane, unasked: it never takes the keys from the
+// prompt, waits undrawn on a narrow window, and stays shut once the person closed it
+async function maybeAutoOpen($) {
+  await refreshPanes($)
+  if (!autoPane.canOpen(options.pane, G, paneUp)) return
+  try {
+    await loadOthers($)
+    // no `focus`: the pane never asks for the prompt's keys
+    await $.ui.open({ id: PANE, title: 'Waypoints', closeOnEscape: true })
+    paneUp = true
+    autoPane.opened()
+  } catch (err) {
+    // nobody asked, so no toast; the log keeps the reason
+    $.ui.log(`waypoints: the pane did not open (${err && err.message ? err.message : err})`)
+  }
+}
+
+// A pane the mod opened leaves with the band; one the person opened stays
+async function maybeAutoClose($) {
+  if (!autoPane.shouldClose(paneUp, !!G && (G.status === 'running' || isRecent(G)))) return
+  autoPane.takenOver()
+  try {
+    await $.ui.close({ id: PANE })
+  } catch {
+    // already gone
+  }
+  paneUp = false
+}
+
 async function registerCommand($) {
   const spec = { name: 'waypoints', description: 'Waypoints: this chat\'s goal task list and every chat\'s goal (/waypoints hide|show|strict on|off|auto on|off|clear)', argumentHint: '[hide|show|strict on|off|auto on|off|clear]', immediate: true }
   try {
@@ -162,6 +220,11 @@ async function finishGoal($, how) {
   const took = minutes(G.endedAt - G.startedAt)
   $.ui.toast(`${G.kind === 'plan' ? 'Plan' : 'Goal'} done in ${took}: ${clip(mask(G.title), 60)}`)
   $.ui.invalidate('ui.render')
+  // the full band keeps FULL_MS, then it is one row: draw again just after
+  $.clock.after(FULL_MS + 200, async () => {
+    now = await $.clock.now()
+    $.ui.invalidate('ui.render')
+  })
 }
 
 async function serveTool($, e) {
@@ -175,10 +238,12 @@ async function serveTool($, e) {
     hidden = false
   }
   const by = e.by ? String(e.by) : e.agentId ? agentNames.get(e.agentId) || 'agent' : ''
+  const firstPlan = action === 'plan' && !G.planAt
   const r = applyAction(G, e, { now, by })
   if (r.ok) {
     await save($)
     $.ui.invalidate('ui.render')
+    if (firstPlan && G.planAt) await maybeAutoOpen($)
   }
   return { result: r.text }
 }
@@ -242,7 +307,11 @@ async function onCheck($, message, at, attempt = 0) {
   $.ui.invalidate('ui.render')
 }
 
-export function register(on) {
+export function register(on, opts) {
+  options = { palette: 'follow', animation: 'follow', pane: 'auto', ...(opts || {}) }
+  look = resolveLook(options, [])
+  roles = rolesOf(look.palette)
+
   on('session.start', async ($, e, next) => {
     now = await $.clock.now()
     home = (await $.env.get('USERPROFILE')) || (await $.env.get('HOME')) || ''
@@ -262,10 +331,16 @@ export function register(on) {
     }
     commandName = (await registerCommand($)) || commandName
     await restore($)
+    await refreshLook($)
+    await refreshPanes($)
     $.clock.every(15000, async () => {
       now = await $.clock.now()
-      if (paneOpen) await loadOthers($)
-      if (paneOpen || (G && (G.status === 'running' || isRecent(G)))) $.ui.invalidate('ui.render')
+      // the fallback for a /config change of Agent-Pulse's that never reached config.set
+      await refreshLook($)
+      await refreshPanes($)
+      if (paneUp) await loadOthers($)
+      await maybeAutoClose($)
+      if (paneUp || (G && (G.status === 'running' || isRecent(G)))) $.ui.invalidate('ui.render')
     })
     $.clock.every(10000, () => readRecording($).catch(() => {}))
     return next(e)
@@ -427,17 +502,29 @@ export function register(on) {
       await stopGoal($, 'stopped')
       return {}
     }
-    await loadOthers($)
     const surface = await $.session.surface()
     if (!surface) return { text: plainText() }
-    paneOpen = true
-    await $.ui.open({ id: PANE, title: 'Waypoints', focus: true, closeOnEscape: true })
+    await openPane($)
     return {}
   })
 
+  // The pane closing: a close by the person is remembered for this goal, so the next plan
+  // does not reopen it; the engine dropping it (unload) is not the person's doing
   on('ui.close', async ($, e, next) => {
-    if (e.id === PANE) paneOpen = false
+    if (e.id === PANE) {
+      paneUp = false
+      autoPane.closed(e.origin, G)
+    }
     return next(e)
+  })
+
+  // Another plugin's /config change that Waypoints follows: the new value is in the rows
+  // once the change has gone through
+  // (literals, so the engine can read the matcher off the source; FOLLOW_KEYS names the same two)
+  on('config.set', { key: ['agent-pulse.palette', 'agent-pulse.animation'] }, async ($, e, next) => {
+    const r = await next(e)
+    if (!r || !r.deny) await refreshLook($)
+    return r
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
@@ -445,8 +532,21 @@ export function register(on) {
     if (e.props && e.props.hasSurvey) return below
     if (!G || hidden || !(G.status === 'running' || isRecent(G))) return below
     const el = $.ui.resolve(e)
-    const width = Math.max(40, (e.props && e.props.bodyColumns) || 100)
-    const mine = drawBand($, el, width)
+    // a Client names its module as a literal here, where the engine reads it from
+    const pulse = el.Client ? (key, props, width) => el.Client({ key, module: './pulse.mjs', props, width, height: 1 }) : undefined
+    const view = {
+      g: G,
+      now,
+      mask,
+      roles,
+      level: look.level,
+      width: Math.max(40, (e.props && e.props.bodyColumns) || 100),
+      maxRows: e.props && e.props.maxRows,
+      nudged,
+      pulse,
+      open: () => openPane($),
+    }
+    const mine = drawBand(el, view)
     return el.Box({ flexDirection: 'column', children: below ? [mine, below] : [mine] })
   })
 
@@ -462,42 +562,19 @@ export function register(on) {
     if (e.requestId !== PANE) return next(e)
     const el = $.ui.resolve(e)
     const width = Math.max(50, (e.props && e.props.bodyColumns) || 100)
-    return drawPane(el, width)
+    return drawPane(el, { g: G, now, mask, roles, level: look.level, width, others, sessionId, commandName, settings })
   })
 }
 
+async function openPane($) {
+  now = await $.clock.now()
+  await loadOthers($)
+  autoPane.takenOver() // the person asked: it is theirs now
+  paneUp = true
+  await $.ui.open({ id: PANE, title: 'Waypoints', focus: true, closeOnEscape: true })
+}
+
 // ---------- words ----------
-
-function label(g) {
-  return g.kind === 'plan' ? 'Plan' : 'Goal'
-}
-
-function paused(g) {
-  return g.status === 'running' && !g.active && g.lastTurnEnd > 0
-}
-
-function headline(g, p) {
-  if (g.status === 'met') return `done ✓ in ${minutes((g.endedAt || now) - g.startedAt)}`
-  if (g.status !== 'running') return 'stopped'
-  if (!g.planAt) return 'planning…'
-  return `${p.doneN} of ${p.n} tasks · ${p.pct}%`
-}
-
-function statsLine(g, p) {
-  const parts = []
-  if (g.status === 'running') {
-    parts.push(`${minutes(now - g.startedAt)} elapsed`)
-    const t = eta(g, now)
-    if (t) parts.push(`about ${minutes(t.ms)} left (≈${clock(t.at)})`)
-    else if (g.planAt && p.doneN < 2) parts.push('ETA after 2 tasks finish')
-  }
-  if (g.firstPlan && p.n > g.firstPlan) parts.push(`plan grew ${g.firstPlan} → ${p.n}`)
-  if (runningAgents.size && g.status === 'running') parts.push(`${runningAgents.size} agent${runningAgents.size === 1 ? '' : 's'} running`)
-  if (g.interrupted && g.status === 'running') parts.push('interrupted')
-  else if (paused(g) && p.doneN < p.n) parts.push('paused, waiting on you')
-  if (g.checks) parts.push(`${g.checks} goal check${g.checks === 1 ? '' : 's'}`)
-  return parts.join(' · ')
-}
 
 function footerLabel() {
   if (!G) return ''
@@ -512,6 +589,8 @@ function footerLabel() {
   return ''
 }
 
+const ICON = { done: '✓', active: '▶', pending: '○', dropped: '×' }
+
 function taskTail(t) {
   if (t.status === 'done') return t.doneAt > t.startedAt ? minutes(t.doneAt - t.startedAt) : ''
   if (t.status === 'active') return (t.by ? t.by + ' · ' : '') + 'running ' + minutes(now - t.startedAt)
@@ -519,143 +598,11 @@ function taskTail(t) {
   return ''
 }
 
-const ICON = { done: '✓', active: '▶', pending: '○', dropped: '×' }
-
-function taskRow(el, t, width) {
-  const { Box, Text } = el
-  const tail = mask(taskTail(t))
-  const title = mask(t.title)
-  const icon = ICON[t.status] || '○'
-  const lead = t.status === 'done'
-    ? Text({ color: 'green', children: [`${icon} `] })
-    : t.status === 'active'
-      ? Text({ color: 'cyan', bold: true, children: [`${icon} `] })
-      : Text({ dimColor: true, children: [`${icon} `] })
-  const body = t.status === 'active'
-    ? Text({ bold: true, wrap: 'truncate-end', children: [`${t.size}  ${title}`] })
-    : Text({ dimColor: t.status !== 'pending', wrap: 'truncate-end', children: [`${t.size}  ${title}`] })
-  const kids = [lead, body]
-  if (tail) kids.push(Text({ dimColor: true, children: ['  ' + clip(tail, Math.max(10, Math.floor(width / 3)))] }))
-  return Box({ flexDirection: 'row', children: kids })
-}
-
-function barRow(el, g, p, width) {
-  const { Box, Text } = el
-  const w = Math.max(10, Math.min(width - 2, 120))
-  const n = Math.round(p.fraction * w)
-  const color = g.status === 'met' ? 'green' : 'cyan'
-  return Box({ flexDirection: 'row', children: [Text({ color, children: ['█'.repeat(n)] }), Text({ dimColor: true, children: ['░'.repeat(w - n)] })] })
-}
-
-// ---------- drawing ----------
-
-function drawBand($, el, width) {
-  const { Box, Text, Button } = el
-  const g = G
-  const p = progress(g)
-  const rows = []
-  const right = headline(g, p)
-  const open = Button({ key: 'goal-tasks', label: 'all tasks', hotkey: 'g', plain: true, onPress: () => openPane($) })
-  rows.push(
-    Box({
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      width: '100%',
-      columnGap: 2,
-      children: [
-        Text({ bold: true, wrap: 'truncate-end', children: [`◎ ${label(g)}: ${mask(g.title)}`] }),
-        Box({ flexDirection: 'row', columnGap: 2, flexShrink: 0, children: [Text({ bold: true, color: g.status === 'met' ? 'green' : 'cyan', children: [right] }), open] }),
-      ],
-    }),
-  )
-  if (g.planAt) rows.push(barRow(el, g, p, width))
-  const stats = statsLine(g, p)
-  if (stats) rows.push(Text({ dimColor: true, wrap: 'truncate-end', children: [stats] }))
-  if (!g.planAt && g.status === 'running') {
-    rows.push(Text({ dimColor: true, wrap: 'truncate-end', children: [nudged ? 'No plan yet: reminded Claude to plan with Waypoints' : 'Waiting for Claude\'s task plan…'] }))
-  } else if (g.status === 'running') {
-    // a window on the list: the last two done, everything running, the next ones
-    const tasks = visibleTasks(g)
-    const done = tasks.filter((t) => t.status === 'done').slice(-2)
-    const active = tasks.filter((t) => t.status === 'active')
-    const todo = tasks.filter((t) => t.status === 'pending').slice(0, active.length ? 2 : 3)
-    const shown = [...done, ...active, ...todo].sort((a, b) => a.id - b.id)
-    for (const t of shown) rows.push(taskRow(el, t, width))
-    const more = tasks.length - shown.length
-    if (more > 0) rows.push(Text({ dimColor: true, children: [`  +${more} more · g: all tasks`] }))
-  }
-  if (g.status === 'running' && g.check && g.check.met === false && g.check.reason) {
-    rows.push(Text({ color: 'yellow', wrap: 'truncate-end', children: [`Goal check: not met yet: ${mask(g.check.reason)}`] }))
-  }
-  return Box({ flexDirection: 'column', children: rows })
-}
-
-async function openPane($) {
-  now = await $.clock.now()
-  await loadOthers($)
-  paneOpen = true
-  await $.ui.open({ id: PANE, title: 'Waypoints', focus: true, closeOnEscape: true })
-}
-
-function otherRow(el, g, width) {
-  const { Box, Text } = el
-  const p = progress(g)
-  const name = clip(mask(`${g.label || basename(g.cwd)}: ${g.title}`), Math.max(16, Math.floor(width * 0.4)))
-  let tail
-  if (g.status === 'met') tail = 'done ✓'
-  else if (g.status !== 'running') tail = 'stopped'
-  else if (!g.planAt) tail = 'planning'
-  else {
-    const t = eta(g, now)
-    tail = `${p.pct}% · ${t ? '~' + minutes(t.ms) : p.doneN + '/' + p.n}`
-  }
-  const w = Math.max(8, Math.min(24, width - name.length - tail.length - 6))
-  return Box({
-    flexDirection: 'row',
-    columnGap: 2,
-    children: [
-      Text({ wrap: 'truncate-end', children: [name] }),
-      Text({ color: g.status === 'met' ? 'green' : 'cyan', children: [bar(p.fraction, w)] }),
-      Text({ dimColor: true, children: [tail] }),
-    ],
-  })
-}
-
-function drawPane(el, width) {
-  const { Box, Text } = el
-  const rows = []
-  if (G) {
-    const p = progress(G)
-    rows.push(Text({ bold: true, wrap: 'truncate-end', children: [`◎ ${label(G)}: ${mask(G.title)}`] }))
-    rows.push(Text({ color: G.status === 'met' ? 'green' : 'cyan', children: [headline(G, p)] }))
-    if (G.planAt) rows.push(barRow(el, G, p, width))
-    const stats = statsLine(G, p)
-    if (stats) rows.push(Text({ dimColor: true, children: [stats] }))
-    rows.push(Text({ children: [' '] }))
-    const tasks = G.tasks.filter((t) => !t.replaced)
-    if (!tasks.length) rows.push(Text({ dimColor: true, children: ['No task plan yet.'] }))
-    for (const t of tasks) rows.push(taskRow(el, t, width))
-    if (G.check && G.check.reason) {
-      rows.push(Text({ children: [' '] }))
-      rows.push(Text(G.check.met === false ? { color: 'yellow', children: [`Last goal check: not met yet: ${mask(G.check.reason)}`] } : { dimColor: true, children: [`Last goal check: ${mask(G.check.reason)}`] }))
-    }
-  } else {
-    rows.push(Text({ dimColor: true, children: ['No goal in this chat. Type /goal <what done looks like> to start one.'] }))
-  }
-  const rest = others.filter((g) => g.sessionId !== sessionId)
-  rows.push(Text({ children: [' '] }))
-  rows.push(Text({ bold: true, children: [`Other chats (${rest.length})`] }))
-  if (!rest.length) rows.push(Text({ dimColor: true, children: ['No other chat has a goal in the last 12 hours.'] }))
-  for (const g of rest.slice(0, 15)) rows.push(otherRow(el, g, width))
-  rows.push(Text({ children: [' '] }))
-  rows.push(Text({ dimColor: true, children: [`/${commandName} hide|show (the band) · /${commandName} strict ${settings.strict ? 'off' : 'on'} · /${commandName} auto ${settings.auto ? 'off' : 'on'} · /${commandName} clear`] }))
-  return Box({ flexDirection: 'column', children: rows })
-}
-
+// /waypoints where no surface can draw a pane (a -p run)
 function plainText() {
   if (!G) return 'No goal in this chat.'
   const p = progress(G)
-  const lines = [`${label(G)}: ${mask(G.title)}`, `${headline(G, p)}  ${bar(p.fraction, 30)}`, statsLine(G, p)]
+  const lines = [`${label(G)}: ${mask(G.title)}`, `${statsLine(G, p, now)}  ${bar(p.fraction, 30)}`]
   for (const t of G.tasks.filter((x) => !x.replaced)) lines.push(`${ICON[t.status] || '○'} ${t.size}  ${mask(t.title)}  ${mask(taskTail(t))}`)
   return lines.filter(Boolean).join('\n')
 }
