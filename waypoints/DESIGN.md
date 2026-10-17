@@ -75,7 +75,7 @@ When the goal finishes (`finishGoal`):
   palette's `sparkle` colours along the route from start to end and leaves a `✦` on the last node.
 - **`subtle` / `off`:** the route draws all solid in the `done` colour with `✦` on the last node, no motion.
 - Either way the full band stays **8 s** after the finish, then collapses to one row for the rest of the
-  existing 10-minute `RECENT_MS` **(builder's call: the 8 s)**:
+  `RECENT_MS`, which 2.0 shortens from 10 minutes to 3 (the person's call) **(builder's call: the 8 s)**:
 
 ```
 ✓ Plan: Add band to Settings type…                 6 tasks · done in 14m   all tasks g
@@ -169,10 +169,10 @@ Other chats (2)
 
 - **Setting** `pane`: `auto` (default) or `off` (`userConfig`, see Settings).
 - **When:** when a `plan` action succeeds and this goal had no plan before (its `planAt` was 0 before
-  `applyAction` ran): `$.ui.open({ id: 'waypoints', title: 'Waypoints', focus: false, closeOnEscape: true })`.
+  `applyAction` ran): `$.ui.open({ id: 'waypoints', title: 'Waypoints', closeOnEscape: true })`.
   Only then: never on `add`, `start`, `done`, and not on `/goal` before there is a plan.
-- **`focus: false`.** An unasked pane must never take the keys from the prompt (the engine would refuse focus
-  while the person types anyway).
+- **No `focus`.** An unasked pane must never take the keys from the prompt, so `focus` is left out. (The first
+  draft of this spec said `focus: false`; the host refuses that: `PaneOpenArgs.focus` is `true` or absent.)
 - **Not twice:** skip when `$.ui.panes()` already lists `waypoints`.
 - **Respect a close.** When `ui.close` for `waypoints` arrives with `e.origin.kind === 'person'`, remember the
   goal's `startedAt` (in memory) and do not auto-open again for that goal. A new goal or plan may auto-open again.
@@ -258,6 +258,7 @@ Stays plain JavaScript (`.mjs`), as 1.1 is; no TypeScript conversion. A `Client`
 | `hooks/route.mjs` | Pure: `routeCells(tasks, width)` → `{ cells, dense }`; `miniRoute(g, maxTasks)` |
 | `hooks/svg.mjs` | Pure: the Desktop route SVG source from the cells, palette and level |
 | `hooks/pulse.mjs` | The terminal `Client`: `spin` (spinner or node pulse) and `sweep` (finish) |
+| `hooks/pane.mjs` | Pure: when the pane opens and closes by itself (`createAutoPane`). The test engine cannot raise a `ui.close` with an origin, so the person/plugin/unload rules are tested here |
 | `hooks/palette.mjs` | Palettes and helpers copied from Agent-Pulse, the role map, `resolveLook(options, configRows)` |
 | `hooks/plan.mjs`, `fmt.mjs`, `privacy.mjs` | Unchanged (a helper may be added to `fmt.mjs` for durations) |
 
@@ -286,7 +287,7 @@ Keep the existing 12. Add, with `claude plugin test waypoints`:
 - **band rows:** header right side with and without ETA; now row with `by` and with nothing running (last done);
   next row; notable row priority; `+k` when the plan grew; rows give way under a small `maxRows`; finished →
   route for 8 s then the single summary row; `hasSurvey` still returns `below`.
-- **auto-open:** the first `plan` opens the pane with `focus: false`; a second `plan` or `add` does not; `pane: off`
+- **auto-open:** the first `plan` opens the pane without `focus`; a second `plan` or `add` does not; `pane: off`
   never opens; a person's close (`origin.kind: 'person'`) stops it for that goal, a new goal opens again; an
   `unload` close does not count.
 - **masking:** with Recording Mode on, titles in the now/next rows, the pane trail and the SVG `alt` are masked.
@@ -316,7 +317,7 @@ looks; the builder lists what to look at:
 5. With Agent-Pulse installed: change its palette in `/config`; Waypoints recolours (within 15 s at worst).
    Set Waypoints' own palette explicitly; it stops following. Disable Agent-Pulse: `follow` falls back to `ember`.
 6. Animation `off` / `subtle` / `full`: nothing moves / pulse only / pulse + breathing + finish sweep.
-7. Finish a plan: sweep (full), 8 s, then the single summary row; the auto-opened pane closes 10 minutes later.
+7. Finish a plan: sweep (full), 8 s, then the single summary row; the auto-opened pane closes 3 minutes after the finish.
 8. Desktop app: the SVG route, its pulse, no restart of the animation every 15 s, the finish sweep once.
 9. Recording Mode on: titles masked everywhere, the SVG `alt` included.
 10. A plan of 20+ tasks in an 80-column window: dense route, no wrap.

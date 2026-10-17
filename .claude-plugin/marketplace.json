@@ -38,7 +38,7 @@
     {
       "name": "waypoints",
       "source": "./waypoints",
-      "description": "A progress bar for /goal and any multi-step work, built from Claude's own task plan: tasks done out of the plan, elapsed time and an ETA, with every chat's goal in /waypoints. The mod itself asks Claude to plan, so no line in the global CLAUDE.md. Fork of Nate Herk's goal-meter."
+      "description": "A route for /goal and any multi-step work, built from Claude's own task plan: the plan as nodes and legs above the prompt, an ETA, a pane that opens by itself with the whole task trail, and every chat's goal in /waypoints. Follows Agent-Pulse's palette and animation. The mod itself asks Claude to plan, so no line in the global CLAUDE.md. Fork of Nate Herk's goal-meter."
     }
   ]
 }

@@ -10,7 +10,7 @@ Personal [Claude Code mods](https://code.claude.com/docs): plugins of function h
 | [`work-report`](./work-report) | `/report` shows what Claude has done for you: tasks finished, an estimate of the hours that saved you and what that time is worth, in a pane with Today, Week, Month and Year tabs. Counts only, kept in the mod's own store; no model calls. How to use it: [work-report/README.md](./work-report/README.md). |
 | [`agent-pulse`](./agent-pulse) | A box above the prompt that says what Claude is doing right now, in plain English, alive with color and motion: a spinner per phase, a border that flashes when a call ends and breathes while Claude waits on you, a timeline of the turn, and a jellyfish on the desktop. Fork of Tzafrir Rehan's whats-agent-doing; what changed: [agent-pulse/README.md](./agent-pulse/README.md). Why: [agent-pulse/DESIGN.md](./agent-pulse/DESIGN.md). |
 | [`arsenal`](./arsenal) | A menu for the tool mods: a `◆ Arsenal ▾` button right above the prompt box opens a menu pane, docked on the right, with a Prompt Upgrade on/off switch and one-press shortcuts to `/better` and `/report`. A remote control, so every row runs a command the tool already has; it shows the model and effort but never changes them. Needs `prompt-upgrade` and/or `work-report` to show rows. Idea from [tristenobrien.ai](https://tristenobrien.ai/); how to use it: [arsenal/README.md](./arsenal/README.md). Why: [arsenal/DESIGN.md](./arsenal/DESIGN.md). |
-| [`waypoints`](./waypoints) | A progress bar for `/goal` and any multi-step work, built from Claude's own task plan: tasks done out of the plan, elapsed time and an ETA at the goal's own pace, with every chat's goal in `/waypoints`. The mod itself asks Claude to plan, so nothing goes in the global `CLAUDE.md`. Fork of Nate Herk's goal-meter; what changed: [waypoints/README.md](./waypoints/README.md). |
+| [`waypoints`](./waypoints) | A route for `/goal` and any multi-step work, built from Claude's own task plan: the plan drawn as nodes and legs above the prompt, an ETA at the goal's own pace, a pane that opens by itself with the whole task trail, and every chat's goal in `/waypoints`. Follows Agent-Pulse's palette and animation. The mod itself asks Claude to plan, so nothing goes in the global `CLAUDE.md`. Fork of Nate Herk's goal-meter; what changed: [waypoints/README.md](./waypoints/README.md). |
 
 ## Install (each computer)
 
@@ -130,12 +130,17 @@ arsenal/
   hooks/render.test.ts            the launcher and pane drawn on terminal and desktop, presses
   types/index.d.ts                the mod's state contract
 waypoints/
-  README.md                       when Claude plans, commands, what changed from goal-meter
+  README.md                       the route, when Claude plans, settings, commands, what changed
+  DESIGN.md                       the 2.0 spec: look, pane, auto-open, colour, tests
   LICENSE                         MIT, upstream's notice and ours
-  .claude-plugin/plugin.json      name, version
+  .claude-plugin/plugin.json      name, version, the palette / animation / pane settings
   hooks/hooks.json                points at register.mjs
-  hooks/register.mjs              the mod: task tool, /waypoints, band, footer, pane, standing plan line
+  hooks/register.mjs              the hooks: task tool, /waypoints, auto-open, settings, footer
+  hooks/draw.mjs                  the band and the pane, terminal and Desktop branches
+  hooks/route.mjs                 the route as cells (legs by size, dense mode, mini route)
+  hooks/svg.mjs, pulse.mjs        the Desktop route SVG; the terminal's spinner, node pulse, finish sweep
+  hooks/palette.mjs, pane.mjs     Agent-Pulse's palettes and the roles; when the pane opens and closes
   hooks/plan.mjs, plan.test.ts    the plan, the bar, the ETA, the words Claude reads
-  hooks/fmt.mjs, privacy.mjs      time and bar formatting; masking while Recording Mode is on
-  hooks/flow.test.ts              the command, the standing line and its switches, a plan outside /goal
+  hooks/fmt.mjs, privacy.mjs      time formatting; masking while Recording Mode is on
+  hooks/*.test.ts                 flow, route, palette, draw (band, pane, SVG), auto-open, pulse
 ```
