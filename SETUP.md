@@ -18,7 +18,7 @@ Paste this into Claude Code on the new computer:
 | Mod | Source | Tested | What it is |
 | --- | --- | --- | --- |
 | `ctx` | `afterever/claude-mods` (this repo) | 0.6.2 | Context window pane and band, compacting on your terms |
-| `subagent-progress` | `afterever/claude-mods` (this repo) | 2.0.1 | Progress bar and live panel for subagent work |
+| `subagent-progress` | `afterever/claude-mods` (this repo) | 2.1.0 | Progress bar and live panel for subagent work |
 | `prompt-upgrade` | `afterever/claude-mods` (this repo) | 0.1.0 | `/better` turns a rough prompt into a great one before it is sent |
 | `work-report` | `afterever/claude-mods` (this repo) | 0.3.0 | `/report` shows what Claude has done for you: tasks, hours saved, what that is worth |
 | `waypoints` | `afterever/claude-mods` (this repo) | 2.0.2 | Task plan shown as a route above the prompt for a `/goal` or any multi-step work, with a pane that opens by itself; replaces `goal-meter` |
@@ -60,8 +60,9 @@ and the commands: [ctx/README.md](./ctx/README.md#use-it). Why each feature exis
 ## subagent-progress
 
 My fork of johnnyvizz's `savvy-progress`, renamed in 2.0.0: a progress bar above the prompt and a
-live agents panel, each subagent a crab whose costume follows its model and effort. Nothing to
-configure. What it does and what changed: [subagent-progress/README.md](./subagent-progress/README.md).
+live agents panel, each subagent a crab whose costume follows its model and effort. Nothing you
+have to configure: its terminal look follows `agent-pulse`'s palette and animation level by default
+(set your own in `/config`). What it does and what changed: [subagent-progress/README.md](./subagent-progress/README.md).
 
 **Do not install `savvy-progress` next to it.** Both register `/agents-info`.
 

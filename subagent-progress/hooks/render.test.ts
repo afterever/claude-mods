@@ -146,12 +146,102 @@ test('compact leaves the bar out on a narrow pane', async ($, on) => {
   expect(await ui.find({ text: 'Map the hooks' })).toBeDefined()
 })
 
-test('the band bar fills in eighths of a cell', async ($, on) => {
+const pulses = async (ui: { findAll: (q: { type: string }) => Promise<Node[]> }) =>
+  (await ui.findAll({ type: 'Client' }))
+    .map(n => n.props as { module?: string; props?: Record<string, unknown> })
+    .filter(p => p.module?.endsWith('pulse.tsx'))
+    .map(p => p.props ?? {})
+
+const mountBand = ($: Engine, cols = 100) =>
+  $.ui.mount({ plugin: 'subagent-progress', surface: 'terminal', component: 'AbovePrompt', props: bandProps(cols) })
+
+test('the band bar fills in eighths of a cell, its head a pulsing cell of its own', async ($, on) => {
   await world($, on, seed())
-  const ui = await $.ui.mount({ plugin: 'subagent-progress', surface: 'terminal', component: 'AbovePrompt', props: bandProps(100) })
-  // 1/3 of 40 cells is 106.7 eighths: 13 full cells, a 3/8 cell, 26 empty
-  expect(await ui.find({ text: '█'.repeat(13) + '▍' + '░'.repeat(26) })).toBeDefined()
+  const ui = await mountBand($)
+  // 1/3 of 40 cells is 106.7 eighths: 13 full cells, a 3/8 cell, 26 empty. While agents run the 3/8 head is a Client.
+  expect(await ui.find({ text: '█'.repeat(13) })).toBeDefined()
+  expect(await ui.find({ text: '░'.repeat(26) })).toBeDefined()
+  const head = (await pulses(ui)).find(p => Array.isArray(p.frames) && p.frames[0] === '▍')
+  expect(head).toMatchObject({ kind: 'spin', frames: ['▍'] })
+  // the ember palette shades the head core to glow
+  expect((head?.colors as string[]).length).toBe(12)
 })
+
+test('with animation off the band bar is one still text and nothing runs', { options: { animation: 'off' } }, async ($, on) => {
+  await world($, on, seed())
+  const ui = await mountBand($)
+  expect(await ui.find({ text: '█'.repeat(13) + '▍' + '░'.repeat(26) })).toBeDefined()
+  expect(await ui.findAll({ type: 'Client' })).toEqual([])
+})
+
+test('the band shows a glyph per agent in its costume color, then ✓, ✗ and a dim ○', async ($, on) => {
+  const list = [
+    agent({ id: 'a', agentId: 'a', type: 'Explore', description: 'Scout' }),
+    agent({ id: 'b', agentId: 'b', type: 'general-purpose', description: 'Wire', model: 'claude-sonnet-5-5', effort: 'high' }),
+    agent({ id: 'c', agentId: 'c', description: 'Checked', status: 'done', endedAt: 50_000 }),
+    agent({ id: 'd', agentId: 'd', description: 'Broke', status: 'failed', endedAt: 60_000 }),
+  ]
+  await world($, on, seed({}, flow, list))
+  const ui = await mountBand($)
+  // the running ones first, newest first: the engineer, then the pirate
+  const spins = (await pulses(ui)).filter(p => Array.isArray(p.frames) && (p.frames as string[]).length > 1)
+  expect(spins.map(p => p.colors)).toEqual([['#BA7517'], ['#888780']])
+  // `find` matches a node by its joined text, so a glyph is picked out of the Texts by exact text
+  const glyph = async (ch: string) => (await ui.findAll({ type: 'Text' })).find(t => t.text === ch)?.props as { color?: string; dimColor?: boolean } | undefined
+  expect((await glyph('✓'))?.color).toBe('success')
+  expect((await glyph('✗'))?.color).toBe('error')
+  // the planned task is a dim open circle in its costume's color (Opus at medium: the detective)
+  expect(await glyph('○')).toMatchObject({ color: '#D85A30', dimColor: true })
+})
+
+test('past eight agents the glyph row folds into +n and the row still fits 80 columns', async ($, on) => {
+  const many = Array.from({ length: 10 }, (_, i) => agent({ id: `r${i}`, agentId: `r${i}`, description: `Agent ${i}` }))
+  const busy: Flow = { title: 'savvy-flow', total: 0, done: 0, running: 10, phase: 'delegate', isFinished: false, tasks: [] }
+  await world($, on, seed({}, busy, many))
+  const ui = await mountBand($, 80)
+  expect((await pulses(ui)).filter(p => p.kind === 'spin')).toHaveLength(8)
+  expect(await ui.find({ text: '+2' })).toBeDefined()
+  const all = await texts(ui)
+  const barText = all.find(t => /^[█▏▎▍▌▋▊▉░]+$/.test(t))!
+  // title slot 12, the bar, label 15, percent 2, eight glyphs and `+2` 10, `a: ×10` 6, ✕ 1, six gaps of 2
+  expect(12 + barText.length + 15 + 2 + 10 + 6 + 1 + 12).toBeLessThanOrEqual(80)
+})
+
+// The sparkle plays at `full`, once, for a finish the band saw happen.
+const sweeps = async (ui: { findAll: (q: { type: string }) => Promise<Node[]> }) => (await pulses(ui)).filter(p => p.kind === 'sweep')
+const finishedFlow: Flow = { ...flow, done: 3, running: 0, phase: 'close', isFinished: true }
+// The orchestrator closes the flow through the mod's own tool, as it does in a session.
+const finish = ($: Engine, id: string) => $.tool.call({ tool: 'mcp__subagent-progress__progress', finished: true, tool_use_id: id })
+
+test('the finish sparkle plays once for a finish the band saw', { options: { animation: 'full' } }, async ($, on) => {
+  await world($, on, seed())
+  const ui = await mountBand($)
+  expect(await sweeps(ui)).toEqual([])
+  await finish($, 'close-1')
+  const [sweep] = await sweeps(ui)
+  expect(sweep).toMatchObject({ kind: 'sweep' })
+  expect((sweep?.chars as string[]).join('')).toBe('█'.repeat(40))
+  // the same finished flow drawn again is the same sweep, not a second one
+  await finish($, 'close-2')
+  expect(await sweeps(ui)).toHaveLength(1)
+})
+
+test('a flow already finished on first sight does not sparkle', { options: { animation: 'full' } }, async ($, on) => {
+  await world($, on, seed({}, finishedFlow))
+  const ui = await mountBand($)
+  expect(await ui.find({ text: 'Done' })).toBeDefined()
+  expect(await sweeps(ui)).toEqual([])
+})
+
+for (const animation of ['subtle', 'off']) {
+  test(`${animation} never sparkles`, { options: { animation } }, async ($, on) => {
+    await world($, on, seed())
+    const ui = await mountBand($)
+    await finish($, 'close-1')
+    expect(await ui.find({ text: 'Done' })).toBeDefined()
+    expect(await sweeps(ui)).toEqual([])
+  })
+}
 
 test('a long band label takes its cells from the bar, not the row', async ($, on) => {
   // an orchestrated flow with no report yet: "Tasks 1 running" and "0%", on an 80-column prompt
@@ -254,11 +344,105 @@ test('planned tasks are dressed by model, effort or savvy tier', async ($, on) =
   expect(row('3. Unspecified')).toContain('c-other')
 })
 
-test('the terminal row names the agent type and takes the costume color', async ($, on) => {
+type Node = { props?: unknown }
+const crabs = async (ui: { findAll: (q: { type: string }) => Promise<Node[]> }) =>
+  (await ui.findAll({ type: 'Client' }))
+    .map(n => n.props as { module?: string; props?: Record<string, unknown> })
+    .filter(p => p.module?.endsWith('crab.tsx'))
+    .map(p => p.props ?? {})
+
+test('the terminal card draws a crab in the costume color and names the agent type', async ($, on) => {
   const list = [agent({ id: 'a', agentId: 'a', type: 'general-purpose', description: 'Engineer', model: 'claude-sonnet-5-5', effort: 'high' })]
   await world($, on, seed({}, flow, list))
   const ui = await $.ui.mount({ plugin: 'subagent-progress', surface: 'terminal', component: 'Pane', requestId: 'subagents', props: paneProps(60) })
   expect((await texts(ui)).some(t => t.includes('general-purpose · Sonnet 5.5 · high'))).toBe(true)
+  const running = (await crabs(ui)).find(c => c.costume === 'engineer')
+  expect(running).toMatchObject({ costume: 'engineer', accent: '#BA7517', running: true, dim: false })
+})
+
+test('finished and planned crabs stand still and dim, only the running one walks', async ($, on) => {
+  const list = [
+    agent({ id: 'a', agentId: 'a', description: 'Walker' }),
+    agent({ id: 'b', agentId: 'b', description: 'Finished', status: 'done', endedAt: 50_000 }),
+    agent({ id: 'c', agentId: 'c', description: 'Broken', status: 'failed', endedAt: 60_000 }),
+  ]
+  await world($, on, seed({}, flow, list))
+  const ui = await $.ui.mount({ plugin: 'subagent-progress', surface: 'terminal', component: 'Pane', requestId: 'subagents', props: paneProps(60) })
+  const all = await crabs(ui)
+  expect(all.filter(c => c.running === true)).toHaveLength(1)
+  expect(all.filter(c => c.running === false && c.dim === true)).toHaveLength(3) // done, failed, the planned task
+  // the planned task's crab replaces the ▢
+  expect((await texts(ui)).some(t => t.includes('▢'))).toBe(false)
+  expect(await ui.find({ text: '1. Write docs' })).toBeDefined()
+})
+
+test('only the newest eight running crabs walk', async ($, on) => {
+  const many = Array.from({ length: 10 }, (_, i) => agent({ id: `r${i}`, agentId: `r${i}`, description: `Agent ${i}` }))
+  await world($, on, seed({}, flow, many))
+  const ui = await $.ui.mount({ plugin: 'subagent-progress', surface: 'terminal', component: 'Pane', requestId: 'subagents', props: paneProps(60) })
+  expect((await crabs(ui)).filter(c => c.running === true)).toHaveLength(8)
+  expect((await crabs(ui)).filter(c => c.running === false)).toHaveLength(3) // two over the cap and the planned task
+})
+
+test('the animation level reaches every crab', { options: { animation: 'off' } }, async ($, on) => {
+  await world($, on, seed())
+  const ui = await $.ui.mount({ plugin: 'subagent-progress', surface: 'terminal', component: 'Pane', requestId: 'subagents', props: paneProps(60) })
+  const all = await crabs(ui)
+  expect(all.length).toBeGreaterThan(0)
+  expect(all.every(c => c.level === 'off')).toBe(true)
+})
+
+test('compact spins a running agent and leaves a finished one a check', async ($, on) => {
+  const done = agent({ id: 'b', agentId: 'b', description: 'Check the band', status: 'done', endedAt: 50_000 })
+  await world($, on, seed({ isCompact: true }, flow, [agent(), done]))
+  const ui = await $.ui.mount({ plugin: 'subagent-progress', surface: 'terminal', component: 'Pane', requestId: 'subagents', props: paneProps(60) })
+  const spins = (await pulses(ui)).filter(p => p.kind === 'spin')
+  expect(spins).toHaveLength(1)
+  expect(spins[0]).toMatchObject({ colors: ['#888780'] }) // the Explore pirate
+  expect(await crabs(ui)).toEqual([]) // one cell-row is too small for a crab
+  expect((await ui.findAll({ type: 'Text' })).some(t => t.text === '✓')).toBe(true)
+})
+
+test('the context bar of a worker with no steps turns amber, then red; a steps bar never does', async ($, on) => {
+  const noSteps = { stepTotal: undefined, stepDone: undefined, stepNote: undefined }
+  const list = [
+    agent({ id: 'a', agentId: 'a', description: 'Cool', contextTokens: 120_000, ...noSteps }),
+    agent({ id: 'b', agentId: 'b', description: 'Warm', contextTokens: 750_000, ...noSteps }),
+    agent({ id: 'c', agentId: 'c', description: 'Hot', contextTokens: 950_000, ...noSteps }),
+    agent({ id: 'd', agentId: 'd', description: 'Steps', contextTokens: 950_000 }),
+  ]
+  await world($, on, seed({}, flow, list))
+  const ui = await $.ui.mount({ plugin: 'subagent-progress', surface: 'terminal', component: 'Pane', requestId: 'subagents', props: paneProps(100) })
+  const bars = (await ui.findAll({ type: 'Text' })).filter(t => /^[█▏▎▍▌▋▊▉░]+$/.test(t.text))
+  const colors = bars.map(b => (b.props as { color?: string; dimColor?: boolean }).color)
+  expect(colors).toContain('#f6d36b') // amber, ember's first heat color, at 75%
+  expect(colors).toContain('#ff5c5c') // red at 95%
+  expect(bars.some(b => (b.props as { dimColor?: boolean }).dimColor === true)).toBe(true) // 12% stays dim
+  // the steps bar at 95% context keeps its costume color: exactly one bar per heat color
+  expect(colors.filter(c => c === '#ff5c5c')).toHaveLength(1)
+})
+
+test('the desktop draws no Client: its crabs are the SVGs', async ($, on) => {
+  await world($, on, seed())
+  for (const component of ['AbovePrompt', 'Pane'] as const) {
+    const ui = await $.ui.mount({
+      plugin: 'subagent-progress',
+      surface: 'desktop',
+      component,
+      ...(component === 'Pane' ? { requestId: 'subagents' } : {}),
+      props: component === 'Pane' ? paneProps(60) : bandProps(100),
+    })
+    expect(await ui.find({ type: 'Svg' })).toBeDefined()
+    expect(await ui.findAll({ type: 'Client' })).toEqual([])
+    await ui.unmount()
+  }
+})
+
+test('a pane under 24 columns keeps the glyph and draws no crab', async ($, on) => {
+  const list = [agent({ id: 'a', agentId: 'a', type: 'general-purpose', description: 'Engineer', model: 'claude-sonnet-5-5', effort: 'high' })]
+  await world($, on, seed({}, flow, list))
+  const ui = await $.ui.mount({ plugin: 'subagent-progress', surface: 'terminal', component: 'Pane', requestId: 'subagents', props: paneProps(20) })
+  expect(await crabs(ui)).toEqual([])
   const mark = (await ui.findAll({ type: 'Text' })).find(t => t.text === '▣')
   expect((mark?.props as { color?: string } | undefined)?.color).toBe('#BA7517')
 })

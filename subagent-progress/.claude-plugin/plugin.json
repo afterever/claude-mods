@@ -1,6 +1,6 @@
 {
   "name": "subagent-progress",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "description": "Progress bar above the prompt plus an agents panel (/agents-info) for any subagent work: running, finished and planned subagents with model, task progress, context, cost and time, each drawn as a crab whose costume follows its model and effort. Fork of johnnyvizz/claude-kit savvy-progress 1.2.0.",
   "author": {
     "name": "afterever"
@@ -16,6 +16,31 @@
         "auto",
         "en",
         "ru"
+      ]
+    },
+    "palette": {
+      "type": "string",
+      "title": "Palette",
+      "description": "follow uses Agent-Pulse's palette (ember when it is not installed); ember is Claude's warm orange range, claude follows your theme, neon is bioluminescent sea colors, mono keeps color for what needs you. Colors the terminal band's bar; the crabs keep their costume colors",
+      "default": "follow",
+      "options": [
+        "follow",
+        "ember",
+        "claude",
+        "neon",
+        "mono"
+      ]
+    },
+    "animation": {
+      "type": "string",
+      "title": "Animation",
+      "description": "follow uses Agent-Pulse's level (subtle when it is not installed); off keeps the terminal still, subtle walks the crabs and pulses the bar, full also moves their props and sparkles when the work is done. The desktop drawings are unchanged",
+      "default": "follow",
+      "options": [
+        "follow",
+        "off",
+        "subtle",
+        "full"
       ]
     }
   },
