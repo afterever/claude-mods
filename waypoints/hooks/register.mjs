@@ -544,6 +544,7 @@ export function register(on, opts) {
       maxRows: e.props && e.props.maxRows,
       nudged,
       pulse,
+      svg: e.surface !== 'terminal',
       open: () => openPane($),
     }
     const mine = drawBand(el, view)

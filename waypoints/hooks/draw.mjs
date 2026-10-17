@@ -10,9 +10,11 @@
 //   pulse,    (key, props, width) → a terminal Client (built in register.mjs, which the
 //             engine reads the module path from); absent, nothing animates
 //   open,     () → open the pane
+//   svg,      the surface paints Svg (Desktop, mobile): the engine's `e.surface` says so, as
+//             the terminal's element table lists `Svg` too and cannot tell them apart
 // }
-// A surface whose element table has `Svg` (Desktop, mobile) gets the route as one Svg and a
-// still spinner; the terminal gets Text runs and the Client animations.
+// A surface that paints Svg gets the route as one Svg and a still spinner; the terminal
+// gets Text runs and the Client animations.
 
 import { minutes, clock, clip, basename } from './fmt.mjs'
 import { progress, eta, live, weight } from './plan.mjs'
@@ -60,9 +62,10 @@ function routeRow(el, v, cells, tail, tasks) {
   const { Box, Text } = el
   const finishing = v.g.status === 'met'
   // Desktop draws the route as an Svg, which moves by CSS; only the terminal takes a Client
-  const animate = v.pulse && !el.Svg
+  const svg = v.svg && el.Svg
+  const animate = v.pulse && !svg
   const kids = []
-  if (el.Svg) {
+  if (svg) {
     const p = progress(v.g)
     const running = tasks.map((t, i) => (t.status === 'active' ? i + 1 : 0)).filter(Boolean)
     const width = svgWidth(v.width)
@@ -119,7 +122,7 @@ function headerRow(el, v, mark, right) {
 }
 
 function spinner(el, v, key) {
-  if (v.level === 'off' || el.Svg || !v.pulse) return el.Text({ color: v.roles.activeStill, children: ['◉'] })
+  if (v.level === 'off' || v.svg || !v.pulse) return el.Text({ color: v.roles.activeStill, children: ['◉'] })
   return v.pulse(key, { kind: 'spin', frames: SPIN.frames, ms: SPIN.ms, colors: [...v.roles.active] }, 1)
 }
 

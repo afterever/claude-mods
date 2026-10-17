@@ -60,6 +60,10 @@ The standing line is the one thing the global `CLAUDE.md` bullet used to do. If 
 
 In the band, the **all tasks** button (or `g`) opens the pane.
 
+## What changed in 2.0.1
+
+Fixed: on the terminal the route row was missing and the running node did not pulse, because the band took the terminal for Desktop. It now goes by the surface the engine names.
+
 ## What changed in 2.0
 
 Only how it looks and when the pane opens; what Claude is told and the tool it plans with are the same as in 1.1, and the data files are unchanged, so chats still on 1.1 appear in your pane.
