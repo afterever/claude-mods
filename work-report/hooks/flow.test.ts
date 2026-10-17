@@ -617,6 +617,50 @@ test('the band leaves the others alone while a survey holds it', async ($, on) =
   expect(await band.find({ key: 'work-report-open' })).toBeUndefined()
 })
 
+test('/report settings band off hides the chip and on brings it back, and the choice is kept', async ($, on) => {
+  const w = world(on, { stored: SAMPLE })
+  await start($)
+  const band = () =>
+    $.ui.mount({
+      plugin: PLUGIN,
+      surface: 'terminal',
+      component: 'AbovePrompt',
+      props: { hasSurvey: false, isWorking: false, maxRows: 6, bodyColumns: 100, scroll: { offset: 0, bodyRows: 6 }, view: {} },
+    }) as Promise<Drawing>
+  expect(await (await band()).find({ key: 'work-report-open' })).toBeDefined()
+
+  const off: any = await $.command.run(cmd('settings band off'))
+  expect(off.text).toContain('hidden')
+  expect((w.stored.settings as any).band).toBe(false)
+  expect(await (await band()).find({ key: 'work-report-open' })).toBeUndefined()
+  // the pane is still there for /report
+  const opened: any = await $.command.run(cmd(''))
+  expect(opened.text).toContain('Opening')
+  expect((await $.command.run(cmd('settings')) as any).text).toContain('Chip above the prompt: off')
+
+  const back: any = await $.command.run(cmd('settings band on'))
+  expect(back.text).toContain('back')
+  expect((w.stored.settings as any).band).toBe(true)
+  expect(await (await band()).find({ key: 'work-report-open' })).toBeDefined()
+})
+
+test('a chip hidden in an earlier session stays hidden, and a word it does not know changes nothing', async ($, on) => {
+  const w = world(on, { stored: { settings: { rate: 50, minutes: {}, band: false } } })
+  await start($)
+  const band: Drawing = await $.ui.mount({
+    plugin: PLUGIN,
+    surface: 'terminal',
+    component: 'AbovePrompt',
+    props: { hasSurvey: false, isWorking: false, maxRows: 6, bodyColumns: 100, scroll: { offset: 0, bodyRows: 6 }, view: {} },
+  })
+  expect(await band.find({ key: 'work-report-open' })).toBeUndefined()
+  for (const args of ['settings band', 'settings band maybe']) {
+    const r: any = await $.command.run(cmd(args))
+    expect(r.text).toContain('on or off')
+  }
+  expect((w.stored.settings as any).band).toBe(false)
+})
+
 test('the saved days are read back when a session starts', async ($, on) => {
   const w = world(on, { stored: SAMPLE })
   await start($)

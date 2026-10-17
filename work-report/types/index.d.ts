@@ -14,6 +14,8 @@ export type Settings = {
   rate: number
   /** Minutes one finished task of each kind saved. */
   minutes: Record<Kind, number>
+  /** Whether the "Work report" chip is drawn above the prompt. */
+  band: boolean
 }
 
 export type Tab = 'today' | 'week' | 'month' | 'year'

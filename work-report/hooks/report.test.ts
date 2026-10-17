@@ -66,7 +66,7 @@ test('the estimate is minutes per kind, then hours, then dollars at the rate', (
   expect(est.byKind.documents.minutes).toBe(60)
   expect(est.byKind.code.minutes).toBe(100)
 
-  const changed = estimate(kinds, { rate: 75, minutes: { ...DEFAULT_SETTINGS.minutes, emails: 15 } })
+  const changed = estimate(kinds, { ...DEFAULT_SETTINGS, rate: 75, minutes: { ...DEFAULT_SETTINGS.minutes, emails: 15 } })
   expect(changed.minutes).toBe(265)
   expect(near(changed.dollars)).toBe(near((265 / 60) * 75))
 })
@@ -84,17 +84,23 @@ test('only the kinds a stretch holds are shown, most first, with other always la
 })
 
 test('the defaults are the ones asked for, and damaged settings fall back to them', () => {
-  expect(DEFAULT_SETTINGS).toEqual({ rate: 50, minutes: { emails: 10, documents: 30, images: 20, code: 20, research: 20, other: 10 } })
+  expect(DEFAULT_SETTINGS).toEqual({ rate: 50, minutes: { emails: 10, documents: 30, images: 20, code: 20, research: 20, other: 10 }, band: true })
   expect(normalizeSettings(undefined)).toEqual(DEFAULT_SETTINGS)
   // settings and days saved before the code kind existed are read as they were, code at its default
+  // and the chip, which they never had a say in, on
   expect(normalizeSettings({ rate: 80, minutes: { emails: 12, documents: 30, images: 20, research: 25, other: 10 } })).toEqual({
     rate: 80,
     minutes: { emails: 12, documents: 30, images: 20, code: 20, research: 25, other: 10 },
+    band: true,
   })
+  // the chip is only ever a yes or a no
+  expect(normalizeSettings({ band: false }).band).toBe(false)
+  expect(normalizeSettings({ band: 'off' }).band).toBe(true)
   expect(normalizeDay({ kinds: { emails: 2, other: 5 }, models: { A: 7 } })).toEqual({ kinds: { emails: 2, other: 5 }, models: { A: 7 } })
   expect(normalizeSettings({ rate: 'a lot', minutes: { emails: -4, documents: 45 } })).toEqual({
     rate: 50,
     minutes: { ...DEFAULT_SETTINGS.minutes, documents: 45 },
+    band: true,
   })
   expect(normalizeDay({ kinds: { emails: 2, bogus: 9, other: -1 }, models: { A: 1, B: 'x' } })).toEqual({ kinds: { emails: 2 }, models: { A: 1 } })
   expect(normalizeDay('nonsense')).toEqual(emptyDay())
