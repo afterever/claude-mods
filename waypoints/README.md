@@ -39,7 +39,7 @@ In `/config`, under Waypoints:
 | Work | What asks for a plan |
 | --- | --- |
 | A `/goal` | The mod adds a note to the command asking for a plan. If four tool calls pass with no plan, it reminds Claude once. |
-| Any other work of 3 or more steps | A standing line in the system prompt (new in 1.1.0). A plan made this way shows the same, named after its first task and labelled *Plan* where a goal is labelled *Goal*. |
+| Any other work of 3 or more steps | A standing line in the system prompt (new in 1.1.0). A plan made this way shows the same, named after the one-line `goal` Claude gives it (its first task if it gives none) and labelled *Plan* where a goal is labelled *Goal*. |
 | A small, single-step request | Nothing: the line tells Claude to skip it. |
 
 Subagents are told never to call `plan`, because it replaces the main agent's pending tasks; they can `start` and `done` tasks.
@@ -59,6 +59,10 @@ The standing line is the one thing the global `CLAUDE.md` bullet used to do. If 
 | `/waypoints clear` | Stops tracking this chat's goal. |
 
 In the band, the **all tasks** button (or `g`) opens the pane.
+
+## What changed in 2.0.2
+
+Fixed: a plan made without `/goal` was named after its first task, so a plan to review the README showed as "Plan: Review README intro". The `plan` action now takes an optional `goal`, one line naming what the whole plan achieves, and the standing line asks Claude for it. The title, the toast and the pane use it; without one the plan is still named after its first task.
 
 ## What changed in 2.0.1
 

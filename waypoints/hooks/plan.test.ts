@@ -1,7 +1,7 @@
 import { test, expect } from 'claude-code/testing'
 
 // @ts-ignore the plan is plain JavaScript, shared with the module
-import { newGoal, applyAction, progress, eta, instruction, nudge, standing, strictDeny, TOOL_SPEC } from './plan.mjs'
+import { newGoal, applyAction, progress, eta, instruction, nudge, standing, strictDeny, planSubject, TOOL_SPEC } from './plan.mjs'
 
 const TOOL = 'mcp__waypoints__tasks'
 
@@ -55,4 +55,18 @@ test('the standing line asks for a plan on multi-step work and keeps subagents o
   expect(text).toContain('action "plan"')
   expect(text).toContain('single-step')
   expect(text).toContain('subagent')
+})
+
+test('a plan outside /goal is named after the goal Claude gives, else its first task', async () => {
+  const tasks = [{ title: 'Review README intro', size: 'S' }]
+  expect(planSubject({ action: 'plan', goal: 'Review the README for stale claims', tasks })).toBe('Review the README for stale claims')
+  expect(planSubject({ action: 'plan', tasks })).toBe('Review README intro')
+  expect(planSubject({ action: 'plan', goal: '   ', tasks })).toBe('Review README intro')
+  expect(planSubject({ action: 'plan', goal: 'x'.repeat(200), tasks })).toHaveLength(160)
+})
+
+test('the plan tool takes an optional goal, and the standing line asks for it', async () => {
+  expect(TOOL_SPEC.inputSchema.properties.goal.type).toBe('string')
+  expect(TOOL_SPEC.inputSchema.required).toEqual(['action'])
+  expect(standing(TOOL)).toContain('"goal"')
 })

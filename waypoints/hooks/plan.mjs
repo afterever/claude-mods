@@ -15,6 +15,13 @@ export function titleOf(condition) {
   return line.length > 160 ? line.slice(0, 159) + '…' : line
 }
 
+// What a plan made outside /goal is named after: the one line Claude gives as "goal",
+// else the first task (which names a step, not the whole plan)
+export function planSubject(input) {
+  const goal = String(input.goal || '').trim()
+  return goal ? titleOf(goal) : titleOf(normalizeTasks(input.tasks)[0]?.title)
+}
+
 export function newGoal({ sessionId, condition, now, cwd, kind = 'goal' }) {
   return {
     sessionId,
@@ -202,6 +209,7 @@ export const TOOL_SPEC = {
     type: 'object',
     properties: {
       action: { type: 'string', enum: ['plan', 'add', 'start', 'done', 'drop', 'show'] },
+      goal: { type: 'string', description: 'For plan: one line naming what the whole plan achieves, shown as its title' },
       tasks: {
         type: 'array',
         description: 'For plan and add: the tasks in order.',
@@ -238,7 +246,7 @@ export function instruction(tool) {
 export function standing(tool) {
   return (
     `Waypoints is installed: the user watches a progress bar built from your task plan. ` +
-    `For multi-step work (3 or more steps), call ${tool} (load it with ToolSearch if it is deferred) with action "plan" before you start, with every task in order, each sized S, M, or L. ` +
+    `For multi-step work (3 or more steps), call ${tool} (load it with ToolSearch if it is deferred) with action "plan" before you start, with "goal" set to one line naming what the whole plan achieves and every task in order, each sized S, M, or L. ` +
     `Then call "start" with a task's id when you begin it and "done" when it is finished, and "add" work you find along the way. ` +
     `Skip it for small single-step requests. If you are a subagent, never call "plan": it replaces the main agent's pending tasks.`
   )

@@ -85,9 +85,9 @@ waits for you). That is by design, not a freeze.
   carry on, or add tasks. Then start a **different** plan (a new `/goal`, or after this one finishes).
 - **See:** the pane **stays closed** for the rest of the first plan. The next plan opens it again.
 - Result: first half passes: after closing the pane it stayed closed while a task was added and the plan
-  carried on. Second half (the next plan opens it again) skipped. Note for a retest: a `plan` call made
-  within minutes of a finished plan is **glued onto that plan's list** (7 done + 3 new = 10 tasks), so it
-  may not count as a different plan. Wait a few minutes after a finish, or use a new `/goal`.
+  carried on. Second half (the next plan opens it again) skipped. Note for a retest: a plan only finishes
+  when the turn ends, so a second `plan` call **in the same turn** lands on the same plan (7 done + 3 new =
+  10 tasks, not a different plan). For a different plan, end the turn after the first one finishes.
 
 ### 4. `Pane: off`
 
@@ -170,11 +170,12 @@ waits for you). That is by design, not a freeze.
 
 ## Also worth a glance
 
-- [ ] **Plan title (to build, not in 2.0.1):** a plan started without `/goal` is named after its **first
-  task** (`◎ Plan: Review README intro`). It should show the plan's overall goal instead. The cause is
-  `serveTool` in `hooks/register.mjs` (`condition: first.title`). The idea is an optional `goal` field on the
-  tool's `plan` action that Claude fills with one line, falling back to the first task. Re-check this item
-  once that change ships.
+- [ ] **Plan title (fixed in 2.0.2, to re-check):** a plan started without `/goal` was named after its
+  **first task** (`◎ Plan: Review README intro`) because `serveTool` in `hooks/register.mjs` used
+  `condition: first.title`. 2.0.2 adds an optional `goal` field to the tool's `plan` action, which the
+  standing line asks Claude to fill with one line; the title falls back to the first task. Re-check on
+  2.0.2: a plan to review the README should read `◎ Plan: <the goal line>`, in the band, the pane, the
+  toast and the one-row collapse.
 - [x] **Footer:** still shows `◎ plan 44% · ~2m` (or `◎ goal …`) in every view. (Seen: `plan 17%`,
   `plan 67% · ~2m`, `plan done ✓`.)
 - [x] **ETA:** appears in the header (`· ~2m`) only after two tasks are done. (Seen at 4 of 6.)
