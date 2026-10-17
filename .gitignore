@@ -10,3 +10,5 @@ work-report/.claude-plugin/types/
 agent-pulse/.claude-plugin/types/
 arsenal/tsconfig.json
 arsenal/.claude-plugin/types/
+waypoints/tsconfig.json
+waypoints/.claude-plugin/types/

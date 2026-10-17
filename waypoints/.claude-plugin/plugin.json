@@ -1,0 +1,20 @@
+{
+  "name": "waypoints",
+  "displayName": "Waypoints",
+  "version": "1.1.0",
+  "description": "A progress bar for /goal and any multi-step work, built from Claude's own task plan: tasks done out of the plan, elapsed time, an ETA at the goal's own pace, and every chat's goal in /waypoints. Claude is asked to plan by the mod itself. Fork of Nate Herk's goal-meter 1.0.0.",
+  "author": {
+    "name": "afterever"
+  },
+  "homepage": "https://github.com/afterever/claude-mods/tree/master/waypoints",
+  "repository": "https://github.com/afterever/claude-mods",
+  "license": "MIT",
+  "keywords": [
+    "goal",
+    "progress",
+    "tasks",
+    "eta",
+    "ui",
+    "mod"
+  ]
+}

@@ -34,6 +34,11 @@
       "name": "arsenal",
       "source": "./arsenal",
       "description": "A menu for the tool mods in this repo: a button right above the prompt box opens a menu pane, docked on the right, with a Prompt Upgrade switch and one-press shortcuts to /better and /report. A remote control, so every row runs a command the tool already has. Idea from https://tristenobrien.ai/."
+    },
+    {
+      "name": "waypoints",
+      "source": "./waypoints",
+      "description": "A progress bar for /goal and any multi-step work, built from Claude's own task plan: tasks done out of the plan, elapsed time and an ETA, with every chat's goal in /waypoints. The mod itself asks Claude to plan, so no line in the global CLAUDE.md. Fork of Nate Herk's goal-meter."
     }
   ]
 }

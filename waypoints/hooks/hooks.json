@@ -1,0 +1,4 @@
+{
+  "description": "Waypoints hooks module",
+  "modules": ["./register.mjs"]
+}
