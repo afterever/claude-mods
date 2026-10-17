@@ -1,8 +1,7 @@
 # Setting up my Claude Code mods on a new computer
 
-One file to reproduce this laptop's Claude Code mod setup elsewhere: which mods to install, the
-one line of global `CLAUDE.md` they rely on, and the `/skin` setting and skin that are not in any
-repository. Each mod has its own section; when the setup changes, change the section, do not add a
+One file to reproduce this laptop's Claude Code mod setup elsewhere: which mods to install and the
+`/skin` setting and skin that are not in any repository. Each mod has its own section; when the setup changes, change the section, do not add a
 file.
 
 ## Quick start
@@ -10,8 +9,7 @@ file.
 Paste this into Claude Code on the new computer:
 
 > Read `SETUP.md` in the `afterever/claude-mods` repository and set up my Claude Code mods exactly
-> as it says: add the marketplaces and install the plugins, add the Goal meter bullet to my global
-> `~/.claude/CLAUDE.md` (update in place if it is already there), run `/skin words claude`, and
+> as it says: add the marketplaces and install the plugins, run `/skin words claude`, and
 > rebuild the `cupertino` skin. Show me the diff before changing any file, and run the
 > checks at the end.
 
@@ -23,7 +21,7 @@ Paste this into Claude Code on the new computer:
 | `subagent-progress` | `afterever/claude-mods` (this repo) | 2.0.1 | Progress bar and live panel for subagent work |
 | `prompt-upgrade` | `afterever/claude-mods` (this repo) | 0.1.0 | `/better` turns a rough prompt into a great one before it is sent |
 | `work-report` | `afterever/claude-mods` (this repo) | 0.3.0 | `/report` shows what Claude has done for you: tasks, hours saved, what that is worth |
-| `goal-meter` | `nateherkai/claude-code-mods` | 1.0.0 | Task plan shown as a progress bar while a `/goal` runs |
+| `waypoints` | `afterever/claude-mods` (this repo) | 1.1.0 | Task plan shown as a progress bar for a `/goal` or any multi-step work; replaces `goal-meter` |
 | `skins` | `hellosverre/claude-skins` | 0.5.6 | Colour scheme and words for the transcript |
 | `cache-keeper` | `nateherkai/claude-code-mods` | 1.0.0 | Adds the `session-handoff` skill |
 | `agent-pulse` | `afterever/claude-mods` (this repo) | 1.1.0 | Box above the prompt naming the step Claude is on, in color and motion, with a step history |
@@ -42,7 +40,7 @@ claude plugin install prompt-upgrade@afterever-mods
 claude plugin install work-report@afterever-mods
 claude plugin install agent-pulse@afterever-mods
 claude plugin install arsenal@afterever-mods
-claude plugin install goal-meter@nateherk-mods
+claude plugin install waypoints@afterever-mods
 claude plugin install cache-keeper@nateherk-mods
 claude plugin install skins@hellosverre-mods
 ```
@@ -96,25 +94,24 @@ Nothing to configure, but the figures are estimates from settings you can change
 - What it counts, how a task is sorted and how the pane narrows:
   [work-report/README.md](./work-report/README.md).
 
-## goal-meter
+## waypoints
 
-`goal-meter` gives Claude one tool, `mcp__goal-meter__tasks`, that holds the task plan the bar
-shows. It only fills in if Claude is told to use it, which is one bullet in the global
-`~/.claude/CLAUDE.md` (Windows: `C:\Users\<user>\.claude\CLAUDE.md`).
+My own mod, a fork of Nate Herk's `goal-meter` 1.0.0 (renamed; imported with its history). It gives
+Claude one tool, `mcp__waypoints__tasks`, that holds the task plan the bar shows, and `/waypoints`
+opens the pane. Written against 1.1.0. Nothing to configure and nothing to add to the global
+`~/.claude/CLAUDE.md`: the mod puts one line in the system prompt asking Claude to plan work of 3 or
+more steps, and a `/goal` asks for a plan on its own. `/waypoints auto off` removes the line.
 
-Add this under the other global instructions:
-
-```markdown
-- **Goal meter:** For multi-step work (3+ steps), load `mcp__goal-meter__tasks` via ToolSearch and call action `plan` before starting, then `start`/`done` each task as you go. Skip it for small single-step requests. Subagents should not call `plan` (it would replace the main agent's pending tasks).
-```
-
+- **Coming from `goal-meter`:** `claude plugin uninstall goal-meter@nateherk-mods`, delete the
+  **Goal meter** bullet from the global `CLAUDE.md` (it names a tool that no longer exists), and open
+  a new chat. Both plugins would otherwise run side by side.
 - **Trigger:** work of 3 or more steps. Small single-step requests skip it.
-- **Flow:** load the tool, call `plan` first with every task, then `start` and `done` each task.
-- **Subagents:** they must not call `plan`, because it replaces the main agent's pending tasks.
-- **Edit the file, do not re-create it.** Keep the user's other global instructions as they are.
-  If the file is a hard link, write into it in place; an editor that replaces the file breaks the
-  link.
-- **If a "Goal meter" bullet is already there,** update it in place instead of adding a second one.
+- **Subagents:** they are told never to call `plan`, because it replaces the main agent's pending
+  tasks.
+- **Where it does not run:** the standing line is a `prompt.compose` hook, which the engine passes
+  over in plugins you install where an organization manages Claude Code. A `/goal` still asks for a
+  plan there.
+- What it does and what changed: [waypoints/README.md](./waypoints/README.md).
 
 ## skins
 
@@ -261,7 +258,8 @@ right, with a Prompt Upgrade on/off switch and one-press shortcuts to `/better` 
 - `/skin list` shows `words claude`, and `cupertino` as `●`.
 - In use, the spinner shows a Claude Code pool word (Clauding, Reticulating...) and the turn
   footer an original done word (Baked, Brewed, Sautéed...).
-- A multi-step request makes Claude call `mcp__goal-meter__tasks` with `plan` first.
+- A multi-step request makes Claude call `mcp__waypoints__tasks` with `plan` first, and the bar
+  above the prompt fills as tasks finish; `/waypoints` opens the pane.
 - `/better` opens a pane that asks for a rough prompt; `/report` opens the Work Report pane, and a
   `Work report` chip shows above the prompt.
 - A `◆ Arsenal ▾` button shows as the last row right above the prompt box, under the bands of

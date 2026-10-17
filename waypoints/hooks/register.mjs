@@ -9,13 +9,16 @@
 //   who runs it, the next tasks, and the goal check's latest "not met yet" reason.
 // - The footer: "◎ goal 69% · ~15m" in every view, terminal and Desktop.
 // - /waypoints: a pane with this chat's whole task list and every other chat's goal.
-//   /waypoints hide|show (the band), /waypoints strict on|off, /waypoints clear.
+//   /waypoints hide|show (the band), /waypoints strict on|off, /waypoints auto on|off,
+//   /waypoints clear.
+// - A standing line in the system prompt asks Claude to plan any multi-step work,
+//   not only a /goal; /waypoints auto off removes it.
 // - Each chat writes ~/.claude/mods-data/waypoints/<session>.json for /waypoints.
 //   The mod sends no model requests of its own.
 
 import { minutes, clock, clip, bar, basename } from './fmt.mjs'
 import { makeMasker } from './privacy.mjs'
-import { newGoal, applyAction, progress, eta, parseCheck, isStopWord, normalizeTasks, TOOL_SPEC, instruction, nudge, strictDeny } from './plan.mjs'
+import { newGoal, applyAction, progress, eta, parseCheck, isStopWord, normalizeTasks, TOOL_SPEC, instruction, standing, nudge, strictDeny } from './plan.mjs'
 
 const DIR = '/.claude/mods-data/waypoints'
 const PANE = 'waypoints'
@@ -32,7 +35,8 @@ let cwd = ''
 let now = 0
 let toolName = 'mcp__waypoints__tasks'
 let commandName = 'waypoints'
-let settings = { strict: false }
+let settings = { strict: false, auto: true }
+let toolFailed = false
 let hidden = false
 let nudged = false
 let callsWithoutPlan = 0
@@ -115,7 +119,7 @@ async function readRecording($) {
 }
 
 async function registerCommand($) {
-  const spec = { name: 'waypoints', description: 'Waypoints: this chat\'s goal task list and every chat\'s goal (/waypoints hide|show|strict on|off|clear)', argumentHint: '[hide|show|strict on|off|clear]', immediate: true }
+  const spec = { name: 'waypoints', description: 'Waypoints: this chat\'s goal task list and every chat\'s goal (/waypoints hide|show|strict on|off|auto on|off|clear)', argumentHint: '[hide|show|strict on|off|auto on|off|clear]', immediate: true }
   try {
     await $.command.register(spec)
     return 'waypoints'
@@ -253,6 +257,7 @@ export function register(on) {
       const reg = await $.tool.register(TOOL_SPEC)
       if (reg && reg.tool) toolName = reg.tool
     } catch (err) {
+      toolFailed = true
       $.ui.log(`waypoints: the task tool did not register (${err && err.message ? err.message : err})`)
     }
     commandName = (await registerCommand($)) || commandName
@@ -264,6 +269,18 @@ export function register(on) {
     })
     $.clock.every(10000, () => readRecording($).catch(() => {}))
     return next(e)
+  })
+
+  // The standing ask for multi-step work outside a /goal, so the global CLAUDE.md
+  // needs no line for it. A session section: it sits after the cache boundary and
+  // reads the same every request. Left out where no one watches the bar (-p, the
+  // bare prompt), for teammates (they must not replace the lead's plan), and when
+  // the tool did not register or /waypoints auto off.
+  on('prompt.compose', async ($, e, next) => {
+    const r = await next(e)
+    const traits = e.traits || []
+    if (!settings.auto || toolFailed || traits.some((t) => t === 'bare' || t === 'print' || t === 'teammate')) return r
+    return { sections: [...r.sections, { id: 'waypoints:plan', text: standing(toolName), scope: 'session' }] }
   })
 
   // /goal <condition> starts the meter and asks Claude to plan. The ask rides as
@@ -393,6 +410,12 @@ export function register(on) {
       settings.strict = value !== 'off'
       await $.store.set('settings', settings)
       $.ui.toast(`Strict planning ${settings.strict ? 'on: no file edits in a /goal before the plan' : 'off'}`)
+      return {}
+    }
+    if (key === 'auto') {
+      settings.auto = value !== 'off'
+      await $.store.set('settings', settings)
+      $.ui.toast(`Standing plan ask ${settings.auto ? 'on: Claude plans any multi-step work' : 'off: only a /goal asks for a plan'}`)
       return {}
     }
     if (key === 'hide' || key === 'show') {
@@ -625,7 +648,7 @@ function drawPane(el, width) {
   if (!rest.length) rows.push(Text({ dimColor: true, children: ['No other chat has a goal in the last 12 hours.'] }))
   for (const g of rest.slice(0, 15)) rows.push(otherRow(el, g, width))
   rows.push(Text({ children: [' '] }))
-  rows.push(Text({ dimColor: true, children: [`/${commandName} hide|show (the band) · /${commandName} strict ${settings.strict ? 'off' : 'on'} · /${commandName} clear`] }))
+  rows.push(Text({ dimColor: true, children: [`/${commandName} hide|show (the band) · /${commandName} strict ${settings.strict ? 'off' : 'on'} · /${commandName} auto ${settings.auto ? 'off' : 'on'} · /${commandName} clear`] }))
   return Box({ flexDirection: 'column', children: rows })
 }
 

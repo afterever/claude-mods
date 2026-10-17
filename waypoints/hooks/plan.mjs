@@ -233,6 +233,17 @@ export function instruction(tool) {
   )
 }
 
+// The standing ask, kept in the system prompt: plan any multi-step work, not only
+// a /goal. It replaces the line the mod used to need in the global CLAUDE.md.
+export function standing(tool) {
+  return (
+    `Waypoints is installed: the user watches a progress bar built from your task plan. ` +
+    `For multi-step work (3 or more steps), call ${tool} (load it with ToolSearch if it is deferred) with action "plan" before you start, with every task in order, each sized S, M, or L. ` +
+    `Then call "start" with a task's id when you begin it and "done" when it is finished, and "add" work you find along the way. ` +
+    `Skip it for small single-step requests. If you are a subagent, never call "plan": it replaces the main agent's pending tasks.`
+  )
+}
+
 export function nudge(tool) {
   return `Reminder from Waypoints: this /goal has no task plan yet, so the user's progress bar is empty. Call ${tool} with action "plan" now (every task to meet the goal, in order, sized S, M, or L), then mark tasks as you go.`
 }
