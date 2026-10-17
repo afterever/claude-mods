@@ -53,7 +53,7 @@ In `/config`, type `Animation` to find the three rows:
 | Setting | Values | Default |
 | --- | --- | --- |
 | Animation | `off`: still, but with the colors and charts. `subtle`: the status glyph, the flash, the jellyfish's swim. `full`: adds the breathing border, bubbles, ink and sparkles | `subtle` |
-| Palette | `claude`: follows your theme with the Claude orange. `neon`: vivid. `mono`: color only for what needs you | `claude` |
+| Palette | `ember`: Claude's warm orange range, each phase shading from one color into a second. `claude`: follows your theme. `neon`: glowing deep-sea colors, shading the same way. `mono`: color only for what needs you | `ember` |
 | Sound | `off`, or `approval`: a soft chime when Claude starts waiting for your approval | `off` |
 
 A change reloads the mod at once; the box keeps its history. On the desktop, the jellyfish also stops moving when your system asks for reduced motion.

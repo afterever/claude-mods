@@ -165,10 +165,10 @@ describe('terminal', () => {
     const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
 
     await $.tool.call({ tool: 'Read', file_path: 'src/app.ts' })
-    expect(await borderOf(ui)).toBe(paletteOf('claude').outcomeHex.ok)
+    expect(await borderOf(ui)).toBe(paletteOf('ember').outcomeHex.ok)
 
     await clock.advance(400)
-    expect(await borderOf(ui)).toBe('suggestion')
+    expect(await borderOf(ui)).toBe(paletteOf('ember').phase.requesting)
   })
 
   test('full breathes the border while it waits for approval', { options: { animation: 'full' } }, async ($, on) => {
@@ -200,7 +200,7 @@ describe('terminal', () => {
     const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
     const timer = (await ui.findAll({ type: 'Text' })).find(text => text.text.startsWith(' · 31s'))
 
-    expect(timer?.props['color']).toBe(paletteOf('claude').heat[0])
+    expect(timer?.props['color']).toBe(paletteOf('ember').heat[0])
   })
 
   test('the neon palette paints the border its own color', { options: { palette: 'neon', animation: 'off' } }, async ($, on) => {
@@ -210,6 +210,49 @@ describe('terminal', () => {
     const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
 
     expect(await borderOf(ui)).toBe(paletteOf('neon').phase.requesting)
+  })
+
+  test('ember, the default, shimmers the spinner from core toward glow', { options: { animation: 'subtle' } }, async ($, on) => {
+    seat(on)
+    await $.turn.start({ text: 'fix it', turnId: 't1' })
+
+    const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    const glyph = 'glyph-requesting'
+    const before = (await ui.find({ type: 'Text', in: glyph }))?.props['color']
+    await ui.advance(140)
+    const after = (await ui.find({ type: 'Text', in: glyph }))?.props['color']
+
+    expect(before).toBe(paletteOf('ember').hex.requesting)
+    expect(after).not.toBe(before)
+    expect(String(after)).toMatch(/^#[0-9a-f]{6}$/)
+  })
+
+  test('a flat palette keeps one color on the spinner and the strip', { options: { palette: 'claude', animation: 'subtle' } }, async ($, on) => {
+    seat(on)
+    await $.turn.start({ text: 'fix it', turnId: 't1' })
+
+    const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    const glyph = 'glyph-requesting'
+    const before = (await ui.find({ type: 'Text', in: glyph }))?.props['color']
+    await ui.advance(140)
+
+    expect(before).toBe('suggestion')
+    expect((await ui.find({ type: 'Text', in: glyph }))?.props['color']).toBe('suggestion')
+    expect((await ui.findAll({ type: 'Text' })).filter(text => text.text.includes('━'))).toHaveLength(1)
+  })
+
+  test('ember shades the strip cell by cell', { options: { animation: 'off' } }, async ($, on) => {
+    seat(on)
+    await $.turn.start({ text: 'fix it', turnId: 't1' })
+
+    const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    const cells = (await ui.findAll({ type: 'Text' })).filter(text => text.text === '━')
+    const colors = new Set(cells.map(cell => cell.props['color']))
+
+    expect(cells.length).toBeGreaterThan(1)
+    expect(colors.size).toBeGreaterThan(1)
+    expect(cells[0]?.props['color']).toBe(paletteOf('ember').hex.requesting)
+    expect(cells.at(-1)?.props['color']).toBe(paletteOf('ember').glow.requesting)
   })
 })
 
@@ -237,6 +280,17 @@ describe('desktop', () => {
 
     expect(before).toBeDefined()
     expect((await svgOf(ui, /^Claude is/))?.props['source']).toBe(before)
+  })
+
+  test('ember shades the jellyfish and the strip toward each phase\'s glow', { options: { animation: 'subtle' } }, async ($, on) => {
+    seat(on)
+    await $.turn.start({ text: 'fix it', turnId: 't1' })
+
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const { glow } = paletteOf('ember')
+
+    expect(String((await svgOf(ui, /^Claude is/))?.props['source'])).toContain(glow.requesting)
+    expect(String((await svgOf(ui, /^The turn so far/))?.props['source'])).toContain(`stop-color="${glow.requesting}"`)
   })
 
   test('the history draws a duration bar per timed row', { options: { animation: 'off' } }, async ($, on) => {
@@ -294,5 +348,18 @@ describe('pieces', () => {
     expect(heatOf(paletteOf('claude'), 10_000)).toBeUndefined()
     expect(heatOf(paletteOf('claude'), 400_000)).toBe('error')
     expect(mix('#000000', '#ffffff', 0.5)).toBe('#808080')
+  })
+
+  test('ember is the default; each phase of a two-stop palette has its own color', async () => {
+    expect(paletteOf(undefined)).toBe(paletteOf('ember'))
+    expect(paletteOf('nonsense')).toBe(paletteOf('ember'))
+
+    for (const name of ['ember', 'neon'] as const) {
+      const { hex, glow } = paletteOf(name)
+      const phases = Object.keys(hex).filter(phase => phase !== 'question') as (keyof typeof hex)[]
+
+      expect(new Set(phases.map(phase => hex[phase])).size).toBe(phases.length)
+      expect(phases.every(phase => glow[phase] !== hex[phase])).toBe(true)
+    }
   })
 })

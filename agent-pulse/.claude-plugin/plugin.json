@@ -1,7 +1,7 @@
 {
   "name": "agent-pulse",
   "displayName": "Agent Pulse",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "A box above the prompt that always says what the agent is doing right now, alive with color and motion: an animated status glyph, a glowing jellyfish on the desktop, a timeline of the turn, and a history behind its triangle. Fork of Tzafrir Rehan's whats-agent-doing 0.4.3.",
   "author": {
     "name": "afterever"
@@ -33,9 +33,10 @@
     "palette": {
       "type": "string",
       "title": "Palette",
-      "description": "claude follows your theme with the Claude orange; neon is vivid; mono keeps color for what needs you",
-      "default": "claude",
+      "description": "ember is Claude's warm orange range, each color shading into a second; claude follows your theme; neon is bioluminescent sea colors, shading too; mono keeps color for what needs you",
+      "default": "ember",
       "options": [
+        "ember",
         "claude",
         "neon",
         "mono"

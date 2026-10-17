@@ -31,7 +31,7 @@ An SVG source must not change on every redraw: the 1 s ticker redraws the band, 
 | 2 | ~~Shimmer on the "Claude" word~~ | | | | removed in 1.0.1 with the word itself: the headline is the step alone | |
 | 3 | Breathing border while waiting on you (approval, question) | | | ✓ | the hook redraws at 8 fps during the wait only | the jellyfish's glow breathes |
 | 4 | Flash when a call ends: green ✓, red ✗, yellow ⊘ | | ✓ | ✓ | border in the outcome color for 360 ms | a halo ring expands once |
-| 5 | Palettes (`claude`, `neon`, `mono`) on theme keys and hex | ✓ | ✓ | ✓ | both | both |
+| 5 | Palettes (`ember`, `claude`, `neon`, `mono`) on theme keys and hex; `ember` and `neon` give each phase two colors | ✓ | ✓ | ✓ | both | both |
 | 6 | Timer heat: dim, amber after 30 s, orange after 2 min, red after 5 min | ✓ | ✓ | ✓ | `Text` color | `Text` color, tabular digits |
 | 7 | A glyph per tool (◧ Read, ✎ Edit, ❯ Bash, ⌕ Grep, ⌁ Web, ◆ Agent, ⧉ MCP) | ✓ | ✓ | ✓ | both | both |
 | 8 | A color per agent, tree connectors, a spinner each | colors | + spinners | + spinners | `├─ └─` | same |
@@ -65,7 +65,7 @@ The desktop gets a mascot: a small jellyfish next to the headline that acts out 
 | Field | Values | Default |
 |---|---|---|
 | `animation` | `off`, `subtle`, `full` | `subtle` |
-| `palette` | `claude`, `neon`, `mono` | `claude` |
+| `palette` | `ember`, `claude`, `neon`, `mono` | `ember` |
 | `sound` | `off`, `approval` | `off` |
 
 A change in the config menu reloads the module with the new `options`; the state atoms survive the reload.
@@ -73,6 +73,20 @@ A change in the config menu reloads the module with the new `options`; the state
 ## The question dialog (1.0.1)
 
 The AskUserQuestion dialog takes the prompt's place and covers the band. Its own render site, `ui.render` on `AskUserQuestion`, takes a tree that holds the engine's dialog node once with nothing below it, in 12 rows on the terminal (a row per 40 columns of text) and 48 elsewhere, and no `Client`, size, place or hover. So the box draws a still copy of itself there, above the dialog: the headline and up to three agents, each cut to one row.
+
+## Two-color palettes (1.1.0)
+
+`claude` mostly takes the theme's own keys, so it looked like Claude Code's default colors with orange only while a tool ran. 1.0's `neon` used colors where one RGB channel is 255 and another near 0, where the old 16-color ANSI palette sits, so it read as a 16-color terminal. Its lightness also ran from 0.55 to 0.92 in OKLCH, and two pairs of phases shared a color.
+
+In 1.1.0 a palette gives each phase a second color, `glow`, beside its `hex`. `ember` (the new default: Claude's coral, honey, rose and orchid) and `neon` (now glowing deep-sea colors: cyan, aqua and violet, with amber kept for what needs you) set it. `claude` and `mono` set it to `hex`, so they draw exactly as before and still follow the theme. The two colors drive:
+
+| | Terminal | Desktop |
+|---|---|---|
+| Status glyph | the spinner's color cycles core → glow → core, 12 steps on the spinner's own clock | the jellyfish's bell sheen and tentacle tips take the glow |
+| Timeline strip | a `Text` per cell, each run shading core → glow | a `linearGradient` per segment |
+| Waiting border | breathes from the dimmed glow up to the core, so the hue shifts too | same |
+
+Each phase in `ember` and `neon` has a color of its own (the tests check it), and both palettes are fixed hex: they look the same under any skin. A palette that follows the theme cannot shade, since a theme key cannot be mixed. The history's reply and compact marks take the palette's `writing` and `compacting` colors, where they used to take fixed theme keys.
 
 ## Alternatives turned down
 

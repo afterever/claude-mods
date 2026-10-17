@@ -35,6 +35,8 @@ export type JellyArgs = {
   level: Level
   /** The phase's color, hex. */
   color: string
+  /** The phase's second stop, hex: the bell's sheen and the tentacles' tips. `color` when left out. */
+  glow?: string
   /** A call that ended in this phase: its id and outcome color, hex. */
   halo: { id: number; color: string } | null
   /** A turn that just ended: its id. */
@@ -45,11 +47,12 @@ export type JellyArgs = {
 /** The jellyfish acting out `phase`, as an SVG document. */
 export function jellySvg(args: JellyArgs): string {
   const { phase, level, color, halo, sparkle, size } = args
+  const glow = args.glow ?? color
   const gait = GAITS[phase]
   const isIdle = phase === 'idle'
   const isWaiting = phase === 'approval' || phase === 'question'
   const isFull = level === 'full'
-  const light = mix(color, '#ffffff', 0.45)
+  const light = mix(glow, '#ffffff', 0.45)
   const deep = mix(color, '#000000', 0.25)
 
   const css: string[] = [
@@ -152,14 +155,15 @@ export function jellySvg(args: JellyArgs): string {
   }
 
   const tentacles = [14.5, 20, 28, 33.5]
-    .map((x, i) => `<path class="tent t${i + 1}" d="M${x} 23q-2 5 0 9q2 4 0 8" stroke="${color}" stroke-width="1.6" fill="none" stroke-linecap="round" opacity=".85"/>`)
+    .map((x, i) => `<path class="tent t${i + 1}" d="M${x} 23q-2 5 0 9q2 4 0 8" stroke="url(#t)" stroke-width="1.6" fill="none" stroke-linecap="round" opacity=".85"/>`)
     .join('')
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 48 48">`
     + `<style>${css.join('')}${REDUCED}</style>`
     + '<defs>'
-    + `<radialGradient id="g" cx="50%" cy="45%" r="50%"><stop offset="0" stop-color="${color}" stop-opacity=".9"/><stop offset="1" stop-color="${color}" stop-opacity="0"/></radialGradient>`
+    + `<radialGradient id="g" cx="50%" cy="45%" r="50%"><stop offset="0" stop-color="${color}" stop-opacity=".9"/><stop offset="1" stop-color="${glow}" stop-opacity="0"/></radialGradient>`
     + `<linearGradient id="b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${light}"/><stop offset="1" stop-color="${color}"/></linearGradient>`
+    + `<linearGradient id="t" gradientUnits="userSpaceOnUse" x1="0" y1="23" x2="0" y2="40"><stop offset="0" stop-color="${color}"/><stop offset="1" stop-color="${glow}"/></linearGradient>`
     + '</defs>'
     + `<circle class="glow" cx="24" cy="21" r="22" fill="url(#g)" opacity="${isIdle ? 0.15 : 0.45}"/>`
     + `<g${isIdle ? ' opacity=".6" transform="translate(0 2)"' : ''}><g class="body">`
@@ -179,21 +183,32 @@ export function jellySvg(args: JellyArgs): string {
 
 /**
  * The turn's phases as one rounded strip of colored segments, each as wide
- * as its share of the turn, the running one breathing.
+ * as its share of the turn, the running one breathing. With `glowOf`, a
+ * segment whose phase has a second stop shades from one to the other.
  */
 export function stripSvg(
   segments: readonly { phase: ActivityPhase; ms: number; isOpen: boolean }[],
   hexOf: (phase: ActivityPhase) => string,
   width: number,
   level: Level,
+  glowOf: (phase: ActivityPhase) => string = hexOf,
 ): string {
   const height = 6
   const total = segments.reduce((sum, s) => sum + s.ms, 0) || 1
+  const shades: string[] = []
   let x = 0
 
-  const rects = segments.map(s => {
+  const rects = segments.map((s, i) => {
     const w = Math.max(1.5, (s.ms / total) * width)
-    const rect = `<rect${s.isOpen && level !== 'off' ? ' class="live"' : ''} x="${x.toFixed(1)}" y="0" width="${w.toFixed(1)}" height="${height}" fill="${hexOf(s.phase)}"/>`
+    const [core, glow] = [hexOf(s.phase), glowOf(s.phase)]
+    let fill = core
+
+    if (glow !== core) {
+      shades.push(`<linearGradient id="s${i}"><stop offset="0" stop-color="${core}"/><stop offset="1" stop-color="${glow}"/></linearGradient>`)
+      fill = `url(#s${i})`
+    }
+
+    const rect = `<rect${s.isOpen && level !== 'off' ? ' class="live"' : ''} x="${x.toFixed(1)}" y="0" width="${w.toFixed(1)}" height="${height}" fill="${fill}"/>`
 
     x += w
 
@@ -202,6 +217,7 @@ export function stripSvg(
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`
     + `<style>.live{animation:live 1s ease-in-out infinite}@keyframes live{0%,100%{opacity:1}50%{opacity:.45}}${REDUCED}</style>`
+    + (shades.length > 0 ? `<defs>${shades.join('')}</defs>` : '')
     + `<clipPath id="c"><rect width="${width}" height="${height}" rx="3"/></clipPath>`
     + `<g clip-path="url(#c)"><rect width="${width}" height="${height}" fill="#8a8a8a" opacity=".15"/>${rects.join('')}</g>`
     + '</svg>'
