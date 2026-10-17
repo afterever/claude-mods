@@ -13,9 +13,12 @@ Hours and dollars are always **estimates**: the minutes you say a task saves, ti
 | `/report settings` | Lists the minutes saved per kind of task and the hourly rate. |
 | `/report settings rate 75` | Sets the hourly rate to 75. |
 | `/report settings emails 15` | Sets the minutes one email task saves to 15. Also `code`, `documents`, `images`, `research` and `other`. |
+| `/report settings band off` | Hides the chip above the prompt. `on` brings it back. |
 | `/report help` | One line of usage. |
 
 A **Work report** chip above the prompt, with today's count beside it, opens the pane too. Claude Code has no pressable entry in the status line itself, so the button sits in the band above the prompt and keeps whatever the other mods draw there beneath it.
+
+If another mod already opens the pane for you, such as the [`arsenal`](../arsenal) menu's report rows, the chip is a second button for the same thing. `/report settings band off` hides it; `/report` and the other mod's buttons still open the pane. The choice is kept between sessions, and the chip is on until you turn it off.
 
 ### The pane
 
@@ -107,7 +110,7 @@ Days in a row with at least one task, counted back from today. A day that has no
 
 ## What is stored
 
-Only counts, in the mod's own store: one small record per calendar day (`day:2026-10-13`, the count of each kind and the count per model) and one `settings` record. No prompt text, no file names and no answers are kept. Nothing is written inside the mod's folder.
+Only counts, in the mod's own store: one small record per calendar day (`day:2026-10-13`, the count of each kind and the count per model) and one `settings` record (the rate, the minutes per kind and whether the chip shows). No prompt text, no file names and no answers are kept. Nothing is written inside the mod's folder.
 
 A day's record is read back from the store before each task is added, so two sessions open at once do not overwrite each other's counts.
 

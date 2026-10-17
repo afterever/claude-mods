@@ -72,7 +72,10 @@ async function openOn($: EngineInterface, tab: Tab | null): Promise<void> {
 
 const SETTING_ORDER: readonly Kind[] = ['emails', 'code', 'documents', 'images', 'research', 'other']
 
-const SETTING_NAMES: Record<string, Kind | 'rate'> = {
+const SETTING_NAMES: Record<string, Kind | 'rate' | 'band'> = {
+  band: 'band',
+  chip: 'band',
+  button: 'band',
   rate: 'rate',
   emails: 'emails',
   email: 'emails',
@@ -91,12 +94,24 @@ const SETTING_NAMES: Record<string, Kind | 'rate'> = {
 
 const num = (n: number) => String(Math.round(n * 100) / 100)
 
+const BAND_WORDS: Record<string, boolean> = { on: true, off: false, show: true, hide: false }
+
 function settingsText(s: Settings): string {
   const minutes = SETTING_ORDER.map(k => `${KIND_LABEL[k]} ${num(s.minutes[k])}`).join(', ')
   return (
-    `Minutes saved per task: ${minutes}. Hourly rate: $${num(s.rate)}. ` +
-    'Hours and dollars are estimates. Change one with /report settings rate 75 or /report settings emails 15.'
+    `Minutes saved per task: ${minutes}. Hourly rate: $${num(s.rate)}. Chip above the prompt: ${s.band ? 'on' : 'off'}. ` +
+    'Hours and dollars are estimates. Change one with /report settings rate 75, /report settings emails 15 or /report settings band off.'
   )
+}
+
+/** The settings for this session, and across sessions when the store takes them. */
+async function keepSettings($: EngineInterface, next: Settings): Promise<void> {
+  await update($, settingsAtom, () => next)
+  try {
+    await $.store.set('settings', next)
+  } catch {
+    // changed for this session still
+  }
 }
 
 async function settingsCommand($: EngineInterface, args: string[]): Promise<string> {
@@ -105,7 +120,13 @@ async function settingsCommand($: EngineInterface, args: string[]): Promise<stri
 
   const name = SETTING_NAMES[(args[0] ?? '').toLowerCase()]
   if (!name) {
-    return `I do not know the setting "${args[0]}". The ones you can change are rate, emails, code, documents, images, research and other. For example: /report settings rate 75.`
+    return `I do not know the setting "${args[0]}". The ones you can change are rate, emails, code, documents, images, research, other and band. For example: /report settings rate 75.`
+  }
+  if (name === 'band') {
+    const on = BAND_WORDS[(args[1] ?? '').toLowerCase()]
+    if (on === undefined) return 'The chip takes on or off, for example /report settings band off.'
+    await keepSettings($, { ...current, band: on })
+    return on ? 'The Work report chip is back above the prompt.' : 'The Work report chip is hidden. /report still opens the pane, and /report settings band on brings the chip back.'
   }
   const raw = args[1]
   const value = raw === undefined ? NaN : Number(raw.replace(/^\$/, ''))
@@ -117,12 +138,7 @@ async function settingsCommand($: EngineInterface, args: string[]): Promise<stri
     return name === 'rate' ? `That rate is too high. Use a number up to ${limit}.` : `That is more than a day. Use a number of minutes up to ${limit}.`
   }
   const next: Settings = name === 'rate' ? { ...current, rate: value } : { ...current, minutes: { ...current.minutes, [name]: value } }
-  await update($, settingsAtom, () => next)
-  try {
-    await $.store.set('settings', next)
-  } catch {
-    // changed for this session still
-  }
+  await keepSettings($, next)
   return name === 'rate'
     ? `Hourly rate is now $${num(value)}. Hours and dollars stay estimates.`
     : `${KIND_LABEL[name]} now save ${num(value)} minutes each. Hours and dollars stay estimates.`
@@ -249,10 +265,12 @@ export const register: Register = on => {
   })
 
   // The one button: a chip above the prompt that opens the pane. The band is
-  // shared, so what the others draw is kept beneath it.
+  // shared, so what the others draw is kept beneath it. `/report settings band
+  // off` hides it, for one who opens the pane from another mod's menu.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const below = await next(e)
     if (e.props.hasSurvey) return below
+    if (normalizeSettings(await read($, settingsAtom)).band === false) return below
     const { Box, Button, Text } = $.ui.resolve(e)
     const days = (await read($, daysAtom)) ?? {}
     const today = tasksOf(days[keyOf(noonOf(await $.clock.now()))])

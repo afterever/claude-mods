@@ -93,14 +93,16 @@ export function shownKinds(kinds: Readonly<Record<Kind, number>>): Kind[] {
 export const DEFAULT_SETTINGS: Settings = {
   rate: 50,
   minutes: { emails: 10, documents: 30, images: 20, code: 20, research: 20, other: 10 },
+  band: true,
 }
 
 /** Settings as the store gave them back, each value checked, the rest the default. */
 export function normalizeSettings(raw: unknown): Settings {
-  const out: Settings = { rate: DEFAULT_SETTINGS.rate, minutes: { ...DEFAULT_SETTINGS.minutes } }
+  const out: Settings = { rate: DEFAULT_SETTINGS.rate, minutes: { ...DEFAULT_SETTINGS.minutes }, band: DEFAULT_SETTINGS.band }
   if (!raw || typeof raw !== 'object') return out
-  const r = raw as { rate?: unknown; minutes?: unknown }
+  const r = raw as { rate?: unknown; minutes?: unknown; band?: unknown }
   if (typeof r.rate === 'number' && Number.isFinite(r.rate) && r.rate >= 0) out.rate = r.rate
+  if (typeof r.band === 'boolean') out.band = r.band
   if (r.minutes && typeof r.minutes === 'object') {
     for (const k of KINDS) {
       const v = (r.minutes as Record<string, unknown>)[k]

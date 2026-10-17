@@ -22,7 +22,7 @@ Paste this into Claude Code on the new computer:
 | `ctx` | `afterever/claude-mods` (this repo) | 0.6.2 | Context window pane and band, compacting on your terms |
 | `subagent-progress` | `afterever/claude-mods` (this repo) | 2.0.1 | Progress bar and live panel for subagent work |
 | `prompt-upgrade` | `afterever/claude-mods` (this repo) | 0.1.0 | `/better` turns a rough prompt into a great one before it is sent |
-| `work-report` | `afterever/claude-mods` (this repo) | 0.2.0 | `/report` shows what Claude has done for you: tasks, hours saved, what that is worth |
+| `work-report` | `afterever/claude-mods` (this repo) | 0.3.0 | `/report` shows what Claude has done for you: tasks, hours saved, what that is worth |
 | `goal-meter` | `nateherkai/claude-code-mods` | 1.0.0 | Task plan shown as a progress bar while a `/goal` runs |
 | `skins` | `hellosverre/claude-skins` | 0.5.6 | Colour scheme and words for the transcript |
 | `cache-keeper` | `nateherkai/claude-code-mods` | 1.0.0 | Adds the `session-handoff` skill |
@@ -82,7 +82,7 @@ you press Run. Written against 0.1.0. Nothing to configure.
 ## work-report
 
 My own mod: `/report` opens a pane with Today, Week, Month and Year tabs showing the tasks Claude
-finished, an estimate of the hours that saved and what they are worth. Written against 0.2.0.
+finished, an estimate of the hours that saved and what they are worth. Written against 0.3.0.
 Nothing to configure, but the figures are estimates from settings you can change.
 
 - **Set the estimate once:** `/report settings` lists the minutes each kind of task saves and the
@@ -91,7 +91,8 @@ Nothing to configure, but the figures are estimates from settings you can change
   this computer. The store belongs to the installed copy, so a `--plugin-dir` run keeps a separate
   count.
 - **A chip above the prompt** shows today's count and opens the pane. Other bands above the prompt
-  stack under it.
+  stack under it. With `arsenal` installed the chip is redundant: `/report settings band off` hides
+  it (kept between sessions), and the Arsenal menu's report rows still open the pane.
 - What it counts, how a task is sorted and how the pane narrows:
   [work-report/README.md](./work-report/README.md).
 
