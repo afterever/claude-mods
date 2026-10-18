@@ -275,7 +275,7 @@ Module state that a drawing reads can stay in module variables as in 1.1 (the pl
   up: the footer held only `Auto`, Arsenal and the model), only a tree, so from 2.0.3 the label there is a `Text` in a
   `Box` around `await next(e)`, as Arsenal's launcher and ctx's footer do. The band draws the plan on Desktop, so the
   tree shows only while `bandUp()` is false (`/waypoints hide`, or a goal that ended long ago). A hook cannot see the
-  engine's own collapse of the band (ctrl+x ctrl+a), so that case stays unlabelled. Not yet seen live on Desktop.
+  engine's own collapse of the band (ctrl+x ctrl+a), so that case stays unlabelled. Seen live on Desktop (2026-10-18, 2.0.3): with a plan and with a `/goal`, `/waypoints hide` puts the label in the footer and `show` takes it out.
 - **Privacy.** Every new string that shows a title, a note, a `by` name or a check reason goes through `mask(...)`,
   including the SVG's `alt`.
 - **Band order.** Still `[mine, below]`, and `props.hasSurvey` still returns `below` untouched.
