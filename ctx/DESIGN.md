@@ -234,7 +234,7 @@ Two figures the pane showed without a reference point, and one cosmetic tighteni
 - **The footer** (`SessionMode`), where the probe drew it. It shares the first footer row with claude-hud, Arsenal's launcher and Waypoints' plan label, and was judged too small for all of them.
 - **A separate `pace` mod.** A mod cannot draw into another mod's row, so it would be a third band row under ctx and agent-pulse, or the crowded footer.
 - **Arsenal's pane.** It is a remote control, and its pane is not always open; a gauge that has to be opened is not a gauge.
-- **A Desktop footer.** Not needed: Desktop draws the band (see Principles).
+- **A Desktop footer for the pace.** Not needed: Desktop draws the band (see Principles). The footer keeps its one number, the fill.
 
 **What it shows, by the kind of account.**
 
@@ -288,7 +288,7 @@ Before every release: `claude plugin test ctx`, `claude plugin validate .`, and 
 - **Not yet seen live:** `/ctx compact` compacting in a real session, and autokeep's instructions reaching a real auto-compaction. Running `/ctx compact` between turns should show exactly one "Compacted" toast.
 - **Mid-turn compaction:** `/ctx` runs immediately, so a compact during a turn may be skipped by the engine. The toast says so.
 - **Desktop:** the call that launches programs is CLI-only, so opening a memory file there shows "Couldn't open".
-- **The `ctx N%` Desktop footer is probably dead code.** It was written because Desktop was thought to have no band. Two Desktop screenshots (2026-10-18, before and after 0.7.0) show the band and no `ctx N%` in the footer. It is still in `register.tsx`, with its test; removing it is a later cleanup.
+- **The Desktop footer `ctx N%` never showed, up to 0.7.0.** It appended a label to `modes`, and Desktop does not draw those: with Waypoints' plan running (step 3 of 5, its band on screen and its `◎ plan` label appended to `modes` the same way) the footer held only `Auto`, `◆ Arsenal ▾` and the model. Desktop draws what a hook puts in a tree, as Arsenal's launcher shows. 0.7.1 wraps the engine's footer in a tree and puts `ctx N%` first, the way Arsenal does. Not yet seen live on Desktop. Waypoints' footer label has the same gap on Desktop (its band carries the plan there).
 - **Pace, seen live on 2026-10-18 (0.7.0).** On the terminal, full width: `🐾 39% (3h 8m/+2%) · 24% (4d 15h/-10%)` at the band's right edge; very narrow, the deltas only: `🐾 +1% · -10%`. On Desktop the band shows the pace in full, with the percent green, a small delta over pace yellow and a delta under pace green. The person judged it working by eye, so the colors (`success` standing in for the HUD's blue) and the 130 / 100 / 80 width steps stay as they are. Not yet seen: a `spend_limit` window and an API account's session total in the band (untested on a real account), and the work PC.
 - **`rateLimits` is what the last response reported.** Before a session's first reply it is empty, and between replies the percent can be a few minutes old while the countdown is current. The delta is computed from both, so it drifts from the HUD's by the staleness of the percent.
 - **Token estimates** for single results are characters divided by a learned ratio. They improve as the session goes on but stay approximate, hence the `~`.
@@ -315,3 +315,4 @@ Before every release: `claude plugin test ctx`, `claude plugin validate .`, and 
 | 0.6.1 | Reference points: the session total (pane) as the turn's denominator, a turn count beside the trend, a tighter fill text in the band |
 | 0.6.2 | Cosmetic: the session total in green, the mod's version at the foot of the pane |
 | 0.7.0 | The plan's pace in the band (the HUD's format and color rule) for subscriptions, the session total for API accounts; the scope rule widened to both budgets |
+| 0.7.1 | Fix: the Desktop footer's `ctx N%` is a tree around the engine's footer, since Desktop does not draw the labels in `modes` |
