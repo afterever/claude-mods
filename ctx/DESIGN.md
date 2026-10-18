@@ -275,7 +275,7 @@ The columns are a starting point and are to be tuned by looking at a real termin
 
 **Out of scope on purpose:** a pane section for the windows (the band is the whole feature), history of past windows, a forecast of when a limit runs out, and the HUD's other usage options (bars, remaining-percent mode, reset as wall-clock time).
 
-### 0.8.0: the look (design)
+### 0.8.0: the look
 
 **The problem.** In two days `agent-pulse`, `waypoints` 2.0 and `subagent-progress` 2.1 got a shared look: a palette whose colours shade from a core to a glow, motion in steps (`off` / `subtle` / `full`), one-shot sparkles and sweeps, and SVG on Desktop. ctx, in the same band, still draws flat theme keys, and the person finds it plain next to them. Its bar is the worst of it. On a 1M window at 8% everything used fits in about 1.3 of the band's 16 cells, so the eighth-block bar draws `▎▎▍` slivers in four colours, each over the next one's background, followed by 13 dots. It reads as scraps, not as a gauge.
 
@@ -404,6 +404,7 @@ Before every release: `claude plugin test ctx`, `claude plugin validate .`, and 
 
 ## Known limits and open questions
 
+- **0.8.0's look is not yet seen live** (2026-10-18): the person tests it by eye in a new session. Unanswered by a probe, and so to watch for: whether a `Client`'s `Text` keeps the hover link between the pane's bar and its rows (the typings say `ClientElements` keeps `hover`), whether `~` and `≈` are one cell wide in Windows Terminal, and the timings, which are first guesses to tune.
 - **Not yet seen live:** `/ctx compact` compacting in a real session, and autokeep's instructions reaching a real auto-compaction. Running `/ctx compact` between turns should show exactly one "Compacted" toast.
 - **Mid-turn compaction:** `/ctx` runs immediately, so a compact during a turn may be skipped by the engine. The toast says so.
 - **Desktop:** the call that launches programs is CLI-only, so opening a memory file there shows "Couldn't open".
@@ -437,3 +438,4 @@ Before every release: `claude plugin test ctx`, `claude plugin validate .`, and 
 | 0.7.0 | The plan's pace in the band (the HUD's format and color rule) for subscriptions, the session total for API accounts; the scope rule widened to both budgets |
 | 0.7.1 | Fix: the Desktop footer's `ctx N%` is a tree around the engine's footer, since Desktop does not draw the labels in `modes` |
 | 0.7.2 | The Desktop footer is a switch, `/ctx footer on`, off by default: the band already shows the fill, and ctx cannot see the band collapsed |
+| 0.8.0 | The look: palette colours that follow agent-pulse, whole cells in the band, Tide water, growth glow, breathing near auto-compact, compaction sweep, an SVG bar on Desktop |

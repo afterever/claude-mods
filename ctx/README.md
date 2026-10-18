@@ -8,7 +8,8 @@ terminal. It only observes. It never compacts, rewrites or turns anything off un
 
 - **The band** is one line above the prompt: a small bar, the fill, a trend sparkline, the last
   turn's cost, the plan's pace (or an API account's session total) at the right, and a 📊 button
-  that opens the pane.
+  that opens the pane. Each category in use gets at least one whole cell of the bar, so the split
+  reads even on a nearly empty 1M window, and the free space is water (`████≈~~~~~~~~~~░`).
 - **The pane** is the full breakdown: categories, trend, cost, MCP servers, memory files, skills,
   agents, the heaviest results and what has gone unused.
 - **The Desktop app** draws the same band.
@@ -78,6 +79,33 @@ the prompt. In the fullscreen layout (110+ columns) this docks beside the transc
 Whether the pane was open, autokeep and cost are remembered between sessions. Exact mode is not: an
 exact count costs a token-count call per change, so each session starts on the estimate.
 
+### The look
+
+ctx shares its look with Agent-Pulse, Waypoints and subagent-progress. Two settings, in `/config` →
+ctx:
+
+| Setting | Values | Default |
+| --- | --- | --- |
+| `palette` | `follow`, `ember`, `claude`, `neon`, `mono` | `follow` |
+| `animation` | `follow`, `off`, `subtle`, `full` | `follow` |
+
+`follow` takes Agent-Pulse's own setting (`ember` and `subtle` when it is not installed). In `ember`
+and `neon` each category has a colour of its own that shades along its cells, and the free space is
+water. `claude` and `mono` keep the engine's category colours and dotted free space, as before 0.8.
+
+Every effect means something:
+
+| Effect | Means | Levels |
+| --- | --- | --- |
+| The foam at the water's edge laps; at `full` the water drifts | the room left | `subtle`, `full` |
+| The cells a turn added shimmer for a moment | what that turn ate | `subtle`, `full` |
+| The `ctx` word and the foam breathe amber, then red | auto-compact is near | `subtle`, `full` (`off`: still, in the hot colour) |
+| A wave runs back over the freed cells | a compaction gave room back | `full` |
+| The trend's newest point pulses | a turn is running | `subtle`, `full` |
+
+On Claude Desktop the band's bar is a small SVG pill with the same meaning; the pane's bar stays
+text there, so pointing at a category still lights its row.
+
 ### What to read first
 
 - **The bar and the fill** (`81.9k/1M·8%`): how full the window is. Green below 50%, amber to 80%,
@@ -100,8 +128,8 @@ exact count costs a token-count call per change, so each session starts on the e
 ## Requirements
 
 - A Claude Code build that loads mods (plugins that register `hooks`).
-- Version 0.7.2's tests run on Claude Code 2.1.302, and 0.7.0 ran live on it, on the terminal and
-  Claude Desktop (the pace in the band). The engine API ctx uses was checked against build 2.1.288 (see
+- Version 0.8.0's tests run on Claude Code 2.1.303. 0.7.0 ran live on 2.1.302, on the terminal and
+  Claude Desktop (the pace in the band); 0.8.0's look is still to be seen live. The engine API ctx uses was checked against build 2.1.288 (see
   [DESIGN.md](./DESIGN.md)); no older minimum has been tried.
 
 ## Develop
