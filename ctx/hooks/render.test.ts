@@ -368,8 +368,8 @@ test('compact keeps the files and requests, toasts the drop, marks the sparkline
   await $.session.measure(measure(30_000))
   await $.session.measure(measure(42_000))
   await clock.settle()
-  // (the Messages row shares the color: its bar run and swatch are not bold)
-  const lit = (await ui.findAll({ type: 'Text' })).filter(t => t.props.color === 'permission' && t.props.bold)
+  // in the water's colour (0.8.0); the Messages row's bar run and swatch are not bold
+  const lit = (await ui.findAll({ type: 'Text' })).filter(t => t.props.color === '#9fa8e0' && t.props.bold)
   expect(lit).toHaveLength(1)
   expect(lit[0]!.text).toBe('▁')
 })
@@ -831,4 +831,74 @@ test('animation off keeps the hot ctx word still', { options: { animation: 'off'
   expect(await tides(band)).toEqual([])
   const word = ((await band.findAll({ type: 'Text', text: 'ctx' })) as any[]).pop()
   expect(word.props.color).toBe('error')
+})
+
+// 0.8.0, the look in the pane
+const mountPane = ($: Engine, cols = 48) => $.ui.mount({ plugin: 'ctx', surface: 'terminal', component: 'Pane', requestId: 'ctx', props: paneProps(cols) })
+const EMBER = { tool: '#d97757', water: '#9fa8e0', amber: '#f6d36b', red: '#ff5c5c' }
+
+test('the pane bar is exact, in palette colours, with water', async ($, on) => {
+  const clock = world(on, [])
+  await $.session.measure(measure(36_500))
+  await clock.settle()
+  const bar = await barTide(await mountPane($))
+  expect(bar?.width).toBe(48)
+  const glyphs = bar?.props.cells.map((c: { ch: string }) => c.ch).join('') as string
+  expect(glyphs).toHaveLength(48)
+  expect(glyphs).toMatch(/^[█▏▎▍▌▋▊▉]+≈~+░+$/)
+  expect(bar?.props.cells.some((c: { color: string }) => c.color === EMBER.tool)).toBe(true)
+})
+
+test('swatches match their category', async ($, on) => {
+  const clock = world(on, [])
+  await $.session.measure(measure(36_500))
+  await clock.settle()
+  const swatches = ((await (await mountPane($)).findAll({ type: 'Text', text: '■' })) as any[]).map(t => t.props.color)
+  expect(swatches).toContain(EMBER.tool)
+})
+
+test('the newest sparkline point pulses while a turn runs', async ($, on) => {
+  const clock = world(on, [])
+  on('turn.start', async (_$, e) => ({ turnId: e.turnId }))
+  on('turn.complete', async () => ({ text: '' }))
+  for (const t of [20_000, 26_000]) await $.session.measure(measure(t))
+  await clock.settle()
+  await $.turn.start({ text: 'go', turnId: 't1' } as any)
+  const pane = await mountPane($)
+  const pulse = async () => (await tides(pane)).filter(p => p.width === 1)
+  expect(await pulse()).toHaveLength(1)
+  await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' } as any)
+  expect(await pulse()).toHaveLength(0)
+})
+
+test('section gauges take their category colour', async ($, on) => {
+  const clock = world(on, [])
+  await $.session.measure(measure(36_500))
+  await clock.settle()
+  const fills = ((await (await mountPane($)).findAll({ type: 'Text' })) as any[]).filter(t => /^█+[▏▎▍▌▋▊▉]?$|^[▏▎▍▌▋▊▉]$/.test(t.text)).map(t => t.props.color)
+  // MCP tools in agent-pulse's agent colour, no longer all `claude`
+  expect(fills).toContain('#8cc7b5')
+  expect(fills).not.toContain('claude')
+})
+
+test('heat comes from the palette', async ($, on) => {
+  const clock = world(on, [])
+  for (const t of [300_000, 400_000, 500_000, 800_000]) await $.session.measure(measure(t))
+  await clock.settle()
+  const pane = await mountPane($)
+  const warn = ((await pane.findAll({ type: 'Text' })) as any[]).find(t => t.text.startsWith('⚠ Auto-compact is close'))
+  expect(warn.props.color).toBe(EMBER.red)
+  const left = ((await pane.findAll({ type: 'Text' })) as any[]).find(t => t.text.includes('turns to auto-compact'))
+  expect(left.props.color).toBe(EMBER.red)
+})
+
+test('claude palette: the pane keeps 0.7 colours', { options: { palette: 'claude' } }, async ($, on) => {
+  const clock = world(on, [])
+  for (const t of [300_000, 400_000, 500_000, 800_000]) await $.session.measure(measure(t))
+  await clock.settle()
+  const pane = await mountPane($)
+  const warn = ((await pane.findAll({ type: 'Text' })) as any[]).find(t => t.text.startsWith('⚠ Auto-compact is close'))
+  expect(warn.props.color).toBe('error')
+  expect(((await pane.findAll({ type: 'Text', text: '■' })) as any[]).map(t => t.props.color)).toContain('permission')
+  expect(await barText(pane)).toMatch(/·+/)
 })

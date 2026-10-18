@@ -330,3 +330,15 @@ export function breath(color: string, steps = 20): string[] {
   const dim = mix(color, '#000000', 0.55)
   return Array.from({ length: steps }, (_, i) => mix(dim, color, (1 - Math.cos((i / steps) * 2 * Math.PI)) / 2))
 }
+
+/** Amber, orange, red for the pane's heat: the palette's scale, or the theme keys of 0.7 in claude and mono. */
+export function heatKeys(look: Look): readonly [string, string, string] {
+  return shades(look) ? paletteOf(look.palette).heat : ['warning', 'warning', 'error']
+}
+
+/** The sparkline's `n` past glyphs: a dimmed core shading to the glow; none in a palette that follows the theme. */
+export function sparkColors(look: Look, tint: Tint | undefined, n: number): string[] | undefined {
+  if (!shades(look) || !tint || !/^#/.test(tint.core)) return undefined
+  const from = mix(tint.core, '#000000', 0.35)
+  return Array.from({ length: n }, (_, i) => mix(from, tint.glow, n > 1 ? i / (n - 1) : 1))
+}

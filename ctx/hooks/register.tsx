@@ -8,7 +8,7 @@ import { addRecent, clipAsk, keepInstructions, mergeInstructions, shouldWarn, wa
 import { addEater, addUsage, calibrate, DEFAULT_CPT, EMPTY_USAGE, estimateTokens, idleSessions, logSession, toolLabel, usageOf } from './usage'
 import { bandPace, paceStep, type PacePiece } from './pace'
 import { VERSION } from './version'
-import { breath, categoryTints, paletteOf, resolveLook, waterOf, type Look } from './palette'
+import { breath, categoryTints, heatKeys, paletteOf, resolveLook, sparkColors, waterOf, type Look, type Tint } from './palette'
 import { frameAt, type TideProps } from './tide'
 import {
   bandSuffix,
@@ -152,6 +152,7 @@ const GROWTH_LIVE_MS = 1800
 const SWEEP_LIVE_MS = 1500
 // A compaction is heard twice (the drop on session.measure, then afterCompaction): one sweep
 const SWEEP_GUARD_MS = 2000
+const turnRunning = atom({ plugin: 'ctx', key: 'turnRunning' } as const, false)
 
 async function noteFx($: EngineInterface, kind: keyof CtxFx, delta: number) {
   if (delta <= 0) return
@@ -523,24 +524,48 @@ function Fill({ el, s }: { el: El; s: CtxSnapshot }) {
 // The fill per turn: dim history, the latest reading lit in the fill's color
 // The fill per turn: dim history, compactions lit in blue, the latest
 // reading in the fill's color
-function Spark({ el, values, marks, width, percent }: { el: El; values: readonly number[]; marks: readonly boolean[]; width: number; percent: number }) {
+// With `shade` the past glyphs take the look's colours (Messages' core to glow), and `mark` is the
+// compactions' colour (the water's); `pulse` draws the newest point while a turn runs
+function Spark({
+  el,
+  values,
+  marks,
+  width,
+  percent,
+  shade,
+  mark = 'permission',
+  pulse,
+}: {
+  el: El
+  values: readonly number[]
+  marks: readonly boolean[]
+  width: number
+  percent: number
+  shade?: (n: number) => string[] | undefined
+  mark?: string
+  pulse?: (glyph: string) => unknown
+}) {
   const { Box, Text } = el
   const glyphs = [...sparkline(values, width)]
   const flags = alignFlags(marks, values.length).slice(-glyphs.length)
-  const runs: { text: string; kind: 'past' | 'mark' | 'last' }[] = []
+  const colors = shade?.(glyphs.length)
+  const runs: { text: string; kind: 'past' | 'mark' | 'last'; color?: string }[] = []
   glyphs.forEach((g, i) => {
     const kind = i === glyphs.length - 1 ? 'last' : flags[i] ? 'mark' : 'past'
+    const color = kind === 'past' ? colors?.[i] : undefined
     const run = runs[runs.length - 1]
-    if (run && run.kind === kind) run.text += g
-    else runs.push({ text: g, kind })
+    if (run && run.kind === kind && run.color === color) run.text += g
+    else runs.push({ text: g, kind, ...(color ? { color } : {}) })
   })
   return (
     <Box flexDirection="row" flexShrink={0}>
       {runs.map(r =>
         r.kind === 'past' ? (
-          <Text color="claude" dimColor>{r.text}</Text>
+          r.color ? <Text color={r.color}>{r.text}</Text> : <Text color="claude" dimColor>{r.text}</Text>
         ) : r.kind === 'mark' ? (
-          <Text color="permission" bold>{r.text}</Text>
+          <Text color={mark} bold>{r.text}</Text>
+        ) : pulse ? (
+          pulse(r.text)
         ) : (
           <Text color={fillColor(percent)} bold>{r.text}</Text>
         ),
@@ -579,11 +604,20 @@ function Pace({ el, pieces }: { el: El; pieces: PacePiece[] }) {
   )
 }
 
-function Swatch({ el, kind, color, scope }: { el: El; kind: string; color: string; scope: string }) {
+function Swatch({ el, kind, color, scope, water }: { el: El; kind: string; color: string; scope: string; water?: string }) {
   const { Text } = el
   const hover = { scope: SCOPE + scope, inverse: true }
-  if (kind === 'free') return <Text color="inactive" dimColor hover={hover}>{FREE_GLYPH}</Text>
-  if (kind === 'buffer') return <Text color={color} dimColor hover={hover}>{BUFFER_GLYPH}</Text>
+  if (kind === 'free')
+    return water ? (
+      <Text color={water} dimColor hover={hover}>
+        ~
+      </Text>
+    ) : (
+      <Text color="inactive" dimColor hover={hover}>
+        {FREE_GLYPH}
+      </Text>
+    )
+  if (kind === 'buffer') return <Text color={water ?? color} dimColor hover={hover}>{BUFFER_GLYPH}</Text>
   return <Text color={color} dimColor={kind === 'deferred'} hover={hover}>■</Text>
 }
 
@@ -739,6 +773,11 @@ export const register: Register = (on, options) => {
   // and a clean one is kept, here and for later sessions, to learn prices from
   on('turn.start', async ($, e, next) => {
     try {
+      await update($, turnRunning, () => true)
+    } catch {
+      // the pulse is decoration
+    }
+    try {
       const was = (await read($, spend)).samples
       const s = await update($, spend, startTurn)
       // state hands back copies: a new sample shows in the length or the newest one
@@ -776,6 +815,7 @@ export const register: Register = (on, options) => {
   on('turn.complete', async ($, e, next) => {
     const r = await next(e)
     try {
+      if (!e.agentId) await update($, turnRunning, () => false)
       await update($, spend, s => turnDone(s, e.agentId))
     } catch {
       // the answer stands either way
@@ -1000,11 +1040,24 @@ export const register: Register = (on, options) => {
     const w = await warning($)
     await read($, tick)
     const now = await $.clock.now()
+    const paneFx = await read($, fx)
+    const running = await read($, turnRunning)
     // the body as the surface measured it: the person may drag the dock narrower
     const width = Math.max(20, e.props.bodyColumns || PANE_ARGS.columns)
     if (!s) return <Text dimColor>No context data yet. It fills in after the first response.</Text>
 
     const used = Math.max(1, s.total)
+    // the look: the rows' tints, the water, the heat scale; claude and mono keep 0.7's colours
+    const tints = categoryTints(look, s.rows)
+    const water = waterOf(look)
+    const pal = paletteOf(look.palette)
+    const hk = heatKeys(look)
+    const Client = 'Client' in el ? (el as { Client: any }).Client : undefined
+    const moving = e.surface === 'terminal' && Client !== undefined && look.level !== 'off'
+    // each section's gauge in its category's colour (slash commands share the skills')
+    const GAUGE_ROW: Record<string, string> = { mcp: 'MCP tools', memory: 'Memory files', skills: 'Skills', agents: 'Custom agents', commands: 'Skills' }
+    const gaugeColor = (key: string) =>
+      !water ? 'claude' : key === 'eaters' ? pal.hex.tool : key === 'dead' ? pal.hex.idle : ((tints[GAUGE_ROW[key] ?? ''] as Tint | undefined)?.core ?? pal.hex.tool)
     const section = (key: string, hotkey: string, title: string, tokens: number, count: string) => {
       const g = shareBar(tokens, used, GAUGE)
       return (
@@ -1013,7 +1066,7 @@ export const register: Register = (on, options) => {
             <Button key={'sec-' + key} label={`${open.includes(key) ? '▾' : '▸'} ${title}`} hotkey={hotkey} plain onPress={() => toggleOpen($, key)} />
           </Box>
           <Box flexDirection="row" flexShrink={0}>
-            <Text color="claude">{g.fill}</Text>
+            <Text color={gaugeColor(key)}>{g.fill}</Text>
             <Text color="inactive" dimColor>{g.rest}</Text>
           </Box>
           <Text dimColor>{fmtTokens(tokens).padStart(6)}</Text>
@@ -1066,7 +1119,7 @@ export const register: Register = (on, options) => {
     const sumOf = (xs: { tokens: number }[]) => xs.reduce((a, x) => a + x.tokens, 0)
     const deadTokens = sumOf(idleServers) + sumOf(idleSkills) + sumOf(idleAgents)
     const eatenTokens = eaten.reduce((a, x) => a + estimateTokens(x.chars, cpt), 0)
-    const heat = (t: number) => (t >= TOAST_TOKENS ? 'error' : t >= 5000 ? 'warning' : 'inactive')
+    const heat = (t: number) => (t >= TOAST_TOKENS ? hk[2] : t >= 5000 ? hk[0] : 'inactive')
     const status = want !== s.detail ? 'counting…' : s.detail === 'full' ? 'exact count' : 'estimated'
 
     return (
@@ -1078,7 +1131,7 @@ export const register: Register = (on, options) => {
           {Fill({ el, s })}
         </Box>
         {w.level !== 'none' && (
-          <Text color={w.level === 'imminent' ? 'error' : 'warning'} bold wrap="wrap">
+          <Text color={w.level === 'imminent' ? hk[2] : hk[0]} bold wrap="wrap">
             {(w.level === 'imminent' ? '⚠ Auto-compact is close' : '⚠ Auto-compact is coming') + ' · c compacts on your terms'}
           </Text>
         )}
@@ -1092,19 +1145,56 @@ export const register: Register = (on, options) => {
             {rates && after !== undefined && after < winTokens && muted(`  c compact first: re-writes ~${fmtTokens(after)} ≈ ~${fmtUsd(rewrite(after, rates))}`)}
           </Box>
         )}
-        {Bar({ el, runs: barRuns(s, width) })}
+        {(() => {
+          // the exact bar in the look's colours, as cells, so it can lap and glow like the band's
+          const cells: Cell[] = barRuns(s, width, tints, water).flatMap(r =>
+            [...r.text].map(ch => ({ ch, color: r.color, scope: r.scope, ...(r.bg ? { bg: r.bg } : {}), ...(r.dim ? { dim: true } : {}) })),
+          )
+          const t = tideOf(cells, s.max, paneFx, now, w.level)
+          return moving && moves(t) && Client ? (
+            <Client key="ctx-pane-tide" module="./tide.tsx" props={t} width={cells.length} height={1} />
+          ) : (
+            Cells({ el, cells: frameAt(t, 0, {}) })
+          )
+        })()}
         {marker && <Text color="inactive" dimColor>{marker}</Text>}
         {past.length >= 2 && (
           <Box flexDirection="column">
             <Box flexDirection="row" columnGap={1}>
               <Text color="inactive" dimColor>trend</Text>
-              {Spark({ el, values: past, marks, width: Math.max(8, Math.min(HISTORY_LIMIT, width - 6 - (turnCount ? turnCount.length + 1 : 0))), percent: s.percent })}
+              {Spark({
+                el,
+                values: past,
+                marks,
+                width: Math.max(8, Math.min(HISTORY_LIMIT, width - 6 - (turnCount ? turnCount.length + 1 : 0))),
+                percent: s.percent,
+                shade: n => sparkColors(look, tints['Messages'], n),
+                ...(water ? { mark: water.water } : {}),
+                ...(running && moving && Client
+                  ? {
+                      pulse: (glyph: string) => (
+                        <Client
+                          key="ctx-spark-pulse"
+                          module="./tide.tsx"
+                          props={{
+                            cells: [{ ch: glyph, color: fillColor(s.percent), scope: 'trend' }],
+                            level: 'subtle',
+                            edge: -1,
+                            breathe: { at: [0], colors: breath(tints['Messages']?.core ?? pal.hex.tool) },
+                          }}
+                          width={1}
+                          height={1}
+                        />
+                      ),
+                    }
+                  : {}),
+              })}
               {turnCount && <Text color="inactive" dimColor>{turnCount}</Text>}
             </Box>
             <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
               <Text color="inactive" dimColor>{trendLabel({ delta: pace.delta, perTurn: pace.perTurn })}</Text>
               {pace.turnsLeft !== undefined && (
-                <Text color={pace.turnsLeft <= 3 ? 'error' : pace.turnsLeft <= 10 ? 'warning' : 'inactive'} dimColor={pace.turnsLeft > 10} bold={pace.turnsLeft <= 10}>
+                <Text color={pace.turnsLeft <= 3 ? hk[2] : pace.turnsLeft <= 10 ? hk[0] : 'inactive'} dimColor={pace.turnsLeft > 10} bold={pace.turnsLeft <= 10}>
                   {`· ~${pace.turnsLeft} ${pace.turnsLeft === 1 ? 'turn' : 'turns'} to auto-compact`}
                 </Text>
               )}
@@ -1149,7 +1239,7 @@ export const register: Register = (on, options) => {
           .filter(r => r.tokens > 0 || r.kind === 'free')
           .map(r => (
             <Box flexDirection="row" width="100%" columnGap={1}>
-              {Swatch({ el, kind: r.kind, color: r.color, scope: r.name })}
+              {Swatch({ el, kind: r.kind, color: tints[r.name]?.core ?? r.color, scope: r.name, ...(water ? { water: water.water } : {}) })}
               <Box flexGrow={1} flexShrink={1}>
                 <Text wrap="truncate-end" dimColor={r.kind === 'deferred'} hover={{ scope: SCOPE + r.name, bold: true }}>
                   {r.name}
@@ -1200,7 +1290,7 @@ export const register: Register = (on, options) => {
               <Text>{'  Slash commands'}</Text>
             </Box>
             <Box flexDirection="row" flexShrink={0}>
-              <Text color="claude">{shareBar(s.commandTokens, used, GAUGE).fill}</Text>
+              <Text color={gaugeColor('commands')}>{shareBar(s.commandTokens, used, GAUGE).fill}</Text>
               <Text color="inactive" dimColor>{shareBar(s.commandTokens, used, GAUGE).rest}</Text>
             </Box>
             <Text dimColor>{fmtTokens(s.commandTokens).padStart(6)}</Text>
@@ -1236,7 +1326,7 @@ export const register: Register = (on, options) => {
                   <Text dimColor wrap="truncate-end">{'    ' + v.name}</Text>
                 </Box>
                 {v.streak >= 2 ? (
-                  <Text color={v.streak >= 5 ? 'warning' : 'inactive'} dimColor={v.streak < 5}>{`idle ${v.streak} sessions`}</Text>
+                  <Text color={v.streak >= 5 ? hk[0] : 'inactive'} dimColor={v.streak < 5}>{`idle ${v.streak} sessions`}</Text>
                 ) : (
                   <Text color="inactive" dimColor>no calls</Text>
                 )}

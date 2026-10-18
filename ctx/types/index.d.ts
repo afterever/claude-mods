@@ -179,6 +179,8 @@ declare module 'claude-code' {
       paceTick: number
       /** The look's effect events (0.8.0), so a hot reload keeps their ids. */
       fx: CtxFx
+      /** A main-loop turn is running: the sparkline's newest point pulses. */
+      turnRunning: boolean
     }
   }
 }

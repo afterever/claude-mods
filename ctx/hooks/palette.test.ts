@@ -1,6 +1,6 @@
 import { test, expect } from 'claude-code/testing'
 
-import { breath, categoryTints, paletteOf, resolveLook, waterOf, type Look } from './palette'
+import { breath, categoryTints, heatKeys, paletteOf, resolveLook, sparkColors, waterOf, type Look } from './palette'
 
 const row = (name: string, color = 'promptBorder') => ({ name, color, kind: 'used' })
 const LISTED = ['Messages', 'System prompt', 'System tools', 'MCP tools', 'Memory files', 'Skills', 'Custom agents']
@@ -78,4 +78,18 @@ test('breath rises and falls; a theme key holds still', () => {
   expect(b[1]).toBe(b[19]!)
   expect(b[0]).not.toBe('#ff5c5c')
   expect(breath('error')).toEqual(['error'])
+})
+
+test('heat: the palette scale in ember and neon, the theme keys of 0.7 in claude and mono', () => {
+  expect(heatKeys({ palette: 'ember', level: 'subtle' })).toEqual(['#f6d36b', '#ff9a4d', '#ff5c5c'])
+  expect(heatKeys({ palette: 'claude', level: 'subtle' })).toEqual(['warning', 'warning', 'error'])
+  expect(heatKeys({ palette: 'mono', level: 'off' })).toEqual(['warning', 'warning', 'error'])
+})
+
+test('sparkColors shades a dimmed core to the glow; none for a theme key', () => {
+  const c = sparkColors({ palette: 'ember', level: 'subtle' }, { core: '#d97757', glow: '#f3a97c' }, 5)!
+  expect(c).toHaveLength(5)
+  expect(c[4]).toBe('#f3a97c')
+  expect(c[0]).not.toBe('#d97757')
+  expect(sparkColors({ palette: 'claude', level: 'subtle' }, { core: 'permission', glow: 'permission' }, 5)).toBeUndefined()
 })
