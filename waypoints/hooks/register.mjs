@@ -530,7 +530,7 @@ export function register(on, opts) {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const below = await next(e)
     if (e.props && e.props.hasSurvey) return below
-    if (!G || hidden || !(G.status === 'running' || isRecent(G))) return below
+    if (!bandUp()) return below
     const el = $.ui.resolve(e)
     // a Client names its module as a literal here, where the engine reads it from
     const pulse = el.Client ? (key, props, width) => el.Client({ key, module: './pulse.mjs', props, width, height: 1 }) : undefined
@@ -551,10 +551,19 @@ export function register(on, opts) {
     return el.Box({ flexDirection: 'column', children: below ? [mine, below] : [mine] })
   })
 
-  // The footer shows even when the band is hidden or collapsed
+  // The footer shows even when the band is hidden or collapsed. Desktop does not
+  // draw the labels in `modes` (this one never showed there), only a tree, so
+  // there the engine's footer is wrapped, as arsenal's launcher and ctx do. The
+  // band shows the plan on Desktop, so the label is drawn only while it is away
   on('ui.render', { component: 'SessionMode' }, async ($, e, next) => {
     const label = footerLabel()
     if (!label) return next(e)
+    if (e.surface !== 'terminal') {
+      if (bandUp()) return next(e)
+      const footer = await next(e)
+      const { Box, Text } = $.ui.resolve(e)
+      return Box({ key: 'waypoints-footer', children: [Text({ children: [label] }), Text({ children: [' '] }), footer] })
+    }
     const modes = Array.isArray(e.props && e.props.modes) ? e.props.modes : []
     return next({ ...e, props: { ...e.props, modes: [...modes, label] } })
   })
@@ -576,6 +585,11 @@ async function openPane($) {
 }
 
 // ---------- words ----------
+
+// Whether the band draws: a goal that runs or ended lately, and not hidden
+function bandUp() {
+  return !!G && !hidden && (G.status === 'running' || isRecent(G))
+}
 
 function footerLabel() {
   if (!G) return ''

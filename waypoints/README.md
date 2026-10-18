@@ -9,7 +9,7 @@ Waypoints is a fork of Nate Herk's [goal-meter](https://github.com/nateherkai/cl
 Claude plans the work as tasks sized S, M or L with the mod's own tool, `mcp__waypoints__tasks`, then marks each one started and done. Everything on screen comes from that list.
 
 - **The band above the prompt:** the plan drawn as a **route**, a line of nodes and legs, each leg as long as its task is big (S, M or L). Finished legs are solid and shaded, the node a task starts from pulses while it runs, the last node is the destination `◎` (a `✦` once the plan is done). A long plan in a narrow window drops the legs and draws one glyph per task. Under it: what is running and who runs it, the next task, and the goal check's latest "not met yet" reason. In the header: tasks done, the percentage and the ETA at this goal's own pace.
-- **The footer:** `◎ goal 69% · ~15m`, in every view.
+- **The footer:** `◎ goal 69% · ~15m`, whether or not the band shows. On Claude Desktop, where the band already draws the plan, it appears in the footer only while the band is hidden with `/waypoints hide`.
 - **The pane:** `/waypoints` opens this chat's whole task trail (every task, how long each took, who is running which) and your other chats' goals from the last 12 hours (the newest 15; the heading counts them all), each with its own small route. It also **opens by itself** when a goal's first plan starts, without taking the keys from your prompt, unless you closed the pane during that goal.
 - **Claude Desktop:** the route is a drawn line instead of characters, with the same states and its own motion. Any surface that is not the terminal gets the drawn line.
 
@@ -61,6 +61,10 @@ The standing line is the one thing the global `CLAUDE.md` bullet used to do. If 
 For `strict` and `auto`, anything but `off` turns the setting on. `/goal clear` (or `stop`, `off`, `cancel`, `end`, `none`, `reset`) stops the goal in the same way. If Claude Code will not give the mod the name `/waypoints`, it registers `/waypoints-mod` instead.
 
 In the band, the **all tasks** button (or `g`) opens the pane. `g` is a button in the band, so it only works while the band shows; `/waypoints` always does.
+
+## What changed in 2.0.3
+
+Fixed: on Claude Desktop the footer's `◎ plan 44%` never showed, so `/waypoints hide` left no sign of a running plan. Desktop does not draw the labels a mod adds to the footer, only what it draws as a tree, so there the label is now a tree around the engine's footer. It shows only while the band is hidden, because the band already shows the plan; the terminal is unchanged.
 
 ## What changed in 2.0.2
 
