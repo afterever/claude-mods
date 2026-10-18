@@ -134,6 +134,11 @@ export type CtxSnapshot = {
   commandTokens: number
 }
 
+/** One effect event: its id (a one-shot plays once per id), when it landed, and the tokens it moved. */
+export type CtxFxEvent = { id: number; at: number; delta: number }
+/** The last growth (a turn added to the window) and the last sweep (a compaction freed room). */
+export type CtxFx = { growth?: CtxFxEvent; sweep?: CtxFxEvent }
+
 declare module 'claude-code' {
   interface PluginState {
     ctx: {
@@ -172,6 +177,8 @@ declare module 'claude-code' {
       limits: CtxLimit[]
       /** Bumped once a minute while there are windows, so the band's countdown moves. */
       paceTick: number
+      /** The look's effect events (0.8.0), so a hot reload keeps their ids. */
+      fx: CtxFx
     }
   }
 }

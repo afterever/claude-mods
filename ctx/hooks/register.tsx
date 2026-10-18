@@ -1,14 +1,15 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, SessionContextBreakdown, Timer } from 'claude-code'
 
-import type { CtxDetail, CtxLimit, CtxProjectLog, CtxSample, CtxServer, CtxSnapshot, CtxSpend, CtxWarn } from '../types'
-import type { BarRun } from './fmt'
+import type { CtxDetail, CtxFx, CtxLimit, CtxProjectLog, CtxSample, CtxServer, CtxSnapshot, CtxSpend, CtxWarn } from '../types'
+import type { BarRun, Cell } from './fmt'
 import type { ApiUsage, Piece, Rates } from './cost'
 import { addRecent, clipAsk, keepInstructions, mergeInstructions, shouldWarn, warnBadge, warnLevel, warnText } from './compact'
 import { addEater, addUsage, calibrate, DEFAULT_CPT, EMPTY_USAGE, estimateTokens, idleSessions, logSession, toolLabel, usageOf } from './usage'
 import { bandPace, paceStep, type PacePiece } from './pace'
 import { VERSION } from './version'
-import { resolveLook, type Look } from './palette'
+import { breath, categoryTints, paletteOf, resolveLook, waterOf, type Look } from './palette'
+import { frameAt, type TideProps } from './tide'
 import {
   bandSuffix,
   carry,
@@ -35,19 +36,24 @@ import {
 } from './cost'
 import {
   ago,
+  bandCells,
   barRuns,
+  breatheAt,
   BUFFER_GLYPH,
   compactMarker,
+  edgeOf,
   fillColor,
   FREE_GLYPH,
   fmtCount,
   fmtDelta,
   fmtShare,
   fmtTokens,
+  growthSpan,
   openerFor,
   shareBar,
   shortPath,
   sparkline,
+  sweepSpan,
   trend,
   trendLabel,
 } from './fmt'
@@ -139,6 +145,50 @@ const footerOn = atom({ plugin: 'ctx', key: 'footerOn' } as const, false)
 const limits = atom({ plugin: 'ctx', key: 'limits' } as const, [])
 const paceTick = atom({ plugin: 'ctx', key: 'paceTick' } as const, 0)
 const PACE_TICK_MS = 60000
+// The look's effect events (growth, sweep), and how long a one-shot is handed
+// to the bar after it landed: past that a redraw, a reload or a resume never replays it
+const fx = atom({ plugin: 'ctx', key: 'fx' } as const, {})
+const GROWTH_LIVE_MS = 1800
+const SWEEP_LIVE_MS = 1500
+// A compaction is heard twice (the drop on session.measure, then afterCompaction): one sweep
+const SWEEP_GUARD_MS = 2000
+
+async function noteFx($: EngineInterface, kind: keyof CtxFx, delta: number) {
+  if (delta <= 0) return
+  try {
+    const now = await $.clock.now()
+    await update($, fx, f => {
+      const last = f[kind]
+      if (kind === 'sweep' && last && now - last.at < SWEEP_GUARD_MS) return f
+      return { ...f, [kind]: { id: (last?.id ?? 0) + 1, at: now, delta } }
+    })
+  } catch {
+    // a missed effect is only a missed glow
+  }
+}
+
+// The bar's motion for the look in force: the foam laps and the water drifts,
+// the cells breathe near auto-compact, and a one-shot plays while it is live
+function tideOf(cells: Cell[], max: number, f: CtxFx, now: number, warn: CtxWarn): TideProps {
+  const edge = edgeOf(cells)
+  const props: TideProps = { cells, level: look.level === 'full' ? 'full' : 'subtle', edge }
+  if (look.level === 'off') return props
+  const p = paletteOf(look.palette)
+  const water = waterOf(look)
+  if (water && edge >= 0) props.lap = [water.foam, water.water]
+  if (water && look.level === 'full') props.drift = water.foam
+  if (warn !== 'none') props.breathe = { at: breatheAt(cells), colors: breath(p.heat[warn === 'imminent' ? 2 : 0]) }
+  if (f.growth && now - f.growth.at < GROWTH_LIVE_MS) props.growth = { id: f.growth.id, ...growthSpan(cells, f.growth.delta, max), colors: [...p.sparkle] }
+  if (look.level === 'full' && f.sweep && now - f.sweep.at < SWEEP_LIVE_MS) {
+    const span = sweepSpan(cells, f.sweep.delta, max)
+    const shore = cells[Math.max(0, edge - 1)]?.color ?? p.hex.tool
+    if (span.to > span.from) props.sweep = { id: f.sweep.id, ...span, shore, water: water?.water ?? shore, foam: water?.foam ?? shore }
+  }
+  return props
+}
+
+const moves = (t: TideProps) => Boolean(t.lap || t.breathe || t.growth || t.sweep || (t.level === 'full' && t.drift))
+
 // A compaction's summary when none has been seen yet, in tokens
 const SUMMARY_TOKENS = 8000
 
@@ -222,6 +272,7 @@ async function afterCompaction($: EngineInterface, before: number | undefined) {
   await refresh($)
   const s = await read($, snap)
   if (before === undefined || !s) return
+  await noteFx($, 'sweep', before - s.total)
   let text = `Compacted ${fmtTokens(before)} → ~${fmtTokens(s.total)} (${fmtDelta(s.total - before)})`
   if (await read($, costOn)) {
     const sp = await read($, spend)
@@ -447,6 +498,17 @@ function Bar({ el, runs }: { el: El; runs: BarRun[] }) {
   )
 }
 
+// The band's bar held still: one Text per run of like cells, each in its category's hover group
+function Cells({ el, cells }: { el: El; cells: Cell[] }) {
+  const runs: BarRun[] = []
+  for (const c of cells) {
+    const last = runs[runs.length - 1]
+    if (last && last.color === c.color && last.bg === c.bg && Boolean(last.dim) === Boolean(c.dim) && last.scope === c.scope) last.text += c.ch
+    else runs.push({ text: c.ch, color: c.color, scope: c.scope, ...(c.bg ? { bg: c.bg } : {}), ...(c.dim ? { dim: true } : {}) })
+  }
+  return Bar({ el, runs })
+}
+
 // "81.9k/1M·" dim, then the percent bold in green, amber or red
 function Fill({ el, s }: { el: El; s: CtxSnapshot }) {
   const { Box, Text } = el
@@ -620,7 +682,9 @@ export const register: Register = (on, options) => {
         if (prev !== undefined && tokens < prev * DROP_RATIO) {
           await update($, eaters, () => [])
           await update($, warned, () => 'none')
+          await noteFx($, 'sweep', prev - tokens)
         } else if (prev !== undefined) {
+          if (tokens > prev) await noteFx($, 'growth', tokens - prev)
           const chars = turnChars
           await update($, cptAtom, cpt => calibrate(cpt, chars, tokens - prev))
         }
@@ -817,6 +881,13 @@ export const register: Register = (on, options) => {
     const marks = await read($, compacted)
     const w = await warning($)
     const hot = w.level === 'imminent' ? 'error' : 'warning'
+    // the bar: whole cells in the look's colours; a Tide client while anything moves
+    const nowMs = await $.clock.now()
+    const cells = s ? bandCells(s, barWidth, categoryTints(look, s.rows), waterOf(look)) : []
+    const tide = s ? tideOf(cells, s.max, await read($, fx), nowMs, w.level) : undefined
+    const live = Boolean(tide && e.surface === 'terminal' && 'Client' in el && moves(tide))
+    const Client = 'Client' in el ? (el as { Client: any }).Client : undefined
+    const heat = paletteOf(look.palette).heat[w.level === 'imminent' ? 2 : 0]
     // the warning badge takes the sparkline's place on a band under 100 columns
     const cols = e.props.bodyColumns ?? 80
     const roomy = wide && (w.level === 'none' || cols >= 100)
@@ -839,8 +910,24 @@ export const register: Register = (on, options) => {
         <Box flexDirection="row" justifyContent="space-between" width="100%" columnGap={2}>
           {s ? (
             <Box flexDirection="row" columnGap={1} flexShrink={1}>
-              {w.level === 'none' ? <Text dimColor>ctx</Text> : <Text color={hot} bold>ctx</Text>}
-              {Bar({ el, runs: barRuns(s, barWidth) })}
+              {w.level === 'none' ? (
+                <Text dimColor>ctx</Text>
+              ) : live && Client ? (
+                <Client
+                  key="ctx-word"
+                  module="./tide.tsx"
+                  props={{ cells: [...'ctx'].map(ch => ({ ch, color: heat, scope: 'word' })), level: 'subtle', edge: -1, breathe: { at: [0, 1, 2], colors: breath(heat) } }}
+                  width={3}
+                  height={1}
+                />
+              ) : (
+                <Text color={hot} bold>ctx</Text>
+              )}
+              {live && Client && tide ? (
+                <Client key="ctx-tide" module="./tide.tsx" props={tide} width={barWidth} height={1} />
+              ) : (
+                Cells({ el, cells: tide ? frameAt(tide, 0, {}) : cells })
+              )}
               {Fill({ el, s })}
               {roomy && past.length >= 2 && Spark({ el, values: past, marks, width: 10, percent: s.percent })}
               {roomy && step !== undefined && step !== 0 && <Text dimColor>{fmtDelta(step)}</Text>}

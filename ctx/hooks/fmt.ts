@@ -204,6 +204,37 @@ function paint(parts: { name: string; color: string; kind: 'used' | 'free' | 'bu
   return cells
 }
 
+// Where the used cells end: the water's edge, else the buffer, else the bar's end
+function shoreEnd(cells: readonly Cell[]): number {
+  const edge = edgeOf(cells)
+  if (edge >= 0) return edge
+  const buf = cells.findIndex(c => c.ch === BUFFER_GLYPH)
+  return buf >= 0 ? buf : cells.length
+}
+
+const spanCells = (cells: readonly Cell[], delta: number, max: number) => Math.max(1, Math.round((delta / (max || 1)) * cells.length))
+
+/** The cells a turn added: the last used ones before the edge, at least one. */
+export function growthSpan(cells: readonly Cell[], delta: number, max: number): { from: number; to: number } {
+  const to = shoreEnd(cells)
+  return { from: Math.max(0, to - spanCells(cells, delta, max)), to }
+}
+
+/** The cells a compaction freed: from the edge onward, never into the buffer; empty with no water. */
+export function sweepSpan(cells: readonly Cell[], delta: number, max: number): { from: number; to: number } {
+  const edge = edgeOf(cells)
+  if (edge < 0) return { from: cells.length, to: cells.length }
+  const buf = cells.findIndex((c, i) => i > edge && c.ch === BUFFER_GLYPH)
+  return { from: edge, to: Math.min(buf >= 0 ? buf : cells.length, edge + spanCells(cells, delta, max)) }
+}
+
+/** What breathes near auto-compact: the foam, or the last used cell when no water is left. */
+export function breatheAt(cells: readonly Cell[]): number[] {
+  const edge = edgeOf(cells)
+  if (edge >= 0) return [edge]
+  return [Math.max(0, shoreEnd(cells) - 1)]
+}
+
 /** The first free cell (the water's edge), or -1 on a window with none. */
 export function edgeOf(cells: readonly Cell[]): number {
   return cells.findIndex(c => c.ch === FOAM_GLYPH || c.ch === FREE_GLYPH)

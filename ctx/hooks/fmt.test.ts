@@ -5,6 +5,9 @@ import { categoryTints } from './palette'
 import {
   ago,
   bandCells,
+  breatheAt,
+  growthSpan,
+  sweepSpan,
   barRuns,
   barSegments,
   edgeOf,
@@ -272,4 +275,32 @@ test('barRuns with tints and water draws hex and ~', () => {
   expect(free).toMatch(/^≈~+$/)
   // without them, the bar is today's
   expect(barRuns(snap, 60)[0]!.color).toBe('permission')
+})
+
+// The cells an effect plays on, from a 16-cell band
+const band16 = bandCells(snap8, 16, tints, WATER)
+const fullBand = bandCells(
+  { ...snap8, rows: snap8.rows.map(r => (r.kind === 'free' ? { ...r, tokens: 0 } : r.name === 'Messages' ? { ...r, tokens: 950000 } : r)) },
+  16,
+  tints,
+  WATER,
+)
+
+test('growthSpan: the last used cells before the edge, at least one', () => {
+  expect(growthSpan(band16, 10_000, 1_000_000)).toEqual({ from: 3, to: 4 })
+  expect(growthSpan(band16, 200_000, 1_000_000)).toEqual({ from: 1, to: 4 })
+  // no water left: the cells before the buffer
+  expect(growthSpan(fullBand, 10_000, 1_000_000)).toEqual({ from: 14, to: 15 })
+})
+
+test('sweepSpan: the freed cells from the edge, never the buffer', () => {
+  expect(sweepSpan(band16, 400_000, 1_000_000)).toEqual({ from: 4, to: 10 })
+  expect(sweepSpan(band16, 5_000_000, 1_000_000)).toEqual({ from: 4, to: 15 })
+  const none = sweepSpan(fullBand, 400_000, 1_000_000)
+  expect(none.to - none.from).toBe(0)
+})
+
+test('breatheAt: the foam, or the last used cell on a full window', () => {
+  expect(breatheAt(band16)).toEqual([4])
+  expect(breatheAt(fullBand)).toEqual([14])
 })
