@@ -1,20 +1,33 @@
 import { test, expect } from 'claude-code/testing'
 
 import {
+  MORE_CELLS,
+  NO_OWN,
   TWO_COLUMNS,
+  clipTo,
   commandLine,
+  draftNote,
   effortLabel,
   failedNote,
+  flipped,
+  hasOwn,
   hasRows,
   headerNote,
   launchColumns,
   launchItems,
   modelLabel,
+  nameCells,
+  offFor,
+  ownRow,
+  paneRows,
+  sectionLines,
   sentNote,
   reconcile,
   runningFrom,
   sectionTitle,
+  shownRows,
   toolsFrom,
+  withOff,
 } from './menu'
 
 const BOTH = { better: true, report: true }
@@ -141,4 +154,105 @@ test('titles and notes read as the design draws them', () => {
   expect(sentNote('/better on')).toBe('sent: /better on')
   expect(failedNote('/better on', 'no such command')).toBe('/better on failed: no such command')
   expect(failedNote('/better on', 'x'.repeat(200)).length).toBeLessThanOrEqual(80)
+})
+
+// ── USER and PROJECT ─────────────────────────────────────────────────────
+
+const cmd = (name: string, description = `about ${name}`, takesArgs = false) => ({ name, description, takesArgs })
+const NO_OFF = { user: [], project: {} }
+
+test('the launcher shows for commands of the person’s own, even with no tools and all of them off', () => {
+  const own = { user: [cmd('handoff')], project: [] }
+  expect(hasOwn(own)).toBe(true)
+  expect(hasOwn(NO_OWN)).toBe(false)
+  expect(hasRows(NONE, own)).toBe(true)
+  expect(hasRows(NONE, { user: [], project: [cmd('seed-db')] })).toBe(true)
+  expect(hasRows(NONE, NO_OWN)).toBe(false)
+  expect(hasRows(NONE)).toBe(false)
+  expect(hasRows(BETTER, NO_OWN)).toBe(true)
+})
+
+test('the rows left are the commands not turned off, and edit mode shows them all', () => {
+  const all = [cmd('a'), cmd('b'), cmd('c')]
+  expect(shownRows(all, ['b'], false).map(c => c.name)).toEqual(['a', 'c'])
+  expect(shownRows(all, ['b'], true).map(c => c.name)).toEqual(['a', 'b', 'c'])
+  expect(shownRows(all, ['gone-from-disk'], false)).toHaveLength(3)
+  expect(shownRows(all, ['a', 'b', 'c'], false)).toEqual([])
+})
+
+test('flipping a name turns it off, or on again, and keeps the list sorted', () => {
+  expect(flipped([], 'deploy')).toEqual(['deploy'])
+  expect(flipped(['standup'], 'deploy')).toEqual(['deploy', 'standup'])
+  expect(flipped(['deploy', 'standup'], 'deploy')).toEqual(['standup'])
+})
+
+test('USER’s list is one, PROJECT’s is the repo’s by key, and an empty list leaves no key', () => {
+  const off = { user: ['a'], project: { k1: ['x'], k2: ['y'] } }
+  expect(offFor(off, 'user', 'k1')).toEqual(['a'])
+  expect(offFor(off, 'project', 'k1')).toEqual(['x'])
+  expect(offFor(off, 'project', 'other')).toEqual([])
+  expect(withOff(off, 'project', 'k1', ['x', 'z'])).toEqual({ user: ['a'], project: { k1: ['x', 'z'], k2: ['y'] } })
+  expect(withOff(off, 'project', 'k1', [])).toEqual({ user: ['a'], project: { k2: ['y'] } })
+  expect(withOff(off, 'user', 'k1', ['a', 'b'])).toEqual({ user: ['a', 'b'], project: off.project })
+  expect(off).toEqual({ user: ['a'], project: { k1: ['x'], k2: ['y'] } })
+})
+
+test('a description is cut to the room with … where it was cut', () => {
+  expect(clipTo('short', 10)).toBe('short')
+  expect(clipTo('exactly ten', 11)).toBe('exactly ten')
+  expect(clipTo('Use when the user invokes', 10)).toBe('Use when …')
+  expect(clipTo('anything', 0)).toBe('')
+  expect(clipTo('anything', -3)).toBe('')
+})
+
+test('names are padded to a column, up to half the menu', () => {
+  expect(nameCells([cmd('a'), cmd('handoff')], 46)).toBe('/handoff'.length)
+  expect(nameCells([cmd('a-very-long-command-name-indeed-yes')], 40)).toBe(20)
+  expect(nameCells([], 46)).toBe(0)
+})
+
+test('a row is the padded name and a clipped description that leaves the … column free', () => {
+  const inner = 46
+  const row = ownRow(cmd('handoff', 'Use when the user invokes /handoff, or asks to save, list, or archive session handoff files'), 9, inner)
+  expect(row.label).toBe('/handoff ')
+  expect(row.detail.startsWith('  Use when')).toBe(true)
+  expect(row.detail.endsWith('…')).toBe(true)
+  expect(row.label.length + row.detail.length + MORE_CELLS).toBeLessThanOrEqual(inner)
+  expect(ownRow(cmd('x', 'short'), 9, inner).detail).toBe('  short')
+})
+
+test('a row with no room, or no description, draws the name alone', () => {
+  expect(ownRow(cmd('standup', 'Yesterday'), 8, 14).detail).toBe('')
+  expect(ownRow(cmd('standup', ''), 8, 46).detail).toBe('')
+})
+
+test('a section takes its header and its rows, or one line when all are off', () => {
+  const all = [cmd('a'), cmd('b'), cmd('c')]
+  expect(sectionLines([], [], false)).toBe(0)
+  expect(sectionLines(all, [], false)).toBe(4)
+  expect(sectionLines(all, ['b'], false)).toBe(3)
+  expect(sectionLines(all, ['a', 'b', 'c'], false)).toBe(2)
+  expect(sectionLines(all, ['a', 'b', 'c'], true)).toBe(4)
+})
+
+test('the pane asks for 0.1.0’s rows until the menu needs more', () => {
+  expect(paneRows(BOTH, NO_OWN, NO_OFF, 'k', null, 48)).toBe(14)
+  expect(paneRows(NONE, NO_OWN, NO_OFF, 'k', null, 48)).toBe(14)
+  const ten = Array.from({ length: 10 }, (_, i) => cmd(`c${i}`))
+  const own = { user: ten, project: [cmd('p')] }
+  // 2 header + 3 settings + 6 launch (title and 5) + 11 user + 2 project + 1 note = 25, and 2 of slack
+  expect(paneRows(BOTH, own, NO_OFF, 'k', null, 48)).toBe(27)
+})
+
+test('edit mode counts the rows that are off, and a section that is all off counts its line', () => {
+  const own = { user: [cmd('a'), cmd('b'), cmd('c'), cmd('d'), cmd('e'), cmd('f'), cmd('g'), cmd('h'), cmd('i'), cmd('j')], project: [] }
+  const off = { user: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'], project: {} }
+  const closed = paneRows(BOTH, own, off, 'k', null, 48)
+  const editing = paneRows(BOTH, own, off, 'k', 'user', 48)
+  expect(editing - closed).toBe(9)
+  expect(closed).toBe(2 + 3 + 6 + 2 + 1 + 2)
+})
+
+test('the draft note names the command', () => {
+  expect(draftNote('handoff')).toBe('Clear the prompt box to fill /handoff.')
 })

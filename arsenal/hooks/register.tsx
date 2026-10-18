@@ -1,35 +1,56 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { ArsenalTools } from '../types'
+import type { ArsenalOff, ArsenalOwn, ArsenalTools } from '../types'
 import {
+  NO_OFF,
+  NO_OWN,
   commandLine,
+  draftNote,
   failedNote,
+  flipped,
   hasRows,
   hasSettings,
   headerNote,
   launchColumns,
+  launchItems,
+  nameCells,
+  offFor,
+  ownRow,
+  paneRows,
   ranNote,
   reconcile,
   runningFrom,
   sameRunning,
   sectionTitle,
   sentNote,
+  shownRows,
   toolsFrom,
+  unfilledNote,
+  withOff,
 } from './menu'
-import type { LaunchItem } from './menu'
+import type { LaunchItem, Section } from './menu'
+import { STORE_KEY, confirmed, offFromStore, offToStore, projectPlace, readCandidate, sameFolder, withoutUser } from './own'
+import type { Candidate, Found, GitAnswers } from './own'
 
-// What the drawings read lives in $.state. None of it is kept in $.store, and
-// session.start (which also runs on a hot reload) reads isOpen from the panes
+// What the drawings read lives in $.state. Of it only `off` is also kept, in
+// $.store (a $.store read made while drawing does not subscribe the drawing, a
+// $.state read does), and session.start (which also runs on a hot reload)
+// reads isOpen from the panes
 const isOpenAtom = atom({ plugin: 'arsenal', key: 'isOpen' } as const, false)
 const runningAtom = atom({ plugin: 'arsenal', key: 'running' } as const, null)
 const NO_TOOLS: ArsenalTools = { better: false, report: false }
 const toolsAtom = atom({ plugin: 'arsenal', key: 'tools' } as const, NO_TOOLS)
 const noteAtom = atom({ plugin: 'arsenal', key: 'note' } as const, '')
+const ownAtom = atom({ plugin: 'arsenal', key: 'own' } as const, NO_OWN)
+const offAtom = atom({ plugin: 'arsenal', key: 'off' } as const, NO_OFF)
+const editingAtom = atom({ plugin: 'arsenal', key: 'editing' } as const, null)
+const projectKeyAtom = atom({ plugin: 'arsenal', key: 'projectKey' } as const, '')
 
 // The menu is a pane, docked at the right in fullscreen like the tools' own
 const PANE = 'arsenal'
-const PANE_ARGS = { id: PANE, title: 'Arsenal', closeOnEscape: true, columns: 48, rows: 14 } as const
+const PANE_COLUMNS = 48
+const paneArgs = (rows: number) => ({ id: PANE, title: 'Arsenal', closeOnEscape: true, columns: PANE_COLUMNS, rows }) as const
 
 const COLORS = {
   accent: '#F2A65A',
@@ -67,10 +88,112 @@ async function refreshModel($: EngineInterface) {
   }
 }
 
+// ── The person's own commands ────────────────────────────────────────────
+
+/** What `git rev-parse <args>` prints, first line; null when git says no, is missing or is slow. */
+async function gitLine($: EngineInterface, cwd: string, args: string[]): Promise<string | null> {
+  try {
+    const r = await $.process.run(['git', 'rev-parse', ...args], { cwd, timeoutMs: 5000 })
+    return r.exitCode === 0 ? (r.stdout.split(/\r?\n/)[0]?.trim() || null) : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The repo's top level and shared `.git` folder, as seen from `root`. A git
+ * older than 2.31 has no `--path-format`, so its answer is asked again without
+ * it; `projectPlace` reads a relative one against `root`.
+ */
+async function askGit($: EngineInterface, root: string): Promise<GitAnswers> {
+  const [top, absolute] = await Promise.all([
+    gitLine($, root, ['--show-toplevel']),
+    gitLine($, root, ['--path-format=absolute', '--git-common-dir']),
+  ])
+  return { top, common: absolute ?? (top ? await gitLine($, root, ['--git-common-dir']) : null) }
+}
+
+/** Every entry of a folder, or none when it is not there. */
+const entriesOf = async ($: EngineInterface, path: string) => {
+  try {
+    return await $.fs.list(path)
+  } catch {
+    return []
+  }
+}
+
+/**
+ * What the files of one `.claude` folder say: `skills/<folder>/SKILL.md`, one
+ * level down, and `commands/<file>.md`, at the top. A link is tried as well,
+ * since the engine's list confirms what is really there. Commands in
+ * subfolders (`dir:name`) are left out of 0.2.0.
+ */
+async function collect($: EngineInterface, base: string): Promise<Found[]> {
+  const [skills, commands] = await Promise.all([entriesOf($, `${base}/skills`), entriesOf($, `${base}/commands`)])
+  const files: { kind: Candidate['kind']; fallback: string; path: string }[] = [
+    ...skills.filter(s => s.kind === 'dir' || s.isLink).map(s => ({ kind: 'skill' as const, fallback: s.name, path: `${base}/skills/${s.name}/SKILL.md` })),
+    ...commands
+      .filter(c => (c.kind === 'file' || c.isLink) && /\.md$/i.test(c.name))
+      .map(c => ({ kind: 'command' as const, fallback: c.name.slice(0, -3), path: `${base}/commands/${c.name}` })),
+  ]
+  const read = await Promise.all(
+    files.map(async f => {
+      try {
+        const text = await $.fs.read(f.path)
+        return typeof text === 'string' ? readCandidate({ kind: f.kind, fallback: f.fallback, text }) : null
+      } catch {
+        return null
+      }
+    }),
+  )
+  return read.filter((f): f is Found => f !== null)
+}
+
+/**
+ * Finds the person's own commands and the project they belong to. Run at
+ * session start and each time the menu opens, so a skill added mid-session
+ * shows up, and a `/cd` or worktree move takes PROJECT and its off list along.
+ * A failure leaves what the last scan found.
+ */
+async function scan($: EngineInterface) {
+  try {
+    const home = (await $.env.get('USERPROFILE')) || (await $.env.get('HOME')) || ''
+    const root = await $.session.root()
+    const place = projectPlace(root, await askGit($, root))
+    const listed = await $.command.list()
+    const user = home ? confirmed(await collect($, `${home}/.claude`), listed) : []
+    // in the home folder, `.claude` is USER's own: there is no PROJECT
+    const project = home && sameFolder(place.folder, home) ? [] : withoutUser(confirmed(await collect($, `${place.folder}/.claude`), listed), user)
+    await update($, ownAtom, () => ({ user, project }) satisfies ArsenalOwn)
+    await update($, projectKeyAtom, () => place.key)
+  } catch {
+    // the rows stay as they were
+  }
+}
+
+/** What was turned off, from the last session on this machine. */
+async function loadOff($: EngineInterface) {
+  try {
+    const held = offFromStore(await $.store.get(STORE_KEY))
+    await update($, offAtom, () => held)
+  } catch {
+    // nothing is off until the person turns something off
+  }
+}
+
 async function openMenu($: EngineInterface) {
   await refreshModel($)
+  await scan($)
+  const rows = paneRows(
+    await read($, toolsAtom),
+    (await read($, ownAtom)) ?? NO_OWN,
+    (await read($, offAtom)) ?? NO_OFF,
+    (await read($, projectKeyAtom)) ?? '',
+    null,
+    PANE_COLUMNS,
+  )
   await update($, isOpenAtom, () => true)
-  const { isPlaced } = await $.ui.open(PANE_ARGS)
+  const { isPlaced } = await $.ui.open(paneArgs(rows))
   if (!isPlaced) {
     await update($, isOpenAtom, () => false)
     $.ui.toast('Arsenal needs a wider window to open.')
@@ -79,11 +202,12 @@ async function openMenu($: EngineInterface) {
 
 async function closeMenu($: EngineInterface) {
   await update($, isOpenAtom, () => false)
+  await update($, editingAtom, () => null)
   await $.ui.close({ id: PANE })
 }
 
 async function toggleMenu($: EngineInterface) {
-  if (!hasRows(await read($, toolsAtom))) return
+  if (!hasRows(await read($, toolsAtom), (await read($, ownAtom)) ?? NO_OWN)) return
   if ((await read($, isOpenAtom)) === true) await closeMenu($)
   else await openMenu($)
 }
@@ -125,14 +249,109 @@ async function press($: EngineInterface, command: string, args: string, closes: 
   }
 }
 
+/**
+ * The `…` on a row: puts `/name ` in the prompt box for the person to finish.
+ * A draft in the box is never written over, and a box that cannot take the text
+ * is said so. The menu closes first, so the toast is seen.
+ */
+async function fillPrompt($: EngineInterface, name: string) {
+  await closeMenu($)
+  try {
+    if ((await $.prompt.read()).text.trim() !== '') {
+      $.ui.toast(draftNote(name))
+      return
+    }
+    if (!(await $.prompt.fill({ text: `/${name} ` })).isFilled) $.ui.toast(unfilledNote)
+  } catch {
+    $.ui.toast(unfilledNote)
+  }
+}
+
+/** A pill in edit mode: turns the command off or on at once, and saves it. */
+async function flipOff($: EngineInterface, section: Section, name: string) {
+  const key = (await read($, projectKeyAtom)) ?? ''
+  const held = (await read($, offAtom)) ?? NO_OFF
+  const next: ArsenalOff = withOff(held, section, key, flipped(offFor(held, section, key), name))
+  await update($, offAtom, () => next)
+  try {
+    await $.store.set(STORE_KEY, offToStore(next))
+  } catch {
+    // the state stands for this session
+    $.ui.toast('Could not save which commands are off.')
+  }
+}
+
+/** `✎ edit` and `✓ done`: one section is in edit mode at a time. */
+const setEditing = ($: EngineInterface, section: Section | null) => update($, editingAtom, () => section)
+
 // ── Drawings ─────────────────────────────────────────────────────────────
 
-function drawMenu($: EngineInterface, e: Parameters<typeof $.ui.resolve>[0], bodyColumns: number, view: { tools: ArsenalTools; auto: boolean; header: string; note: string }) {
+type View = {
+  tools: ArsenalTools
+  auto: boolean
+  header: string
+  note: string
+  own: ArsenalOwn
+  off: ArsenalOff
+  editing: Section | null
+  projectKey: string
+}
+
+function drawMenu($: EngineInterface, e: Parameters<typeof $.ui.resolve>[0], bodyColumns: number, view: View) {
   const { Box, Button, Text } = $.ui.resolve(e)
   const { tools, auto } = view
   const inner = Math.max(20, bodyColumns)
   const columns = launchColumns(tools, bodyColumns)
   const columnWidth = columns.length > 1 ? Math.floor(inner / columns.length) : inner
+
+  // `● On` / `○ Off`, as the Prompt Upgrade switch and the edit-mode rows show it
+  const pill = (isOn: boolean) => (
+    <Text backgroundColor={isOn ? COLORS.teal : COLORS.off} color={isOn ? COLORS.dark : COLORS.light}>
+      {isOn ? ' ● On ' : ' ○ Off '}
+    </Text>
+  )
+
+  // USER and PROJECT: a header with `✎ edit`, then a row per command that is on
+  // (`all off` when none is), or in edit mode every command with its pill
+  const ownSection = (section: Section, title: string) => {
+    const commands = view.own[section]
+    if (commands.length === 0) return null
+    const off = offFor(view.off, section, view.projectKey)
+    const isEditing = view.editing === section
+    const shown = shownRows(commands, off, false)
+    const nameWidth = nameCells(shown.length ? shown : commands, inner)
+    return (
+      <Box key={`arsenal-${section}-section`} flexDirection="column">
+        <Box justifyContent="space-between">
+          <Text dimColor>{sectionTitle(title)}</Text>
+          <Button key={`arsenal-${section}-edit`} plain label={isEditing ? '✓ done' : '✎ edit'} onPress={() => setEditing($, isEditing ? null : section)} />
+        </Box>
+        {isEditing
+          ? commands.map(c => (
+              <Box key={`arsenal-${section}-edit-row-${c.name}`} justifyContent="space-between">
+                <Text dimColor={off.includes(c.name)}>{`/${c.name}`}</Text>
+                <Button key={`arsenal-${section}-pill-${c.name}`} plain onPress={() => flipOff($, section, c.name)}>
+                  {pill(!off.includes(c.name))}
+                </Button>
+              </Box>
+            ))
+          : shown.length === 0
+            ? <Text dimColor>{'  all off'}</Text>
+            : shown.map(c => {
+                const { label, detail } = ownRow(c, nameWidth, inner)
+                return (
+                  <Box key={`arsenal-${section}-row-${c.name}`} justifyContent="space-between">
+                    <Button key={`arsenal-${section}-run-${c.name}`} plain onPress={() => press($, c.name, '', true)}>
+                      <Text>{label}</Text>
+                      <Text dimColor>{detail}</Text>
+                    </Button>
+                    {c.takesArgs ? <Button key={`arsenal-${section}-more-${c.name}`} plain label="…" onPress={() => fillPrompt($, c.name)} /> : null}
+                  </Box>
+                )
+              })}
+      </Box>
+    )
+  }
 
   const launchRow = (item: LaunchItem) => (
     <Button
@@ -164,22 +383,26 @@ function drawMenu($: EngineInterface, e: Parameters<typeof $.ui.resolve>[0], bod
               <Text bold>Prompt Upgrade</Text>
             </Box>
             <Button key="arsenal-auto" plain hotkey="p" onPress={() => press($, 'better', auto ? 'off' : 'on', false)}>
-              <Text backgroundColor={auto ? COLORS.teal : COLORS.off} color={auto ? COLORS.dark : COLORS.light}>
-                {auto ? ' ● On ' : ' ○ Off '}
-              </Text>
+              {pill(auto)}
             </Button>
           </Box>
           <Text dimColor>{'  upgrade every prompt first'}</Text>
         </Box>
       ) : null}
-      <Text dimColor>{sectionTitle('LAUNCH')}</Text>
-      <Box>
-        {columns.map((items, i) => (
-          <Box key={`arsenal-column-${i}`} flexDirection="column" width={columnWidth}>
-            {items.map(launchRow)}
+      {launchItems(tools).length > 0 ? (
+        <Box key="arsenal-launch-section" flexDirection="column">
+          <Text dimColor>{sectionTitle('LAUNCH')}</Text>
+          <Box>
+            {columns.map((items, i) => (
+              <Box key={`arsenal-column-${i}`} flexDirection="column" width={columnWidth}>
+                {items.map(launchRow)}
+              </Box>
+            ))}
           </Box>
-        ))}
-      </Box>
+        </Box>
+      ) : null}
+      {ownSection('user', 'USER')}
+      {ownSection('project', 'PROJECT')}
       <Text dimColor>{view.note || ' '}</Text>
     </Box>
   )
@@ -202,11 +425,14 @@ export const register: Register = on => {
       // a hot reload leaves an open pane open
       const isOpen = (await $.ui.panes()).some(p => p.id === PANE)
       await update($, isOpenAtom, () => isOpen)
+      await update($, editingAtom, () => null)
       await say($, '')
     } catch {
       // a menu that stays as it was is still a menu
     }
     await refreshTools($)
+    await loadOff($)
+    await scan($)
     try {
       const model = await $.session.model()
       await update($, runningAtom, r => reconcile(r ?? null, model))
@@ -254,6 +480,7 @@ export const register: Register = on => {
     if (e.id === PANE && e.origin.kind !== 'unload') {
       try {
         await update($, isOpenAtom, () => false)
+        await update($, editingAtom, () => null)
       } catch {
         // the arrow is only a label
       }
@@ -268,7 +495,7 @@ export const register: Register = on => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
     const tools = await read($, toolsAtom)
-    if (!hasRows(tools)) return next(e)
+    if (!hasRows(tools, (await read($, ownAtom)) ?? NO_OWN)) return next(e)
     const open = (await read($, isOpenAtom)) === true
     const below = await next(e)
     const { Box, Button } = $.ui.resolve(e)
@@ -284,12 +511,16 @@ export const register: Register = on => {
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const tools = await read($, toolsAtom)
-    const view = {
+    const view: View = {
       tools,
       auto: await readAuto($),
       header: headerNote((await read($, runningAtom)) ?? null),
       note: (await read($, noteAtom)) ?? '',
+      own: (await read($, ownAtom)) ?? NO_OWN,
+      off: (await read($, offAtom)) ?? NO_OFF,
+      editing: (await read($, editingAtom)) ?? null,
+      projectKey: (await read($, projectKeyAtom)) ?? '',
     }
-    return drawMenu($, e, Math.max(20, e.props.bodyColumns || PANE_ARGS.columns), view)
+    return drawMenu($, e, Math.max(20, e.props.bodyColumns || PANE_COLUMNS), view)
   })
 }

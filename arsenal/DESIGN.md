@@ -418,8 +418,324 @@ goal-meter installed).
 - **Not unit-tested:** the kit's `$` has no `ui.close` at run time (the types declare it), so the
   arrow turning back after Esc rests on the same hook ctx ships, and on the live check.
 
+## 0.2.0: the person's own commands (USER and PROJECT)
+
+Designed on 2026-10-18 (Opus 5.5) in conversation with the person. Nothing in this section is
+built yet. **Read** means read from the engine's API types (`.claude-plugin/types/claude-code/`),
+not run, except in "Settled while building 0.2.0", which a probe answered.
+
+### The problem
+
+LAUNCH holds five rows written into `menu.ts`. The person also has their own skills and slash
+commands: `/handoff` on the home PC, about ten on the work PC. They want those in arsenal without
+editing arsenal for each machine, but not necessarily all of them.
+
+### Goals, non-goals, anti-goals
+
+**Goals**
+
+- Two new sections under LAUNCH:
+  - **USER**: the skills and commands in `~/.claude/skills/` and `~/.claude/commands/`.
+  - **PROJECT**: the ones in the current project's `.claude/skills/` and `.claude/commands/`.
+- Every command found is shown by default. Each section has an **edit mode** that turns single
+  commands off and on again. What is off is remembered on this machine across sessions.
+- A press runs the command bare, as if `/handoff` were typed. A row whose command takes arguments
+  also has a `…` that puts `/handoff ` in the prompt box for the person to finish.
+
+**Non-goals**
+
+- Skills and commands from plugins (`source: 'plugin'`, the 200-odd from superpowers, claude-mem and
+  so on), built-ins and MCP prompts.
+- Hotkeys on USER and PROJECT rows. LAUNCH keeps its own.
+- Any change to SETTINGS or LAUNCH.
+- Folding or scrolling a long section. A tall docked pane is fine (the person said so).
+- Choice buttons parsed from an argument hint, and a text box inside the pane.
+
+**Anti-goals** (it would be a failure even if it worked)
+
+- A row that does nothing when pressed: a file in the folder that the engine did not load (bad
+  frontmatter, `user-invocable: false`).
+- arsenal writing to the skill or command files.
+- Running a command with arguments arsenal made up.
+
+### The menu
+
+```
+┌ Arsenal ─────────────────────────────────┐
+│ ◆  A R S E N A L          Opus 5.5 · High │
+│ ──────────────────────────────────────── │
+│ ── S E T T I N G S                       │
+│ ○ Prompt Upgrade                ○ Off    │
+│   upgrade every prompt first             │
+│ ── L A U N C H                           │
+│ u: ✦ Upgrade a prompt                    │
+│ …                                        │
+│ ── U S E R                      ✎ edit   │
+│ /handoff   Use when the user in…    …    │
+│ /standup   Yesterday's work              │
+│ ── P R O J E C T                ✎ edit   │
+│ /seed-db   Reset the local data…         │
+│ ran: /better off                         │
+└──────────────────────────────────────────┘
+```
+
+Edit mode, for one section at a time:
+
+```
+│ ── U S E R                      ✓ done   │
+│ /deploy-check                 ○ Off      │
+│ /handoff                      ● On       │
+│ /standup                      ● On       │
+```
+
+- **Rows:** a `plain` Button with no `hotkey`, labelled `/name`, then the command's description,
+  dim and clipped with `…` to the room left. Sorted by name. Always one column, at any width:
+  the descriptions need the room.
+- **`…`:** a second `plain` Button at the right end of a row, only when the command has an
+  `argument-hint`.
+- **Section header:** `sectionTitle('USER')` on the left and a `plain` Button `✎ edit` (or `✓ done`
+  in edit mode) on the right, as the SETTINGS row lays out its name and pill.
+- **Edit mode:** shows every command in the section, including the ones that are off. Each has the
+  pill the Prompt Upgrade switch uses (`● On` teal, `○ Off` dim). A press flips it at once and
+  saves it. `✓ done` is only the way back: nothing waits for it. In edit mode, rows run nothing.
+  Opening edit mode in one section closes it in the other.
+- **When a section is drawn:** only when it found at least one command. A section whose commands
+  are all off is still drawn, with its header (so `✎ edit` can turn them back on) and one dim line
+  `all off`. Otherwise there would be no way back.
+- **The launcher and `/arsenal`** now show when there is anything to show: a tool for LAUNCH, *or*
+  a USER or PROJECT command found, even if every one of them is off (edit mode must stay
+  reachable). 0.1.0 needed `better` or `report`.
+- **Height:** docked, the pane takes the dock's height and the `rows` request is ignored (read in
+  `PaneOpenArgs.rows`). Placed above the prompt, `openMenu` asks for as many rows as the menu has
+  lines, computed by a pure function, because the fixed 14 no longer fits.
+
+### Presses
+
+| Press | Does |
+|---|---|
+| a row | `press($, name, '', true)`, the path LAUNCH rows take: close the menu, run bare, toast a failure |
+| `…` | close the menu, then `$.prompt.read()`. Box empty: `$.prompt.fill({ text: '/name ' })`. Box holds a draft: leave it alone and toast "Clear the prompt box to fill /name." `isFilled: false`: toast "Could not fill the prompt box." |
+| `✎ edit` / `✓ done` | set `editing` to the section, or to `null` |
+| a pill in edit mode | flip the name in the section's off list, in state and in `$.store` |
+
+The `…` never replaces a draft the person typed. Treating the draft as the command's arguments was
+considered and turned down: it surprises the person.
+
+### Finding the commands
+
+A pure module `hooks/own.ts` (tested in `hooks/own.test.ts`) holds the parsing and sorting.
+`register.tsx` does the reading.
+
+1. **Where:** home is `$.env.get('USERPROFILE')`, else `$.env.get('HOME')`. Both names are
+   literals, as `$.env.get` requires (read). This is a Windows machine, where `HOME` is often
+   unset. **The project is the repo** (the person's choice, 2026-10-18), so it is worked out with
+   two `$.process.run` calls run from `$.session.root()`. Use `root()` rather than `cwd()`
+   because it follows `/cd` and worktree moves (read):
+   - `git rev-parse --show-toplevel`: the folder to scan, which is this checkout's own top level.
+     Each worktree has its own copy of `.claude/`, so a session in a worktree scans that copy.
+   - `git rev-parse --path-format=absolute --git-common-dir`: the **project key**. Every worktree of
+     one repo shares this `.git` folder, and so does every subfolder. A command turned off in the
+     main checkout is therefore off in each of its worktrees too.
+   - **Not a git repo** (a non-zero exit, git missing, or a rejection): `root()` is both the folder
+     to scan and the key.
+   - The PROJECT folder and the key are worked out **again on every scan** (session start and each
+     time the menu opens), so a `/cd` or a worktree move mid-session takes the rows *and* the off
+     list with it.
+2. **Same folder:** if home and the project folder are the same path (compare with slashes made
+   `/` and, on Windows, case folded), everything is USER and there is no PROJECT section.
+3. **List** each folder with `$.fs.list` (a missing folder is an empty list, inside a `try`):
+   - `skills/`: each entry of kind directory that holds a `SKILL.md`, **one level only**.
+     `~/.claude/skills/synced/` has no `SKILL.md` at its top, so it is skipped by itself. Those are
+     the claude.ai skills that the engine lists as `anthropic-skills:…`, not as the person's own.
+   - `commands/`: each `*.md` at the top level. The name is the file name without `.md`.
+     Subfolders are left out of 0.2.0 (the engine names them `dir:file`; see "Settled while
+     building 0.2.0").
+4. **Read** each file's frontmatter with `$.fs.read`. Only three keys matter: `name`,
+   `argument-hint` and `user-invocable`. `own.ts` has a small parser: the block between a leading
+   `---` line and the next one, `key: value` lines, the value with its surrounding quotes taken
+   off, CRLF accepted, every other line ignored (a multi-line `description` must not break it).
+   - The name is the skill's frontmatter `name`, else its folder's name.
+   - `user-invocable: false` leaves it out.
+   - A non-empty `argument-hint` means the row gets a `…`.
+5. **Confirm** against `$.command.list()`: keep only names it lists with `source: 'user'`. The
+   description shown is the one `list()` gives, the same line as the typeahead's. The folders say
+   which section; the engine says what actually runs.
+6. **Duplicates:** a skill and a command of the same name in one section are one row. A name in
+   both USER and PROJECT is shown once, in **USER**: the global one is the one that runs (see
+   "Settled while building 0.2.0").
+
+**When:** at `session.start`, and again each time the menu opens, so a skill added mid-session
+shows up without a restart. A scan reads a handful of small files, so it is not cached beyond the
+state it writes.
+
+### State and store
+
+The contract (`types/index.d.ts`) gains:
+
+```ts
+/** One of the person's own commands, as a row shows it. */
+export type OwnCommand = { name: string; description: string; takesArgs: boolean }
+
+/** What the last scan found, by section, each sorted by name. */
+export type ArsenalOwn = { user: OwnCommand[]; project: OwnCommand[] }
+
+/** The names turned off in edit mode. `project` is keyed by the project folder. */
+export type ArsenalOff = { user: string[]; project: Record<string, string[]> }
+
+// in PluginState['arsenal']:
+own: ArsenalOwn
+off: ArsenalOff
+/** The section in edit mode, if any. */
+editing: 'user' | 'project' | null
+/** The key into `off.project` for this session's repo, from the last scan. */
+projectKey: string
+```
+
+- **Saved:** `off` lives in `$.store` under `off`, as `{ version: 1, user, project }`. `$.store`
+  is per machine, so the home and work PCs keep separate lists without trying.
+- **Per repo:** `off.project` is keyed by the project key from step 1 (the repo's shared `.git`
+  folder, or `root()` outside git), normalised as in step 2 (slashes `/`; case folded on Windows).
+  Turning `/deploy` off in one repo leaves another repo's `/deploy` on, and that holds across one
+  repo's worktrees and subfolders. Keys of projects no longer used stay in the store. They are a
+  few bytes and do no harm.
+- **Off by name, not on by name:** a new command is on without anyone doing anything, and the name
+  of a deleted command left in the list matches nothing.
+- **Mirrored into `$.state`:** a `$.store.get` made while drawing does not subscribe the drawing,
+  while a `$.state` read does. So `session.start` loads `off` into state. A pill press writes
+  state (the drawing follows) and then `$.store.set`. A failed save is a toast; the state stands for
+  the session.
+- `editing` goes back to `null` when the pane closes (`ui.close`) and at `session.start`.
+
+### Events (what changes)
+
+| Event | 0.2.0 adds |
+|---|---|
+| `session.start` | load `off` from `$.store`, scan (PROJECT folder, `projectKey`, `own`), `editing` null |
+| opening the menu (`openMenu`) | scan again (folder and key too) before `$.ui.open`, and ask for the menu's rows |
+| `ui.close` | `editing` null |
+| `ui.render` `Pane` | draws USER and PROJECT under LAUNCH |
+| `ui.render` `AbovePrompt` | the launcher shows when `hasRows` counts own commands too |
+
+### Testing
+
+- **`own.test.ts`:** the frontmatter parser (quotes, CRLF, no frontmatter, a multi-line value
+  elsewhere), the name rule (frontmatter vs folder), `user-invocable: false`, the confirm step
+  (not listed, listed as `plugin`), home equal to the project folder, duplicates, the project key
+  (slashes, case on Windows, a worktree's and the main checkout's common dir giving one key, the
+  non-git fallback), sorting.
+- **`menu.test.ts`:** rows left after `off`, clipping a description to a width, the pane's row
+  count, `hasRows` with only own commands.
+- **`render.test.ts`:**
+  - an empty section is not drawn;
+  - a section that is all off shows its header, `✎ edit` and `all off`;
+  - `✎ edit` shows the pills, and a pill press flips state and calls `store.set`;
+  - a row press closes the pane and runs the bare command;
+  - `…` fills an empty box and toasts over a draft;
+  - the launcher shows with own commands and no tools.
+- **Live check:**
+  - on the home PC, `/handoff` shows under USER with a `…`;
+  - put a `hello.md` command in a scratch project's `.claude/commands/` and see PROJECT appear;
+  - turn one off, `/reload-plugins` (or a new session), and it stays off;
+  - add a worktree of that scratch project, open a session in it, and the command is still off;
+  - turn it back on;
+  - `…` on `/handoff` leaves `/handoff ` in the box with the cursor at its end.
+
+### Settled while building 0.2.0
+
+Settled on 2026-10-18 (Sonnet 5.5) with a throwaway probe mod, run as `/probe` headless
+(`claude -p "/probe" --plugin-dir …`, with `MSYS_NO_PATHCONV=1` under Git Bash, or it rewrites
+`/probe` into a path) from the subfolder `proj/sub/deep` of a scratch git repo that had a worktree.
+The probe dumped `$.command.list()`, `$.session.root()` and the git calls. **Read** means from the
+API types.
+
+- **Does `$.command.list()` label the person's global and project commands `source: 'user'`?**
+  **Yes, and plugin skills are not.** The list had 175 entries: 58 `builtin`, 95 `plugin`, 3 `mcp`,
+  19 `user`. The `user` ones were the global `handoff`, the scratch project's five, **and** the
+  claude.ai-synced skills (`docx`, `pdf`, `docs`, `chrome-browser`, …). So `source: 'user'` alone
+  is not "the person's own": the folder scan is what leaves the synced ones out (they sit two
+  levels down, in `skills/synced/<bucket>/`). Both halves of step 5 are needed.
+- **Which name does the engine give a skill?** **Its frontmatter `name`.** A skill in `folder-name/`
+  with `name: fancy-name` was listed as `fancy-name`. This is what step 4 says.
+- **A name in both `~/.claude` and the project:** **the global one runs.** With a `zzdupe` command
+  in both, `/zzdupe` ran the global body. `list()` shows both entries (each with its own
+  description) and does not say which wins. So a name found in both is drawn in **USER only**, and
+  PROJECT leaves it out. (The probe's global file was made and removed by hand, so nothing was
+  left in `~/.claude`.)
+- **Which folder does the engine load project commands from** when the session starts in a
+  subfolder of a repo? **The repo's top level.** Started in `proj/sub/deep`, `list()` held the
+  commands of `proj/.claude/`, though `root()` and `cwd()` were both the subfolder. So the
+  `--show-toplevel` scan reads what the engine loaded, and `root()` is not the place.
+- **`git rev-parse --path-format=absolute --git-common-dir`:** **works on the installed git
+  (2.55)**, answering `…/proj/.git` with forward slashes. Without the flag the answer was
+  `../../.git`, relative to the folder git ran in, so the fallback for an old git is to resolve it
+  against `root()`. `--show-toplevel` also gave forward slashes, while `root()` and `cwd()` have
+  backslashes: normalise before comparing.
+- **Commands in subfolders** (`commands/git/sync.md`): **named `git:sync`**, with the folder as a
+  colon-separated prefix. The naming is clear, so adding them is a small follow-up (scan one more
+  level, name it `dir:file`). 0.2.0 still leaves them out.
+- **`$.prompt.fill` from a pane press:** the types say it puts the text in the box by `mode`
+  (`replace` by default) and answers `isFilled: false` "under a dialog or headless". Where the
+  cursor ends is **not documented**, so it stays on the live check.
+- **A `plain` Button with no `hotkey`** draws "the label alone" (read, `ButtonProps.plain`). The
+  live check still looks at the paint.
+
+### What building changed in this design (0.2.0)
+
+- **LAUNCH is drawn only when it has rows.** 0.1.0 always drew the title, because a menu with no
+  tool had no button. With own commands and neither tool, the menu is USER and PROJECT alone.
+- **Links are tried.** A skill folder or a `.md` that `$.fs.list` reports as a link (`kind:
+  'other'`, `isLink`) is read like any other, since the engine's list decides whether it is real.
+  The directory kind is `'dir'`, not `'directory'`.
+- **An older git is asked twice.** If `--path-format=absolute` is refused, `askGit` asks again for
+  the plain `--git-common-dir`, and `projectPlace` reads that against `root()`.
+- **The pane never asks for fewer than 14 rows.** `paneRows` is the line count plus 2 of slack,
+  floored at 0.1.0's 14, so a menu with only the two tools asks for exactly what it did.
+- **The store is read tolerantly.** `offFromStore` turns anything unexpected into an empty list
+  for that part; it sorts and de-duplicates names and drops empty project lists.
+- **Buttons are keyed `arsenal-<section>-<run|more|edit|pill>[-name]`** (`arsenal-user-run-handoff`,
+  `arsenal-project-pill-seed-db`), unique across both sections.
+
+**Verified** (2026-10-18): `claude plugin test arsenal` (96 pass), `claude plugin validate arsenal`,
+and the real mod run headless beside a probe that read its state (`claude -p "/probe"
+--plugin-dir arsenal --plugin-dir <probe>`) from `sub/deep` of a scratch repo. At `session.start`
+it held USER = `handoff` (with `takesArgs`), PROJECT = the scratch repo's skills and commands
+(`fancy-name`, `hello`), nothing from `skills/synced/`, the `user-invocable: false` skill and the
+`dir:name` command left out, the project's `handoff` dropped for the global one, and `projectKey`
+the repo's `.git`. So `$.command.list()` is ready by `session.start`.
+
+**Not verified**: the paint (the live check below), where the cursor ends after `…`, and `tsc -p
+arsenal` (no TypeScript compiler on the home PC when this was built).
+
+### Shipping 0.2.0
+
+A new version of a mod goes on a branch and through a PR (repo `CLAUDE.md`). The branch is
+`arsenal-0.2.0`.
+
+1. `plugin.json` version `0.2.0`.
+2. `README.md`: the USER and PROJECT sections, edit mode, the `…`.
+3. `SETUP.md`'s arsenal section: arsenal now shows rows even with neither prompt-upgrade nor
+   work-report installed, as long as the person has commands of their own.
+4. The marketplace entry's description, if it says the menu is only for the repo's tools.
+5. PR titled like the earlier ones ("arsenal 0.2.0: …").
+
 ## Alternatives turned down
 
+- **For 0.2.0: scanning only `~/.claude`.** Most of the person's work commands may be a repo's own,
+  so PROJECT came in. Folding the two into one list would hide where a command comes from.
+- **For 0.2.0: every plugin skill.** Over 200 rows, most of them skills the model loads by itself
+  ("Use this skill whenever…") that do nothing run bare.
+- **For 0.2.0: "no argument hint" as the test for "launchable".** `/handoff` has a hint and runs
+  fine bare. `pdf` has none and is useless bare. The person decides what shows, in edit mode.
+- **For 0.2.0: a `✕` on every row, or `/arsenal hide <name>`.** The `✕` clutters every row and
+  is easy to hit by mistake. Typing names goes against one press.
+- **For 0.2.0: keying PROJECT's off list by the session's folder.** It needs no git call, but each
+  worktree and subfolder would get its own list, so a command turned off would come back on in a
+  new worktree, and edit mode would look as if it forgot.
+- **For 0.2.0: one off list for USER and every project.** Turning a command off in one repo would
+  turn off a same-named command in every repo.
+- **For 0.2.0: arguments as choice buttons, or a text box in the pane.** The hints are free text
+  (`[shipped|s|list|l|archive|a]` has aliases), and the API has no input widget. The prompt box
+  already is one, so `…` fills it.
 - **A statusLine entry.** It is text only, with no click, and claude-hud owns it.
 - **The button on the hint line (`PromptHint`).** It works, but under a tall statusLine it is far
   from the prompt box, and it cannot share the engine's row (see "The live check").

@@ -17,6 +17,26 @@ type Opts = {
   unplaced?: boolean
   /** Panes already open as the session starts (a hot reload). */
   panes?: string[]
+  /** The person's home folder; the files of `disk` are found under it. */
+  home?: string
+  /** `$.session.root()`. */
+  root?: string
+  /** Every file there is, by absolute path, and its text. A folder is a path with files under it. */
+  disk?: Record<string, string>
+  /** The commands `$.command.list()` gives as the person's own (`source: 'user'`). */
+  own?: { name: string; description?: string }[]
+  /** What `git rev-parse` answers; none is a folder outside git. */
+  git?: { top: string; common: string }
+  /** A git without `--path-format`: the flag is refused, and this is the common dir it prints, relative to the folder. */
+  oldGit?: string
+  /** What `$.store` holds as the session starts. */
+  store?: Record<string, unknown>
+  /** `$.store.set` rejects. */
+  saveFails?: boolean
+  /** What the prompt box holds. */
+  draft?: string
+  /** The prompt box cannot take text (a dialog holds the keys). */
+  cannotFill?: boolean
 }
 
 type World = {
@@ -31,20 +51,75 @@ type World = {
   auto: { on: boolean }
   /** What `/model` names, which a test may change. */
   model: { value: string }
+  /** What `$.store` holds now. */
+  store: Record<string, unknown>
+  /** Every text put in the prompt box. */
+  fills: string[]
+  /** The rows each `ui.open` asked for. */
+  rows: (number | undefined)[]
 }
 
 // The world beneath the plugin: the command list, the model, prompt-upgrade's
 // switch, the panes, and the line and bands other mods draw
 function world(on: On, o: Opts = {}): World {
-  const w: World = { runs: [], registered: [], toasts: [], calls: [], steps: [], auto: { on: o.auto ?? false }, model: { value: o.model ?? 'opus' } }
+  const w: World = { runs: [], registered: [], toasts: [], calls: [], steps: [], auto: { on: o.auto ?? false }, model: { value: o.model ?? 'opus' }, store: { ...o.store }, fills: [], rows: [] }
   const panes = new Set(o.panes ?? [])
+  const draft = { text: o.draft ?? '' }
+  const disk = o.disk ?? {}
   mock.clock(on, { now: 100_000 })
   on('session.start', async () => ({ cwd: 'C:/bats' }))
   on('command.register', async (_$, e) => {
     w.registered.push(e.name)
     return { value: { command: e.name } } as any
   })
-  on('command.list', async () => ({ value: (o.commands ?? BOTH).map(name => ({ name, description: '', source: 'plugin' })) }) as any)
+  on('command.list', async () => {
+    const tools = (o.commands ?? BOTH).map(name => ({ name, description: '', source: 'plugin' }))
+    const own = (o.own ?? []).map(c => ({ name: c.name, description: c.description ?? `about ${c.name}`, source: 'user' }))
+    return { value: [...tools, ...own] } as any
+  })
+  // the folders and files of the person's own commands, and the git around them
+  on('env.get', async (_$, e) => ({ value: e.name === 'USERPROFILE' ? (o.home ?? 'C:/home') : undefined }) as any)
+  on('session.root', async () => ({ value: o.root ?? 'C:/bats' }) as any)
+  on('fs.list', async (_$, e) => {
+    const below = `${e.path.replace(/\\/g, '/').replace(/\/+$/, '')}/`
+    const entries = new Map<string, 'file' | 'dir'>()
+    for (const path of Object.keys(disk)) {
+      if (!path.startsWith(below)) continue
+      const [first = '', ...more] = path.slice(below.length).split('/')
+      entries.set(first, more.length ? 'dir' : 'file')
+    }
+    if (!entries.size) throw new Error('ENOENT')
+    return { value: [...entries].map(([name, kind]) => ({ name, kind, size: 0, mtimeMs: 0, isLink: false })) } as any
+  })
+  on('fs.read', async (_$, e) => {
+    const text = disk[e.path.replace(/\\/g, '/')]
+    if (text === undefined) throw new Error('ENOENT')
+    return { value: text } as any
+  })
+  on('process.run', async (_$, e) => {
+    const git = o.git
+    const refused = { value: { exitCode: 128, stdout: '', stderr: 'fatal: not a git repository' } }
+    if (!git) return refused as any
+    const flag = e.argv[2]
+    const answer = (stdout: string) => ({ value: { exitCode: 0, stdout: `${stdout}\n`, stderr: '' } })
+    if (flag === '--show-toplevel') return answer(git.top) as any
+    if (flag === '--path-format=absolute') return (o.oldGit ? { value: { exitCode: 129, stdout: '', stderr: 'unknown option' } } : answer(git.common)) as any
+    if (flag === '--git-common-dir') return answer(o.oldGit ?? git.common) as any
+    return refused as any
+  })
+  on('store.get', async (_$, e) => ({ value: w.store[e.key] }) as any)
+  on('store.set', async (_$, e) => {
+    if (o.saveFails) throw new Error('disk full')
+    w.store[e.key] = JSON.parse(JSON.stringify(e.value))
+    return { value: undefined } as any
+  })
+  on('prompt.read', async () => ({ value: { text: draft.text, cursor: draft.text.length } }) as any)
+  on('prompt.fill', async (_$, e) => {
+    if (o.cannotFill) return { isFilled: false }
+    w.fills.push(e.text)
+    draft.text = e.text
+    return { isFilled: true }
+  })
   on('session.model', async () => ({ value: w.model.value }) as any)
   on('state.get', async (_$, e, next) => ((e as { plugin: string }).plugin === 'prompt-upgrade' ? ({ value: { value: w.auto.on, version: 1 } } as any) : next(e)))
   // a hook that throws is skipped, so a failing command is one nothing answers
@@ -56,6 +131,7 @@ function world(on: On, o: Opts = {}): World {
   }
   on('ui.open', async (_$, e) => {
     w.calls.push(`open ${e.id}`)
+    w.rows.push(e.rows)
     if (o.unplaced) return { value: { isPlaced: false as const, reason: 'narrow' } } as any
     panes.add(e.id)
     return { value: { isPlaced: true as const } }
@@ -375,4 +451,361 @@ test('opening the menu after /model changed the model drops the old effort', asy
   const all = await inPane($, texts)
   expect(all).toContain('Sonnet')
   expect(all.some(t => t.includes('High'))).toBe(false)
+})
+
+// ── USER and PROJECT ─────────────────────────────────────────────────────
+
+const fm = (description: string, hint = '') => `---\ndescription: ${description}\n${hint ? `argument-hint: "${hint}"\n` : ''}---\nbody\n`
+
+/** /handoff (a skill with a hint) and /standup under USER, /seed-db under PROJECT. */
+const OWN: Opts = {
+  disk: {
+    'C:/home/.claude/skills/handoff/SKILL.md': fm('Save a handoff', '[list|archive]'),
+    'C:/home/.claude/commands/standup.md': fm('Yesterday'),
+    'C:/bats/.claude/commands/seed-db.md': fm('Reset the local data'),
+  },
+  own: [{ name: 'handoff', description: 'Save a handoff' }, { name: 'standup', description: 'Yesterday' }, { name: 'seed-db', description: 'Reset the local data' }],
+}
+
+const label = async (ui: Mounted, key: string) => ((await ui.find({ key }))?.props as { label?: string } | undefined)?.label
+
+test('an empty section is not drawn', async ($, on) => {
+  world(on)
+  await start($)
+  await open($)
+  const all = await inPane($, texts)
+  expect(all).toContain('── L A U N C H')
+  expect(all.some(t => t.includes('U S E R') || t.includes('P R O J E C T'))).toBe(false)
+})
+
+test('USER and PROJECT follow LAUNCH, each row a bare command with a … only where it takes arguments', async ($, on) => {
+  world(on, OWN)
+  await start($)
+  await open($)
+  const ui = await pane($)
+  try {
+    const all = await texts(ui)
+    const at = (t: string) => all.indexOf(t)
+    expect(at('── L A U N C H')).toBeGreaterThan(-1)
+    expect(at('── U S E R')).toBeGreaterThan(at('── L A U N C H'))
+    expect(at('── P R O J E C T')).toBeGreaterThan(at('── U S E R'))
+    expect(all).toContain('/handoff')
+    expect(all).toContain('/seed-db')
+    expect(await ui.find({ key: 'arsenal-user-run-handoff' })).toBeDefined()
+    expect(await ui.find({ key: 'arsenal-user-more-handoff' })).toBeDefined()
+    expect(await ui.find({ key: 'arsenal-user-more-standup' })).toBeUndefined()
+    expect(await ui.find({ key: 'arsenal-project-run-seed-db' })).toBeDefined()
+    // no hotkeys on these rows; LAUNCH keeps its own
+    expect(((await ui.find({ key: 'arsenal-user-run-standup' }))?.props as { hotkey?: string }).hotkey).toBeUndefined()
+    expect(((await ui.find({ key: 'arsenal-upgrade' }))?.props as { hotkey?: string }).hotkey).toBe('u')
+  } finally {
+    await ui.unmount()
+  }
+})
+
+test('only what the engine lists as the person’s own is drawn', async ($, on) => {
+  world(on, { ...OWN, own: [{ name: 'standup' }] })
+  await start($)
+  await open($)
+  const ui = await pane($)
+  try {
+    expect(await ui.find({ key: 'arsenal-user-run-standup' })).toBeDefined()
+    expect(await ui.find({ key: 'arsenal-user-run-handoff' })).toBeUndefined()
+    expect(await ui.find({ key: 'arsenal-project-run-seed-db' })).toBeUndefined()
+  } finally {
+    await ui.unmount()
+  }
+})
+
+test('a row press closes the pane and runs the bare command', async ($, on) => {
+  const w = world(on, OWN)
+  await start($)
+  await open($)
+  await inPane($, ui => ui.press({ key: 'arsenal-user-run-handoff' }))
+  expect(w.runs).toEqual([{ command: 'handoff', args: '' }])
+  expect(w.calls).toEqual(['open arsenal', 'close arsenal'])
+  await open($)
+  await inPane($, ui => ui.press({ key: 'arsenal-project-run-seed-db' }))
+  expect(w.runs[1]).toEqual({ command: 'seed-db', args: '' })
+})
+
+test('… puts the command in an empty box, closing the pane first', async ($, on) => {
+  const w = world(on, OWN)
+  await start($)
+  await open($)
+  await inPane($, ui => ui.press({ key: 'arsenal-user-more-handoff' }))
+  expect(w.fills).toEqual(['/handoff '])
+  expect(w.runs).toEqual([])
+  expect(w.toasts).toEqual([])
+  expect(w.calls).toEqual(['open arsenal', 'close arsenal'])
+})
+
+test('… never writes over a draft', async ($, on) => {
+  const w = world(on, { ...OWN, draft: 'fix the build and' })
+  await start($)
+  await open($)
+  await inPane($, ui => ui.press({ key: 'arsenal-user-more-handoff' }))
+  expect(w.fills).toEqual([])
+  expect(w.toasts).toEqual(['Clear the prompt box to fill /handoff.'])
+})
+
+test('… says so when the box cannot take the text', async ($, on) => {
+  const w = world(on, { ...OWN, cannotFill: true })
+  await start($)
+  await open($)
+  await inPane($, ui => ui.press({ key: 'arsenal-user-more-handoff' }))
+  expect(w.toasts).toEqual(['Could not fill the prompt box.'])
+})
+
+test('✎ edit shows every command with a pill, a press flips it at once and saves it, ✓ done goes back', async ($, on) => {
+  const w = world(on, OWN)
+  await start($)
+  await open($)
+  const ui = await pane($)
+  try {
+    expect(await label(ui, 'arsenal-user-edit')).toBe('✎ edit')
+    await ui.press({ key: 'arsenal-user-edit' })
+    expect(await label(ui, 'arsenal-user-edit')).toBe('✓ done')
+    // in edit mode a row runs nothing: there are pills, not run buttons
+    expect(await ui.find({ key: 'arsenal-user-run-standup' })).toBeUndefined()
+    expect((await texts(ui)).filter(t => t === ' ● On ').length).toBeGreaterThanOrEqual(2)
+
+    await ui.press({ key: 'arsenal-user-pill-standup' })
+    expect(w.store.off).toEqual({ version: 1, user: ['standup'], project: {} })
+    expect(w.runs).toEqual([])
+    // still listed in edit mode, now Off
+    expect(await ui.find({ key: 'arsenal-user-pill-standup' })).toBeDefined()
+    expect(await texts(ui)).toContain(' ○ Off ')
+
+    await ui.press({ key: 'arsenal-user-edit' })
+    expect(await label(ui, 'arsenal-user-edit')).toBe('✎ edit')
+    expect(await ui.find({ key: 'arsenal-user-run-standup' })).toBeUndefined()
+    expect(await ui.find({ key: 'arsenal-user-run-handoff' })).toBeDefined()
+
+    // and on again
+    await ui.press({ key: 'arsenal-user-edit' })
+    await ui.press({ key: 'arsenal-user-pill-standup' })
+    expect(w.store.off).toEqual({ version: 1, user: [], project: {} })
+  } finally {
+    await ui.unmount()
+  }
+})
+
+test('one section is in edit mode at a time, and closing the pane leaves it', async ($, on) => {
+  world(on, OWN)
+  await start($)
+  await open($)
+  const ui = await pane($)
+  try {
+    await ui.press({ key: 'arsenal-user-edit' })
+    await ui.press({ key: 'arsenal-project-edit' })
+    expect(await label(ui, 'arsenal-user-edit')).toBe('✎ edit')
+    expect(await label(ui, 'arsenal-project-edit')).toBe('✓ done')
+  } finally {
+    await ui.unmount()
+  }
+  await $.command.run({ command: 'arsenal', args: '' } as any)
+  await open($)
+  const again = await pane($)
+  try {
+    expect(await label(again, 'arsenal-project-edit')).toBe('✎ edit')
+  } finally {
+    await again.unmount()
+  }
+})
+
+test('a section whose commands are all off keeps its header, ✎ edit and an all off line', async ($, on) => {
+  world(on, { ...OWN, store: { off: { version: 1, user: ['handoff', 'standup'], project: {} } } })
+  await start($)
+  await open($)
+  const ui = await pane($)
+  try {
+    const all = await texts(ui)
+    expect(all).toContain('── U S E R')
+    expect(all).toContain('  all off')
+    expect(await label(ui, 'arsenal-user-edit')).toBe('✎ edit')
+    expect(await ui.find({ key: 'arsenal-user-run-handoff' })).toBeUndefined()
+    // PROJECT is untouched by USER's list
+    expect(await ui.find({ key: 'arsenal-project-run-seed-db' })).toBeDefined()
+  } finally {
+    await ui.unmount()
+  }
+})
+
+test('what was turned off is still off in the next session, and new commands are on', async ($, on) => {
+  world(on, { ...OWN, store: { off: { version: 1, user: ['standup', 'long-gone'], project: {} } } })
+  await start($)
+  await open($)
+  const ui = await pane($)
+  try {
+    expect(await ui.find({ key: 'arsenal-user-run-standup' })).toBeUndefined()
+    expect(await ui.find({ key: 'arsenal-user-run-handoff' })).toBeDefined()
+  } finally {
+    await ui.unmount()
+  }
+})
+
+test('a saved list that makes no sense is no list', async ($, on) => {
+  world(on, { ...OWN, store: { off: 'everything' } })
+  await start($)
+  await open($)
+  expect(await inPane($, ui => ui.find({ key: 'arsenal-user-run-standup' }))).toBeDefined()
+})
+
+test('a save that fails is a toast, and the pill still follows for the session', async ($, on) => {
+  const w = world(on, { ...OWN, saveFails: true })
+  await start($)
+  await open($)
+  const ui = await pane($)
+  try {
+    await ui.press({ key: 'arsenal-user-edit' })
+    await ui.press({ key: 'arsenal-user-pill-standup' })
+    expect(w.toasts).toEqual(['Could not save which commands are off.'])
+    expect(await texts(ui)).toContain(' ○ Off ')
+  } finally {
+    await ui.unmount()
+  }
+})
+
+test('PROJECT is the repo: found from a subfolder, with one off list for every checkout of it', async ($, on) => {
+  const repo = {
+    root: 'C:/work/repo/sub',
+    git: { top: 'C:/work/repo', common: 'C:/work/repo/.git' },
+    disk: { 'C:/work/repo/.claude/commands/deploy.md': fm('Ship it') },
+    own: [{ name: 'deploy', description: 'Ship it' }],
+  }
+  const w = world(on, repo)
+  await start($)
+  await open($)
+  await inPane($, async ui => {
+    await ui.press({ key: 'arsenal-project-edit' })
+    await ui.press({ key: 'arsenal-project-pill-deploy' })
+  })
+  // keyed by the shared .git folder: not the subfolder, not this checkout’s top
+  expect(w.store.off).toEqual({ version: 1, user: [], project: { 'c:/work/repo/.git': ['deploy'] } })
+})
+
+test('a worktree of that repo has the same command off', async ($, on) => {
+  world(on, {
+    root: 'C:/work/repo-wt',
+    git: { top: 'C:/work/repo-wt', common: 'C:/work/repo/.git' },
+    disk: { 'C:/work/repo-wt/.claude/commands/deploy.md': fm('Ship it') },
+    own: [{ name: 'deploy', description: 'Ship it' }],
+    store: { off: { version: 1, user: [], project: { 'c:/work/repo/.git': ['deploy'] } } },
+  })
+  await start($)
+  await open($)
+  const ui = await pane($)
+  try {
+    expect(await ui.find({ key: 'arsenal-project-run-deploy' })).toBeUndefined()
+    expect(await texts(ui)).toContain('  all off')
+  } finally {
+    await ui.unmount()
+  }
+})
+
+test('another repo’s list does not turn this repo’s command off', async ($, on) => {
+  world(on, {
+    root: 'C:/work/other',
+    git: { top: 'C:/work/other', common: 'C:/work/other/.git' },
+    disk: { 'C:/work/other/.claude/commands/deploy.md': fm('Ship it') },
+    own: [{ name: 'deploy' }],
+    store: { off: { version: 1, user: [], project: { 'c:/work/repo/.git': ['deploy'] } } },
+  })
+  await start($)
+  await open($)
+  expect(await inPane($, ui => ui.find({ key: 'arsenal-project-run-deploy' }))).toBeDefined()
+})
+
+test('an older git’s relative common dir gives the same key', async ($, on) => {
+  const w = world(on, {
+    root: 'C:/work/repo/sub',
+    git: { top: 'C:/work/repo', common: 'C:/work/repo/.git' },
+    oldGit: '../.git',
+    disk: { 'C:/work/repo/.claude/commands/deploy.md': fm('Ship it') },
+    own: [{ name: 'deploy' }],
+  })
+  await start($)
+  await open($)
+  await inPane($, async ui => {
+    await ui.press({ key: 'arsenal-project-edit' })
+    await ui.press({ key: 'arsenal-project-pill-deploy' })
+  })
+  expect(w.store.off).toEqual({ version: 1, user: [], project: { 'c:/work/repo/.git': ['deploy'] } })
+})
+
+test('in the home folder everything is USER and there is no PROJECT', async ($, on) => {
+  world(on, { root: 'C:/home', disk: { 'C:/home/.claude/commands/standup.md': fm('Yesterday') }, own: [{ name: 'standup' }] })
+  await start($)
+  await open($)
+  const all = await inPane($, texts)
+  expect(all).toContain('── U S E R')
+  expect(all.some(t => t.includes('P R O J E C T'))).toBe(false)
+})
+
+test('a name in both places is drawn under USER only', async ($, on) => {
+  world(on, {
+    disk: { 'C:/home/.claude/commands/handoff.md': fm('Global'), 'C:/bats/.claude/commands/handoff.md': fm('Project') },
+    own: [{ name: 'handoff' }],
+  })
+  await start($)
+  await open($)
+  const ui = await pane($)
+  try {
+    expect(await ui.find({ key: 'arsenal-user-run-handoff' })).toBeDefined()
+    expect(await ui.find({ key: 'arsenal-project-run-handoff' })).toBeUndefined()
+    expect((await texts(ui)).some(t => t.includes('P R O J E C T'))).toBe(false)
+  } finally {
+    await ui.unmount()
+  }
+})
+
+test('a skill added mid-session shows up when the menu opens again', async ($, on) => {
+  const disk: Record<string, string> = { 'C:/home/.claude/commands/standup.md': fm('Yesterday') }
+  const own = [{ name: 'standup' }]
+  world(on, { disk, own })
+  await start($)
+  await open($)
+  expect(await inPane($, ui => ui.find({ key: 'arsenal-user-run-deploy' }))).toBeUndefined()
+  await $.command.run({ command: 'arsenal', args: '' } as any)
+  disk['C:/home/.claude/commands/deploy.md'] = fm('Ship it')
+  own.push({ name: 'deploy' })
+  await open($)
+  expect(await inPane($, ui => ui.find({ key: 'arsenal-user-run-deploy' }))).toBeDefined()
+})
+
+test('the launcher shows for commands of the person’s own with neither tool, even when all are off', async ($, on) => {
+  const w = world(on, { ...OWN, commands: ['model', 'ctx'] })
+  await start($)
+  expect(await arrow($)).toBe('◆ Arsenal ▾')
+  await $.command.run({ command: 'arsenal', args: '' } as any)
+  expect(w.calls).toEqual(['open arsenal'])
+  const all = await inPane($, texts)
+  expect(all).not.toContain('── L A U N C H')
+  expect(all).not.toContain('── S E T T I N G S')
+  expect(all).toContain('── U S E R')
+})
+
+test('every own command off still leaves the launcher, so edit mode is reachable', async ($, on) => {
+  world(on, { ...OWN, commands: ['model'], store: { off: { version: 1, user: ['handoff', 'standup'], project: { 'c:/bats': ['seed-db'] } } } })
+  await start($)
+  expect(await arrow($)).toBe('◆ Arsenal ▾')
+})
+
+test('the pane asks for as many rows as the menu has lines', async ($, on) => {
+  const many = Array.from({ length: 12 }, (_, i) => `cmd${i}`)
+  const w = world(on, { disk: Object.fromEntries(many.map(n => [`C:/home/.claude/commands/${n}.md`, fm(n)])), own: many.map(name => ({ name })) })
+  await start($)
+  await open($)
+  expect(w.calls).toEqual(['open arsenal'])
+  // 2 header + 3 settings + 6 launch + 13 user + 1 note, and 2 of slack
+  expect(w.rows).toEqual([27])
+})
+
+test('nothing found and nothing broken: no folders, no git, no home', async ($, on) => {
+  world(on, { home: '', disk: {} })
+  await start($)
+  await open($)
+  const all = await inPane($, texts)
+  expect(all.some(t => t.includes('U S E R') || t.includes('P R O J E C T'))).toBe(false)
 })

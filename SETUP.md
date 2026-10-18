@@ -25,7 +25,7 @@ Paste this into Claude Code on the new computer:
 | `skins` | `hellosverre/claude-skins` | 0.5.6 | Colour scheme and words for the transcript |
 | `cache-keeper` | `nateherkai/claude-code-mods` | 1.0.0 | Adds the `session-handoff` skill |
 | `agent-pulse` | `afterever/claude-mods` (this repo) | 1.1.0 | Box above the prompt naming the step Claude is on, in color and motion, with a step history |
-| `arsenal` | `afterever/claude-mods` (this repo) | 0.1.0 | Button above the prompt that opens a docked menu: Prompt Upgrade switch and shortcuts to `/better` and `/report` |
+| `arsenal` | `afterever/claude-mods` (this repo) | 0.2.0 | Button above the prompt that opens a docked menu: Prompt Upgrade switch, shortcuts to `/better` and `/report`, and your own skills and commands (USER and PROJECT), each of which you can turn off |
 
 ## Install
 
@@ -242,15 +242,25 @@ jellyfish on the desktop. Written against 1.1.0. What changed:
 
 My own mod, from an idea in a video by the author of AI Made Easy ([tristenobrien.ai](https://tristenobrien.ai/)):
 a `◆ Arsenal ▾` button, the last row right above the prompt box, opens a menu pane docked on the
-right, with a Prompt Upgrade on/off switch and one-press shortcuts to `/better` and `/report`.
-`/arsenal` toggles it from the keyboard. Written against 0.1.0. Nothing to configure.
+right, with a Prompt Upgrade on/off switch, one-press shortcuts to `/better` and `/report`, and two
+sections for your own commands: **USER** (`~/.claude/skills` and `~/.claude/commands`) and
+**PROJECT** (the same two folders in the current repo). `/arsenal` toggles it from the keyboard.
+Written against 0.2.0. Nothing to configure.
 
-- **It needs `prompt-upgrade` and/or `work-report` installed to show anything.** It lists the
-  session's commands and keeps only the rows whose command exists; with neither tool there is no
-  button. Install those two first, or restart Claude Code after installing them.
-- **It is a remote control.** Every row runs a slash command the tool already has, and it never
-  writes another mod's state. It shows the model and effort in its header and never changes them.
-- **It makes no model calls and keeps nothing between sessions.**
+- **It shows something when you have `prompt-upgrade` or `work-report` installed, or commands of
+  your own.** It lists the session's commands and keeps only the rows whose command exists; with
+  none of those there is no button. Restart Claude Code after installing a tool.
+- **USER and PROJECT list every skill and command you wrote, all on.** `✎ edit` on a section's
+  header shows a pill on each row to turn single commands off and on. What is off is saved on
+  this machine, so the home PC and the work PC keep separate lists, and a PROJECT list belongs to
+  the repo, shared by its worktrees and subfolders. A row runs the command bare; a `…` on a
+  command that takes arguments puts `/name ` in an empty prompt box for you to finish. Plugins'
+  skills, built-ins and commands in subfolders are not listed.
+- **It is a remote control.** Every row runs a slash command that already exists, and it never
+  writes another mod's state or your skill files. It shows the model and effort in its header and
+  never changes them.
+- **It makes no model calls.** The only thing it keeps between sessions is which of your commands
+  you turned off.
 - What it does, the keys and the rows: [arsenal/README.md](./arsenal/README.md); why:
   [arsenal/DESIGN.md](./arsenal/DESIGN.md).
 
