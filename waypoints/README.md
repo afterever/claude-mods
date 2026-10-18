@@ -10,7 +10,7 @@ Claude plans the work as tasks sized S, M or L with the mod's own tool, `mcp__wa
 
 - **The band above the prompt:** the plan drawn as a **route**, a line of nodes and legs, each leg as long as its task is big (S, M or L). Finished legs are solid and shaded, the node a task starts from pulses while it runs, the last node is the destination `◎` (a `✦` once the plan is done). A long plan in a narrow window drops the legs and draws one glyph per task. Under it: what is running and who runs it, the next task, and the goal check's latest "not met yet" reason. In the header: tasks done, the percentage and the ETA at this goal's own pace.
 - **The footer:** `◎ goal 69% · ~15m`, whether or not the band shows. On Claude Desktop, where the band already draws the plan, it appears in the footer only while the band is hidden with `/waypoints hide`.
-- **The pane:** `/waypoints` opens this chat's whole task trail (every task, how long each took, who is running which) and your other chats' goals from the last 12 hours (the newest 15; the heading counts them all), each with its own small route. It also **opens by itself** when a goal's first plan starts, without taking the keys from your prompt, unless you closed the pane during that goal.
+- **The pane:** `/waypoints` opens this chat's whole task trail (every task, how long each took, who is running which) and your other chats' goals from the last hour (the newest 15; the heading counts them all), each with its own small route. It also **opens by itself** when a goal's first plan starts, without taking the keys from your prompt, unless you closed the pane during that goal.
 - **Claude Desktop:** the route is a drawn line instead of characters, with the same states and its own motion. Any surface that is not the terminal gets the drawn line.
 
 ```
@@ -38,7 +38,7 @@ In `/config`, under Waypoints:
 
 | Work | What asks for a plan |
 | --- | --- |
-| A `/goal` | The mod adds a note to the command asking for a plan. If four tool calls pass with no plan, it reminds Claude once. |
+| A `/goal` | The mod adds a note to the command asking for a plan. If four tool calls pass with no plan, it reminds Claude once. Until there is a plan, Claude's `Edit`, `Write`, `NotebookEdit` and `MultiEdit` calls are refused, so the bar is full from the start (`Bash` and subagents are not held back, and nothing is refused if the mod's tool did not register). |
 | Any other work of 3 or more steps | A standing line in the system prompt (new in 1.1.0). A plan made this way shows the same, named after the one-line `goal` Claude gives it (its first task if it gives none) and labelled *Plan* where a goal is labelled *Goal*. |
 | A small, single-step request | Nothing: the line tells Claude to skip it. |
 
@@ -53,14 +53,20 @@ The standing line is the one thing the global `CLAUDE.md` bullet used to do. If 
 | Command | What it does |
 | --- | --- |
 | `/waypoints` | Opens the pane (so does any word it does not know). Where the surface draws none, it prints the plan as text. |
-| `/waypoints hide`, `show` | Hides or shows the band. The footer stays. A new goal or plan shows it again. |
-| `/waypoints strict on`, `off` | On: Claude's `Edit`, `Write`, `NotebookEdit` and `MultiEdit` calls in a `/goal` are refused until it has planned. `Bash`, subagents and plans made outside a `/goal` are not held back. Off by default; the choice is kept between sessions. |
-| `/waypoints auto on`, `off` | Turns the standing line on or off. On by default; the choice is kept between sessions. |
+| `/waypoints hide`, `show` | Hides or shows the band, and says so in a toast. The footer stays. A new goal or plan shows it again. |
+| `/waypoints auto on`, `off` | Turns the standing line on or off. On by default; the choice is kept between sessions. The pane's last row shows which it is. |
 | `/waypoints clear` | Marks this chat's running goal as stopped; the band keeps showing `stopped` for three minutes. A finished goal is left as it is. |
+| `/waypoints prune` | Deletes old files in `~/.claude/mods-data/waypoints/`: other chats' goals that finished over an hour ago, and files untouched for a day. Never this chat's file, never a running goal's. It deletes them straight away, with no dialog: typing the command is the confirmation. Past 100 files the pane names the folder and reminds you. |
 
-For `strict` and `auto`, anything but `off` turns the setting on. `/goal clear` (or `stop`, `off`, `cancel`, `end`, `none`, `reset`) stops the goal in the same way. If Claude Code will not give the mod the name `/waypoints`, it registers `/waypoints-mod` instead.
+For `auto`, anything but `off` turns it on. `/goal clear` (or `stop`, `off`, `cancel`, `end`, `none`, `reset`) stops the goal in the same way. If Claude Code will not give the mod the name `/waypoints`, it registers `/waypoints-mod` instead.
 
 In the band, the **all tasks** button (or `g`) opens the pane. `g` is a button in the band, so it only works while the band shows; `/waypoints` always does.
+
+## What changed in 2.1.0
+
+**The options are fewer and say what they do.** `/waypoints hide` and `show` confirm in a toast. The pane's last row shows whether `auto` is on, what `clear` does and that the look and the pane's opening are set in `/config` → Waypoints. Other chats are listed for an hour instead of twelve. `/waypoints prune` deletes old data files, and the pane reminds you once the folder holds more than 100.
+
+A `/goal` now always plans before Claude edits files; the `strict` option is gone.
 
 ## What changed in 2.0.3
 
@@ -98,4 +104,4 @@ Switching: uninstall `goal-meter@nateherk-mods`, install `waypoints@afterever-mo
 
 ## Files
 
-State is one JSON file per chat in `~/.claude/mods-data/waypoints/`, written so the pane can list other chats. When Recording Mode's flag is on, titles and notes are masked before they are drawn.
+State is one JSON file per chat in `~/.claude/mods-data/waypoints/`, written so the pane can list other chats; `/waypoints prune` deletes the old ones. When Recording Mode's flag is on, titles and notes are masked before they are drawn.

@@ -10,8 +10,8 @@
 // - The footer: "◎ goal 69% · ~15m" in every view, terminal and Desktop.
 // - /waypoints: a pane with this chat's whole task trail and every other chat's goal.
 //   It opens by itself when a plan starts (userConfig pane: auto|off).
-//   /waypoints hide|show (the band), /waypoints strict on|off, /waypoints auto on|off,
-//   /waypoints clear.
+//   /waypoints hide|show (the band), /waypoints auto on|off, /waypoints clear.
+// - In a /goal, file edits wait until Claude has planned.
 // - The look (userConfig palette, animation) follows Agent-Pulse's by default.
 // - A standing line in the system prompt asks Claude to plan any multi-step work,
 //   not only a /goal; /waypoints auto off removes it.
@@ -24,11 +24,11 @@ import { newGoal, applyAction, progress, eta, parseCheck, isStopWord, normalizeT
 import { rolesOf, resolveLook } from './palette.mjs'
 import { drawBand, drawPane, statsLine, label, FULL_MS } from './draw.mjs'
 import { createAutoPane } from './pane.mjs'
+import { OTHERS_MS, shownPath, pickPrunable, deleteArgv } from './prune.mjs'
 
 const DIR = '/.claude/mods-data/waypoints'
 const PANE = 'waypoints'
 const RECENT_MS = 3 * 60000 // a finished goal stays on screen this long
-const OTHERS_MS = 12 * 3600000 // other chats' goals shown in /waypoints
 const REOPEN_MS = 5 * 60000 // a goal closed on its tasks reopens if Claude carries on this soon
 const NUDGE_AFTER = 4 // tool calls into a goal with no plan before the reminder
 const WRITERS = new Set(['Edit', 'Write', 'NotebookEdit', 'MultiEdit'])
@@ -36,11 +36,12 @@ const WRITERS = new Set(['Edit', 'Write', 'NotebookEdit', 'MultiEdit'])
 let G = null
 let sessionId = ''
 let home = ''
+let win = false // the host is Windows: prune deletes with cmd's del
 let cwd = ''
 let now = 0
 let toolName = 'mcp__waypoints__tasks'
 let commandName = 'waypoints'
-let settings = { strict: false, auto: true }
+let settings = { auto: true }
 let toolFailed = false
 let hidden = false
 let nudged = false
@@ -52,6 +53,7 @@ let options = { palette: 'follow', animation: 'follow', pane: 'auto' }
 let look = { palette: 'ember', level: 'subtle' }
 let roles = rolesOf('ember')
 let others = []
+let fileCount = 0 // the data folder's .json files, this chat's included
 let transcriptPath = ''
 const agentNames = new Map()
 const runningAgents = new Set()
@@ -90,9 +92,12 @@ async function restore($) {
 async function loadOthers($) {
   const dir = home + DIR
   const list = []
+  let count = 0
   try {
     for (const entry of await $.fs.list(dir)) {
-      if (entry.kind !== 'file' || !entry.name.endsWith('.json') || entry.name === sessionId + '.json') continue
+      if (entry.kind !== 'file' || !entry.name.endsWith('.json')) continue
+      count += 1
+      if (entry.name === sessionId + '.json') continue
       if (now - (entry.mtimeMs || 0) > OTHERS_MS) continue
       try {
         const g = JSON.parse(await $.fs.read(dir + '/' + entry.name))
@@ -106,7 +111,46 @@ async function loadOthers($) {
   } catch {
     // no folder yet
   }
+  fileCount = count
   others = list.sort((a, b) => (a.status === 'running' ? 0 : 1) - (b.status === 'running' ? 0 : 1) || b.updatedAt - a.updatedAt)
+}
+
+// /waypoints prune: deletes what pickPrunable picks with the host's own delete ($.fs has
+// none), no shell and no dialog. Says what happened in words for a toast; the count is the
+// files really gone.
+async function prune($) {
+  const dir = home + DIR
+  const items = []
+  try {
+    for (const entry of await $.fs.list(dir)) {
+      if (entry.kind !== 'file' || !entry.name.endsWith('.json')) continue
+      let goal = null
+      try {
+        goal = JSON.parse(await $.fs.read(dir + '/' + entry.name))
+      } catch {
+        // unreadable: pickPrunable keeps it while it is young
+      }
+      items.push({ name: entry.name, mtimeMs: entry.mtimeMs, goal })
+    }
+  } catch {
+    // no folder yet
+  }
+  const paths = pickPrunable(items, { now, self: sessionId + '.json' }).map((name) => dir + '/' + name)
+  if (!paths.length) return 'Nothing to prune'
+  const argv = deleteArgv(win, paths)
+  if (!argv) return `Prune did not run: delete old files by hand in ${shownPath(dir)}`
+  let r
+  try {
+    r = await $.process.run(argv)
+  } catch (err) {
+    return `Prune did not run: ${clip(String(err && err.message ? err.message : err), 80)}`
+  }
+  let gone = 0
+  for (const p of paths) if (!(await $.fs.exists(p))) gone += 1
+  await loadOthers($)
+  $.ui.invalidate('ui.render')
+  if (!gone) return `Prune did not run: ${clip(r.stderr || 'exit ' + r.exitCode, 80)}`
+  return `Pruned ${gone} old file${gone === 1 ? '' : 's'}`
 }
 
 async function readRecording($) {
@@ -177,7 +221,7 @@ async function maybeAutoClose($) {
 }
 
 async function registerCommand($) {
-  const spec = { name: 'waypoints', description: 'Waypoints: this chat\'s goal task list and every chat\'s goal (/waypoints hide|show|strict on|off|auto on|off|clear)', argumentHint: '[hide|show|strict on|off|auto on|off|clear]', immediate: true }
+  const spec = { name: 'waypoints', description: 'Waypoints: this chat\'s goal task list and every chat\'s goal (/waypoints hide|show|auto on|off|clear|prune)', argumentHint: '[hide|show|auto on|off|clear|prune]', immediate: true }
   try {
     await $.command.register(spec)
     return 'waypoints'
@@ -315,6 +359,7 @@ export function register(on, opts) {
   on('session.start', async ($, e, next) => {
     now = await $.clock.now()
     home = (await $.env.get('USERPROFILE')) || (await $.env.get('HOME')) || ''
+    win = (await $.env.get('OS')) === 'Windows_NT'
     sessionId = await $.session.id()
     cwd = await $.session.cwd()
     // where Claude Code keeps this chat's log; a settings-hook event confirms it below
@@ -417,7 +462,8 @@ export function register(on, opts) {
   on('tool.call', async ($, e, next) => {
     if (e.tool === toolName) return serveTool($, e)
     if (G && G.status === 'running' && G.kind === 'goal' && !G.planAt && !e.agentId) {
-      if (settings.strict && WRITERS.has(e.tool)) return { deny: strictDeny(toolName) }
+      // always on, but never asks for a tool that did not register
+      if (!toolFailed && WRITERS.has(e.tool)) return { deny: strictDeny(toolName) }
       if (e.tool !== 'ToolSearch') callsWithoutPlan += 1
       if (callsWithoutPlan >= NUDGE_AFTER && !nudged) {
         nudged = true
@@ -481,12 +527,6 @@ export function register(on, opts) {
   on('command.run', { command: ['waypoints', 'waypoints-mod'] }, async ($, e) => {
     now = await $.clock.now()
     const [key, value] = String(e.args || '').trim().toLowerCase().split(/\s+/)
-    if (key === 'strict') {
-      settings.strict = value !== 'off'
-      await $.store.set('settings', settings)
-      $.ui.toast(`Strict planning ${settings.strict ? 'on: no file edits in a /goal before the plan' : 'off'}`)
-      return {}
-    }
     if (key === 'auto') {
       settings.auto = value !== 'off'
       await $.store.set('settings', settings)
@@ -496,10 +536,17 @@ export function register(on, opts) {
     if (key === 'hide' || key === 'show') {
       hidden = key === 'hide'
       $.ui.invalidate('ui.render')
+      $.ui.toast(hidden ? `Waypoints band hidden · /${commandName} show brings it back` : 'Waypoints band shown')
       return {}
     }
     if (key === 'clear') {
       await stopGoal($, 'stopped')
+      return {}
+    }
+    if (key === 'prune') {
+      const msg = await prune($)
+      if (!(await $.session.surface())) return { text: msg }
+      $.ui.toast(msg)
       return {}
     }
     const surface = await $.session.surface()
@@ -572,7 +619,8 @@ export function register(on, opts) {
     if (e.requestId !== PANE) return next(e)
     const el = $.ui.resolve(e)
     const width = Math.max(50, (e.props && e.props.bodyColumns) || 100)
-    return drawPane(el, { g: G, now, mask, roles, level: look.level, width, others, sessionId, commandName, settings })
+    const files = { count: fileCount, dir: shownPath(home + DIR) }
+    return drawPane(el, { g: G, now, mask, roles, level: look.level, width, others, sessionId, commandName, settings, files })
   })
 }
 
