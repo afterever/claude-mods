@@ -1,11 +1,12 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, SessionContextBreakdown, Timer } from 'claude-code'
 
-import type { CtxDetail, CtxProjectLog, CtxSample, CtxServer, CtxSnapshot, CtxSpend, CtxWarn } from '../types'
+import type { CtxDetail, CtxLimit, CtxProjectLog, CtxSample, CtxServer, CtxSnapshot, CtxSpend, CtxWarn } from '../types'
 import type { BarRun } from './fmt'
 import type { ApiUsage, Piece, Rates } from './cost'
 import { addRecent, clipAsk, keepInstructions, mergeInstructions, shouldWarn, warnBadge, warnLevel, warnText } from './compact'
 import { addEater, addUsage, calibrate, DEFAULT_CPT, EMPTY_USAGE, estimateTokens, idleSessions, logSession, toolLabel, usageOf } from './usage'
+import { bandPace, paceStep, type PacePiece } from './pace'
 import { VERSION } from './version'
 import {
   bandSuffix,
@@ -111,6 +112,11 @@ const ASK_LIMIT = 3
 // What the session spent, per turn, from the engine's cost ledger
 const spend = atom({ plugin: 'ctx', key: 'spend' } as const, EMPTY_SPEND)
 const costOn = atom({ plugin: 'ctx', key: 'costOn' } as const, true)
+// The plan's rate-limit windows as the last response reported them, and a
+// minute tick that moves the band's countdown between responses
+const limits = atom({ plugin: 'ctx', key: 'limits' } as const, [])
+const paceTick = atom({ plugin: 'ctx', key: 'paceTick' } as const, 0)
+const PACE_TICK_MS = 60000
 // A compaction's summary when none has been seen yet, in tokens
 const SUMMARY_TOKENS = 8000
 
@@ -346,6 +352,16 @@ function stopTicker() {
   ticker = undefined
 }
 
+// Redraws the band's countdown once a minute; it only runs while the plan has windows
+let paceTimer: Timer | undefined
+
+// The windows the engine reports now (none off a subscription)
+async function setLimits($: EngineInterface, list: readonly CtxLimit[] | undefined) {
+  const next = Array.isArray(list) ? list.map(l => ({ ...l })) : []
+  await update($, limits, () => next)
+  if (next.length > 0) paceTimer ??= $.clock.every(PACE_TICK_MS, () => void update($, paceTick, n => n + 1))
+}
+
 async function setVisible($: EngineInterface, value: boolean, focus = false) {
   await update($, isVisible, () => value)
   try {
@@ -458,6 +474,16 @@ function Pieces({ el, pieces }: { el: El; pieces: Piece[] }) {
   )
 }
 
+// The pace: pieces of text, each in its tone; the HUD draws none of it bold
+function Pace({ el, pieces }: { el: El; pieces: PacePiece[] }) {
+  const { Box, Text } = el
+  return (
+    <Box key="ctx-pace" flexDirection="row" flexShrink={0}>
+      {pieces.map(p => (p.tone === 'dim' ? <Text dimColor>{p.text}</Text> : <Text color={p.tone}>{p.text}</Text>))}
+    </Box>
+  )
+}
+
 function Swatch({ el, kind, color, scope }: { el: El; kind: string; color: string; scope: string }) {
   const { Text } = el
   const hover = { scope: SCOPE + scope, inverse: true }
@@ -513,8 +539,10 @@ export const register: Register = on => {
       if ((await $.store.get('cost')) === false) await update($, costOn, () => false)
       const saved = (await $.store.get('costSamples')) as CtxSample[] | undefined
       if (Array.isArray(saved)) await update($, spend, s => (s.samples.length ? s : { ...s, samples: saved }))
-      const usd = (await $.session.usage()).cost?.usd
+      const taken = await $.session.usage()
+      const usd = taken.cost?.usd
       if (usd !== undefined) await update($, spend, s => ledgerAt(s, usd))
+      await setLimits($, taken.rateLimits)
     } catch {
       // no ledger: the dollar figures stay out
     }
@@ -539,6 +567,7 @@ export const register: Register = on => {
     // the cost ledger, real dollars: the running turn has spent what it grew by
     const usd = e.cost?.usd
     if (usd !== undefined) await update($, spend, s => ledgerAt(s, usd))
+    await setLimits($, e.rateLimits)
     if (e.changed.includes('context')) {
       // the API's own figure, so switching between exact and quick adds no jumps
       const tokens = e.context.tokens
@@ -740,6 +769,15 @@ export const register: Register = on => {
     const money = (await read($, costOn)) && sp.ledger !== undefined
     const lastTurn = money ? shownTurn(sp) : undefined
     const rates = money ? ratesOf(sp) : undefined
+    // the plan's pace (or an API account's session total), right-aligned beside the toggle
+    await read($, paceTick)
+    const pace = bandPace({
+      limits: await read($, limits),
+      usd: sp.ledger,
+      costOn: await read($, costOn),
+      step: paceStep(e.props.bodyColumns, e.surface),
+      now: await $.clock.now(),
+    })
     return (
       <Box flexDirection="column">
         <Box flexDirection="row" justifyContent="space-between" width="100%" columnGap={2}>
@@ -764,14 +802,17 @@ export const register: Register = on => {
           ) : (
             <Text dimColor>Context window</Text>
           )}
-          <Button
-            key="ctx-toggle"
-            label={show ? '📊▾' : '📊'}
-            hotkey="x"
-            plain
-            dimColor={!show}
-            onPress={() => toggleVisible($)}
-          />
+          <Box flexDirection="row" columnGap={2} flexShrink={0}>
+            {pace.length > 0 && Pace({ el, pieces: pace })}
+            <Button
+              key="ctx-toggle"
+              label={show ? '📊▾' : '📊'}
+              hotkey="x"
+              plain
+              dimColor={!show}
+              onPress={() => toggleVisible($)}
+            />
+          </Box>
         </Box>
         {below}
       </Box>

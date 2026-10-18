@@ -49,6 +49,8 @@ function world(
   compactions: (string | undefined)[] = [],
   // the session's cost ledger, when the test keeps one
   ledger?: { usd: number },
+  // the plan's rate-limit windows, when the test is on a subscription
+  limits: unknown[] = [],
 ) {
   const clock = mock.clock(on, { now: 100_000 })
   // the plugin's store, kept in `stored` so a test can read what was written
@@ -86,7 +88,7 @@ function world(
   })
   on('session.usage', async ($, e) => {
     counted.push(e?.breakdown ?? 'none')
-    return { value: { startedAt: 0, context: { window: 1_000_000, breakdown }, rateLimits: [], ...(ledger ? { cost: { usd: ledger.usd } } : {}) } } as any
+    return { value: { startedAt: 0, context: { window: 1_000_000, breakdown }, rateLimits: limits, ...(ledger ? { cost: { usd: ledger.usd } } : {}) } } as any
   })
   on('session.measure', async (_$, e) => ({ changed: e.changed }))
   on('ui.open', async () => ({ value: { isPlaced: true as const } }))
@@ -550,4 +552,124 @@ test("a fresh session's first turn writes the prompt afresh, and nothing calls i
   expect(shown.some(t => t.includes('●'))).toBe(false)
   const pane = await $.ui.mount({ plugin: 'ctx', surface: 'terminal', component: 'Pane', requestId: 'ctx', props: paneProps(60) })
   expect((await texts(pane)).some(t => t.startsWith('● cache miss'))).toBe(false)
+})
+
+// The plan's pace: windows that end this far from the test clock's now
+const NOW = 100_000
+const HOUR = 3_600_000
+const win = (kind: string, used: number, left: number) => ({ kind, percentUsed: used, resetsAt: new Date(NOW + left).toISOString() })
+const subscription = () => [win('five_hour', 25, 3 * HOUR + 40 * 60_000), win('seven_day', 22, 4 * 24 * HOUR + 16 * HOUR)]
+// the color of the Text that says exactly this (a find matches within a Text: `$0.01` is also in `+$0.01`)
+const colorOf = async (ui: any, text: string) =>
+  ((await ui.findAll({ type: 'Text' })) as { text: string; props: { color?: string } }[]).find(t => t.text === text)?.props.color
+// the desktop hands the band no width
+const bandAt = (surface: 'terminal' | 'desktop', columns: number) =>
+  surface === 'desktop' ? { ...bandProps(columns), bodyColumns: undefined } : bandProps(columns)
+
+for (const surface of ['terminal', 'desktop'] as const) {
+  test(`the band draws the plan's pace beside the toggle on ${surface}`, async ($, on) => {
+    const clock = world(on, [], [], [], [], {}, [], undefined, subscription())
+    // the windows the engine reports as the session starts
+    await $.session.start({ cwd: 'C:/bats', surface, isInteractive: true })
+    await clock.settle()
+    const band = await $.ui.mount({ plugin: 'ctx', surface, component: 'AbovePrompt', props: bandAt(surface, 160) as any })
+    // 3h40m of 5h left is 27% gone, 4d16h of 7d is 33% gone: 2 and 11 behind an even spend
+    const shown = await texts(band)
+    for (const piece of ['🐾 ', '25%', ' (3h 40m/', '-2%', ' · ', '22%', ' (4d 16h/', '-11%']) expect(shown).toContain(piece)
+    // under an even spend: green, as is the percent while the window is mostly unused
+    expect(await colorOf(band, '-2%')).toBe('success')
+    expect(await colorOf(band, '25%')).toBe('success')
+    // the pace sits with the toggle, in the group at the band's right edge
+    expect(await band.find({ key: 'ctx-pace' })).toBeDefined()
+    expect(await band.find({ key: 'ctx-toggle' })).toBeDefined()
+  })
+}
+
+test("a window's colors follow the HUD: the delta by its value, the percent by how much is used", async ($, on) => {
+  const clock = world(on, [], [], [], [])
+  // 80% used with 2h of 5h left is 60% gone: 20 over, and the percent past 75; the week is 4 under
+  await $.session.measure({ context: { window: 1_000_000 }, rateLimits: [win('five_hour', 80, 2 * HOUR), win('seven_day', 10, 6 * 24 * HOUR)] as any, changed: ['rateLimits'] })
+  await clock.settle()
+  const band = await $.ui.mount({ plugin: 'ctx', surface: 'terminal', component: 'AbovePrompt', props: bandProps(160) })
+  expect(await colorOf(band, '+20%')).toBe('error')
+  expect(await colorOf(band, '80%')).toBe('warning')
+  expect(await colorOf(band, '-4%')).toBe('success')
+  expect(await colorOf(band, '10%')).toBe('success')
+})
+
+test('the pace shrinks with the band: no countdown, the deltas alone, then nothing', async ($, on) => {
+  const clock = world(on, [], [], [], [], {}, [], undefined, subscription())
+  await $.session.start({ cwd: 'C:/bats', surface: 'terminal', isInteractive: true })
+  await clock.settle()
+  const at = async (columns: number) => texts(await $.ui.mount({ plugin: 'ctx', surface: 'terminal', component: 'AbovePrompt', props: bandProps(columns) }))
+  const full = await at(130)
+  expect(full).toContain(' (3h 40m/')
+  const short = await at(100)
+  expect(short).toContain('25%')
+  expect(short.some(t => t.includes('3h 40m'))).toBe(false)
+  expect(short).toContain('-2%')
+  const delta = await at(80)
+  expect(delta).toContain('🐾 ')
+  expect(delta).toContain('-2%')
+  expect(delta).not.toContain('25%')
+  const none = await at(79)
+  expect(none).not.toContain('🐾 ')
+  expect(none).not.toContain('-2%')
+})
+
+test('the windows move with each response and the countdown with each minute', async ($, on) => {
+  const clock = world(on, [], [], [], [])
+  const band = await $.ui.mount({ plugin: 'ctx', surface: 'terminal', component: 'AbovePrompt', props: bandProps(160) })
+  // nothing before a response has reported a window
+  expect(await band.find({ key: 'ctx-pace' })).toBeUndefined()
+  await $.session.measure({ context: { window: 1_000_000 }, rateLimits: subscription() as any, changed: ['rateLimits'] })
+  await clock.settle()
+  expect(await texts(band)).toContain(' (3h 40m/')
+  // the minute tick redraws the band: the countdown, with no response in between
+  await clock.advance(60_000)
+  expect(await texts(band)).toContain(' (3h 39m/')
+  expect((await texts(band)).includes(' (3h 40m/')).toBe(false)
+  // a later response moves the percent
+  await $.session.measure({ context: { window: 1_000_000 }, rateLimits: [win('five_hour', 31, 3 * HOUR + 39 * 60_000), subscription()[1]] as any, changed: ['rateLimits'] })
+  await clock.settle()
+  expect(await texts(band)).toContain('31%')
+})
+
+test('an API account sees its session total where a subscription sees the pace', async ($, on) => {
+  const ledger = { usd: 0 }
+  const queue: Usage[] = []
+  const clock = world(on, [], [], [], [], {}, [], ledger)
+  turns(on, queue)
+  await runTurn($, queue, ledger, 210_000, [{ usage: u(3, 800, 200_000, 6_000) }, { usage: u(3, 400, 206_000, 2_000) }])
+  await clock.settle()
+  const band = await $.ui.mount({ plugin: 'ctx', surface: 'terminal', component: 'AbovePrompt', props: bandProps(160) })
+  const shown = await texts(band)
+  expect(shown).toContain('session ')
+  expect(shown).toContain(fmtUsd(ledger.usd))
+  expect(await colorOf(band, fmtUsd(ledger.usd))).toBe('success')
+  expect(shown).not.toContain('🐾 ')
+  // the total is a dollar figure: `/ctx cost off` takes it away
+  await $.command.run({ command: 'ctx', args: 'cost off' } as any)
+  expect(await texts(band)).not.toContain('session ')
+  expect(await band.find({ key: 'ctx-pace' })).toBeUndefined()
+})
+
+test('cost off leaves the pace, which is a percent and not a dollar', async ($, on) => {
+  const clock = world(on, [], [], [], [], {}, [], { usd: 3 }, subscription())
+  await $.session.start({ cwd: 'C:/bats', surface: 'terminal', isInteractive: true })
+  await clock.settle()
+  const band = await $.ui.mount({ plugin: 'ctx', surface: 'terminal', component: 'AbovePrompt', props: bandProps(160) })
+  expect(await texts(band)).toContain('25%')
+  await $.command.run({ command: 'ctx', args: 'cost off' } as any)
+  expect(await texts(band)).toContain('25%')
+})
+
+test("a gateway's spend limit shows as a percent, with no pace", async ($, on) => {
+  const clock = world(on, [], [], [], [])
+  await $.session.measure({ context: { window: 1_000_000 }, rateLimits: [{ kind: 'spend_limit', percentUsed: 34 }] as any, changed: ['rateLimits'] })
+  await clock.settle()
+  const band = await $.ui.mount({ plugin: 'ctx', surface: 'terminal', component: 'AbovePrompt', props: bandProps(160) })
+  expect(await texts(band)).toContain('spend ')
+  expect(await texts(band)).toContain('34%')
+  expect((await texts(band)).includes('🐾 ')).toBe(false)
 })

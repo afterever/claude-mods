@@ -241,8 +241,8 @@ Two figures the pane showed without a reference point, and one cosmetic tighteni
 | Account | The band's pace section |
 | --- | --- |
 | Subscription: `rateLimits` has `five_hour` and/or `seven_day` | the pace, below |
-| No such windows, and the ledger exists (an API or enterprise account billed by use) | the session total, `$14.20`, drawn in `success` like the pane's |
-| A gateway `spend_limit` window and no other | its percent only (`34%`): the window's length is not given, so there is no pace to compute. **Untested**, no such account here |
+| No such windows, and the ledger exists (an API or enterprise account billed by use) | `session $14.2` (the label drops below the full step), the amount in `success` like the pane's |
+| A gateway `spend_limit` window and no other | `spend 34%` (the percent only; the label drops below the full step): the window's length is not given, so there is no pace to compute. **Untested**, no such account here |
 | Neither (before the first reply, or no ledger) | nothing, and no placeholder |
 
 Both windows always show when both exist; the HUD's `sevenDayThreshold` that hides the weekly window while it is comfortable is not copied. `/ctx cost off` hides the session total with every other dollar figure and leaves the pace, which is a percent and not a dollar. The session total is in the band only for an account that has no windows to show. 0.6.1 had kept it out, because the band is one line where the turn's dollars already compete for width and a status line would repeat it; on an API account it is the one reading of the budget being spent, and it takes the room the pace would have had.
