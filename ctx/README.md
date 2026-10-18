@@ -7,10 +7,11 @@ It mirrors the Desktop app's context panel, so the same information is one keypr
 terminal. It only observes. It never compacts, rewrites or turns anything off unless you ask.
 
 - **The band** is one line above the prompt: a small bar, the fill, a trend sparkline, the last
-  turn's cost, and a 📊 button that opens the pane.
+  turn's cost, the plan's pace (or an API account's session total) at the right, and a 📊 button
+  that opens the pane.
 - **The pane** is the full breakdown: categories, trend, cost, MCP servers, memory files, skills,
   agents, the heaviest results and what has gone unused.
-- **The Desktop app** has no band, so the same fill shows as `ctx 42%` in the footer.
+- **The Desktop app** draws the same band.
 
 Why each feature exists and how it is built: [DESIGN.md](./DESIGN.md).
 
@@ -88,12 +89,19 @@ exact count costs a token-count call per change, so each session starts on the e
   sessions in a project is a suggestion to turn it off in `/mcp`. ctx never does it for you.
 - **`last turn +$1.84`:** what the last turn cost, from the engine's own ledger. Figures with a `~`
   are estimates, priced from the last clean turns of the model in use.
+- **`🐾 25% (3h 40m/-2%) · 22% (4d 16h/-11%)`**, at the right of the band on a subscription: the
+  share of the 5-hour and 7-day limits used, the time left in each window, and how far ahead of
+  (`+`) or behind (`-`) an even spend you are. The figures and colors are claude-hud's pace. It
+  narrows with the band (no countdown, then the deltas alone, then nothing); on the Desktop it is
+  always whole. An API account sees `session $14.2` there instead, which `/ctx cost off` hides,
+  and the pace stays.
 
 ## Requirements
 
 - A Claude Code build that loads mods (plugins that register `hooks`).
-- Version 0.6.2 runs on Claude Code 2.1.296. The engine API it uses was checked against build 2.1.288
-  (see [DESIGN.md](./DESIGN.md)); no older minimum has been tried.
+- Version 0.7.0's tests run on Claude Code 2.1.302, and 0.6.2 ran live on 2.1.296; the pace has not
+  been seen live yet. The engine API ctx uses was checked against build 2.1.288 (see
+  [DESIGN.md](./DESIGN.md)); no older minimum has been tried.
 
 ## Develop
 

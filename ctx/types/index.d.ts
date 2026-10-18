@@ -96,6 +96,9 @@ export type CtxSpend = {
   compact?: { after?: number; usd?: number; summary?: number }
 }
 
+/** One rate-limit window as the engine reports it: `five_hour`, `seven_day`, or a gateway's `spend_limit`. */
+export type CtxLimit = { kind: string; percentUsed: number; resetsAt?: string }
+
 /** How close auto-compaction is. */
 export type CtxWarn = 'none' | 'near' | 'imminent'
 
@@ -163,6 +166,10 @@ declare module 'claude-code' {
       spend: CtxSpend
       /** Whether dollar figures are shown. */
       costOn: boolean
+      /** The plan's rate-limit windows as the last response reported them; empty off a subscription. */
+      limits: CtxLimit[]
+      /** Bumped once a minute while there are windows, so the band's countdown moves. */
+      paceTick: number
     }
   }
 }
