@@ -8,7 +8,8 @@ import { addRecent, clipAsk, keepInstructions, mergeInstructions, shouldWarn, wa
 import { addEater, addUsage, calibrate, DEFAULT_CPT, EMPTY_USAGE, estimateTokens, idleSessions, logSession, toolLabel, usageOf } from './usage'
 import { bandPace, paceStep, type PacePiece } from './pace'
 import { VERSION } from './version'
-import { breath, categoryTints, heatKeys, paletteOf, resolveLook, sparkColors, waterOf, type Look, type Tint } from './palette'
+import { breath, categoryTints, heatKeys, hexHeat, paletteOf, resolveLook, sparkColors, svgTints, waterOf, type Look, type Tint } from './palette'
+import { bandSvg, breathSvg } from './svg'
 import { frameAt, type TideProps } from './tide'
 import {
   bandSuffix,
@@ -153,6 +154,7 @@ const SWEEP_LIVE_MS = 1500
 // A compaction is heard twice (the drop on session.measure, then afterCompaction): one sweep
 const SWEEP_GUARD_MS = 2000
 const turnRunning = atom({ plugin: 'ctx', key: 'turnRunning' } as const, false)
+const fxTick = atom({ plugin: 'ctx', key: 'fxTick' } as const, 0)
 
 async function noteFx($: EngineInterface, kind: keyof CtxFx, delta: number) {
   if (delta <= 0) return
@@ -163,9 +165,28 @@ async function noteFx($: EngineInterface, kind: keyof CtxFx, delta: number) {
       if (kind === 'sweep' && last && now - last.at < SWEEP_GUARD_MS) return f
       return { ...f, [kind]: { id: (last?.id ?? 0) + 1, at: now, delta } }
     })
+    playFx($, now)
   } catch {
     // a missed effect is only a missed glow
   }
+}
+
+// Desktop has no Client, so its pane plays a one-shot by redraws: a tick while one is live, then none
+const FX_FRAME_MS = 80
+let fxTimer: Timer | undefined
+let fxUntil = 0
+
+function playFx($: EngineInterface, at: number) {
+  fxUntil = Math.max(fxUntil, at + GROWTH_LIVE_MS + 100)
+  fxTimer ??= $.clock.every(FX_FRAME_MS, () => {
+    void $.clock.now().then(now => {
+      if (now > fxUntil) {
+        fxTimer?.cancel()
+        fxTimer = undefined
+      }
+      return update($, fxTick, n => n + 1)
+    })
+  })
 }
 
 // The bar's motion for the look in force: the foam laps and the water drifts,
@@ -186,6 +207,24 @@ function tideOf(cells: Cell[], max: number, f: CtxFx, now: number, warn: CtxWarn
     if (span.to > span.from) props.sweep = { id: f.sweep.id, ...span, shore, water: water?.water ?? shore, foam: water?.foam ?? shore }
   }
   return props
+}
+
+// The band's bar for Desktop: the same cells and one-shots as the terminal's, drawn by bandSvg
+function pill(s: CtxSnapshot, width: number, f: CtxFx, now: number, warn: CtxWarn) {
+  // an SVG takes no theme keys: the dots and the buffer of claude and mono draw in the palette's idle grey
+  const idle = paletteOf(look.palette).hex.idle
+  const cells = bandCells(s, width, svgTints(look, s.rows), waterOf(look)).map(c => (/^#/.test(c.color) ? c : { ...c, color: idle }))
+  const t = tideOf(cells, s.max, f, now, warn)
+  const tick = s.compactAt && s.max ? Math.min(width - 1, Math.floor((s.compactAt / s.max) * width)) : undefined
+  return bandSvg({
+    cells,
+    level: look.level,
+    edge: t.edge,
+    ...(tick !== undefined ? { tick } : {}),
+    ...(warn !== 'none' && look.level !== 'off' ? { warn: hexHeat(look, warn === 'imminent' ? 2 : 0) } : {}),
+    ...(t.growth ? { growth: t.growth } : {}),
+    ...(t.sweep ? { sweep: { id: t.sweep.id, from: t.sweep.from, to: t.sweep.to } } : {}),
+  })
 }
 
 const moves = (t: TideProps) => Boolean(t.lap || t.breathe || t.growth || t.sweep || (t.level === 'full' && t.drift))
@@ -928,6 +967,9 @@ export const register: Register = (on, options) => {
     const live = Boolean(tide && e.surface === 'terminal' && 'Client' in el && moves(tide))
     const Client = 'Client' in el ? (el as { Client: any }).Client : undefined
     const heat = paletteOf(look.palette).heat[w.level === 'imminent' ? 2 : 0]
+    // Desktop: the bar is an SVG pill, its motion in CSS; its colours always hex
+    const Svg = e.surface !== 'terminal' && 'Svg' in el ? (el as { Svg: any }).Svg : undefined
+    const svgBar = s && Svg ? pill(s, barWidth, await read($, fx), nowMs, w.level) : undefined
     // the warning badge takes the sparkline's place on a band under 100 columns
     const cols = e.props.bodyColumns ?? 80
     const roomy = wide && (w.level === 'none' || cols >= 100)
@@ -963,7 +1005,9 @@ export const register: Register = (on, options) => {
               ) : (
                 <Text color={hot} bold>ctx</Text>
               )}
-              {live && Client && tide ? (
+              {svgBar ? (
+                <Svg key="ctx-pill" source={svgBar.source} alt={`context ${Math.round(s.percent)}% full`} width={svgBar.width} height={svgBar.height} />
+              ) : live && Client && tide ? (
                 <Client key="ctx-tide" module="./tide.tsx" props={tide} width={barWidth} height={1} />
               ) : (
                 Cells({ el, cells: tide ? frameAt(tide, 0, {}) : cells })
@@ -1041,6 +1085,10 @@ export const register: Register = (on, options) => {
     await read($, tick)
     const now = await $.clock.now()
     const paneFx = await read($, fx)
+    // Desktop redraws its one-shots on this tick
+    if (e.surface !== 'terminal') await read($, fxTick)
+    const paneSvg = e.surface !== 'terminal' && 'Svg' in el
+    const Svg = paneSvg ? (el as { Svg: any }).Svg : undefined
     const running = await read($, turnRunning)
     // the body as the surface measured it: the person may drag the dock narrower
     const width = Math.max(20, e.props.bodyColumns || PANE_ARGS.columns)
@@ -1130,11 +1178,23 @@ export const register: Register = (on, options) => {
           </Box>
           {Fill({ el, s })}
         </Box>
-        {w.level !== 'none' && (
-          <Text color={w.level === 'imminent' ? hk[2] : hk[0]} bold wrap="wrap">
-            {(w.level === 'imminent' ? '⚠ Auto-compact is close' : '⚠ Auto-compact is coming') + ' · c compacts on your terms'}
-          </Text>
-        )}
+        {w.level !== 'none' &&
+          (paneSvg && look.level !== 'off' ? (
+            // Desktop: the ⚠ breathes in an SVG of its own, the words stay text
+            <Box flexDirection="row" columnGap={1}>
+              {(() => {
+                const b = breathSvg(hexHeat(look, w.level === 'imminent' ? 2 : 0))
+                return <Svg key="ctx-warn" source={b.source} alt="warning" width={b.width} height={b.height} />
+              })()}
+              <Text color={w.level === 'imminent' ? hk[2] : hk[0]} bold wrap="wrap">
+                {(w.level === 'imminent' ? 'Auto-compact is close' : 'Auto-compact is coming') + ' · c compacts on your terms'}
+              </Text>
+            </Box>
+          ) : (
+            <Text color={w.level === 'imminent' ? hk[2] : hk[0]} bold wrap="wrap">
+              {(w.level === 'imminent' ? '⚠ Auto-compact is close' : '⚠ Auto-compact is coming') + ' · c compacts on your terms'}
+            </Text>
+          ))}
         {cold && (
           <Box flexDirection="column">
             <Text color="warning" bold wrap="wrap">{`⚠ cache likely expired · idle ${fmtIdle(idleMs)}`}</Text>
@@ -1151,11 +1211,13 @@ export const register: Register = (on, options) => {
             [...r.text].map(ch => ({ ch, color: r.color, scope: r.scope, ...(r.bg ? { bg: r.bg } : {}), ...(r.dim ? { dim: true } : {}) })),
           )
           const t = tideOf(cells, s.max, paneFx, now, w.level)
-          return moving && moves(t) && Client ? (
-            <Client key="ctx-pane-tide" module="./tide.tsx" props={t} width={cells.length} height={1} />
-          ) : (
-            Cells({ el, cells: frameAt(t, 0, {}) })
-          )
+          if (moving && moves(t) && Client) return <Client key="ctx-pane-tide" module="./tide.tsx" props={t} width={cells.length} height={1} />
+          if (e.surface === 'terminal') return Cells({ el, cells: frameAt(t, 0, {}) })
+          // Desktop: still water, and a one-shot played by the redraws playFx drives
+          const { lap: _lap, drift: _drift, breathe: _breathe, ...still } = t
+          const frame = Math.floor(now / 100)
+          const at = (x?: { at: number }) => (x ? Math.floor(x.at / 100) : undefined)
+          return Cells({ el, cells: frameAt(still, frame, { growth: at(paneFx.growth), sweep: at(paneFx.sweep) }) })
         })()}
         {marker && <Text color="inactive" dimColor>{marker}</Text>}
         {past.length >= 2 && (

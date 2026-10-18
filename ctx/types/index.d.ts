@@ -181,6 +181,8 @@ declare module 'claude-code' {
       fx: CtxFx
       /** A main-loop turn is running: the sparkline's newest point pulses. */
       turnRunning: boolean
+      /** Bumped while a one-shot plays on a surface with no Client, so the Desktop pane redraws it. */
+      fxTick: number
     }
   }
 }

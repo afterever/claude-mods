@@ -902,3 +902,60 @@ test('claude palette: the pane keeps 0.7 colours', { options: { palette: 'claude
   expect(((await pane.findAll({ type: 'Text', text: '■' })) as any[]).map(t => t.props.color)).toContain('permission')
   expect(await barText(pane)).toMatch(/·+/)
 })
+
+// 0.8.0, Desktop: an SVG pill in the band; the pane keeps a Text bar, for the hover link to its rows
+const svgs = async (ui: any) => ((await ui.findAll({ type: 'Svg' })) as { props: { width?: number; source?: string } }[]).map(n => n.props)
+
+test('the Desktop band draws an Svg and no Client', async ($, on) => {
+  const clock = world(on, [])
+  await $.session.measure(measure(36_500))
+  await clock.settle()
+  const band = await $.ui.mount({ plugin: 'ctx', surface: 'desktop', component: 'AbovePrompt', props: bandProps(120) })
+  const pill = (await svgs(band)).find(p => p.width === 128)
+  expect(pill?.source).toContain('class="wave"')
+  expect(await tides(band)).toEqual([])
+  expect(await band.find({ text: '4%' })).toBeDefined()
+})
+
+test('the Desktop band in claude still draws hex colours', { options: { palette: 'claude' } }, async ($, on) => {
+  const clock = world(on, [])
+  await $.session.measure(measure(36_500))
+  await clock.settle()
+  const band = await $.ui.mount({ plugin: 'ctx', surface: 'desktop', component: 'AbovePrompt', props: bandProps(120) })
+  const pill = (await svgs(band)).find(p => p.width === 128)
+  expect(pill?.source).not.toMatch(/(fill|stop-color)="(permission|promptBorder|inactive)"/)
+  expect(pill?.source).not.toContain('class="wave"')
+})
+
+test('the Desktop pane keeps a Text bar and no Svg in it', async ($, on) => {
+  const clock = world(on, [])
+  await $.session.measure(measure(36_500))
+  await clock.settle()
+  const pane = await $.ui.mount({ plugin: 'ctx', surface: 'desktop', component: 'Pane', requestId: 'ctx', props: paneProps(48) })
+  expect(await svgs(pane)).toEqual([])
+  expect(await tides(pane)).toEqual([])
+  expect(await barText(pane)).toMatch(/≈~+/)
+})
+
+test('the Desktop pane plays a growth by redraws, then stops', async ($, on) => {
+  const clock = world(on, [])
+  await $.session.measure(measure(36_500))
+  await clock.settle()
+  const pane = await $.ui.mount({ plugin: 'ctx', surface: 'desktop', component: 'Pane', requestId: 'ctx', props: paneProps(48) })
+  await $.session.measure(measure(60_000))
+  await clock.advance(300)
+  const colours = async () => ((await barRuns(pane)) as { props: { color?: string } }[]).map(t => t.props.color)
+  // the ember sparkle is on the bar while the glow plays
+  expect((await colours()).some(c => ['#ffe3b0', '#f6c177', '#f3a97c', '#e8957a'].includes(c ?? ''))).toBe(true)
+  await clock.advance(2000)
+  expect((await colours()).some(c => c === '#ffe3b0')).toBe(false)
+})
+
+test('the Desktop pane breathes its warning glyph', async ($, on) => {
+  const clock = world(on, [])
+  for (const t of [300_000, 400_000, 500_000, 800_000]) await $.session.measure(measure(t))
+  await clock.settle()
+  const pane = await $.ui.mount({ plugin: 'ctx', surface: 'desktop', component: 'Pane', requestId: 'ctx', props: paneProps(48) })
+  expect((await svgs(pane)).filter(p => p.width === 10)).toHaveLength(1)
+  expect(await pane.find({ text: 'Auto-compact is close · c compacts on your terms' })).toBeDefined()
+})

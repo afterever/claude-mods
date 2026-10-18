@@ -342,3 +342,23 @@ export function sparkColors(look: Look, tint: Tint | undefined, n: number): stri
   const from = mix(tint.core, '#000000', 0.35)
   return Array.from({ length: n }, (_, i) => mix(from, tint.glow, n > 1 ? i / (n - 1) : 1))
 }
+
+/**
+ * The rows' colours for an SVG, which takes no theme keys: the look's own tints in ember and neon,
+ * the phase hex of claude and mono otherwise, so the Desktop pill draws in every palette.
+ */
+export function svgTints(look: Look, rows: readonly { name: string; color: string; kind: string }[]): Record<string, Tint> {
+  if (shades(look)) return categoryTints(look, rows)
+  const p = paletteOf(look.palette)
+  const out: Record<string, Tint> = {}
+  for (const [name, ph] of Object.entries(CATEGORY_PHASE)) out[name] = { core: p.hex[ph], glow: p.hex[ph] }
+  for (const r of rows) if (!(r.name in out)) out[r.name] = { core: r.kind === 'used' ? agentColorOf(p, r.name) : p.hex.idle, glow: r.kind === 'used' ? agentColorOf(p, r.name) : p.hex.idle }
+  return out
+}
+
+/** A heat colour an SVG can draw: the palette's, or its outcome hex where the palette names a theme key. */
+export function hexHeat(look: Look, i: 0 | 1 | 2): string {
+  const p = paletteOf(look.palette)
+  const c = p.heat[i]
+  return /^#/.test(c) ? c : i === 2 ? p.outcomeHex.error : p.outcomeHex.denied
+}
