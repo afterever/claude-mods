@@ -13,5 +13,6 @@
 
 - **A band (`AbovePrompt`) hook draws its own rows first and `await next(e)` after them**
   (`[mine, below]`, never `[below, mine]`). The band is shared, and no API orders the plugins'
-  hooks, so this habit is the only thing that keeps `arsenal`'s launcher as the last row against
-  the prompt box. See "Staying the band's last row" in `arsenal/DESIGN.md`.
+  hooks, so this habit is the only thing that keeps one mod's row from landing under another's.
+  See "Staying the band's last row" in `arsenal/DESIGN.md`. (`arsenal`'s launcher no longer draws
+  in the band: since 0.3.0 it is in the prompt footer, `SessionMode`.)

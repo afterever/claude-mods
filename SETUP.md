@@ -25,7 +25,7 @@ Paste this into Claude Code on the new computer:
 | `skins` | `hellosverre/claude-skins` | 0.5.6 | Colour scheme and words for the transcript |
 | `cache-keeper` | `nateherkai/claude-code-mods` | 1.0.0 | Adds the `session-handoff` skill |
 | `agent-pulse` | `afterever/claude-mods` (this repo) | 1.1.0 | Box above the prompt naming the step Claude is on, in color and motion, with a step history |
-| `arsenal` | `afterever/claude-mods` (this repo) | 0.2.0 | Button above the prompt that opens a docked menu: Prompt Upgrade switch, shortcuts to `/better` and `/report`, and your own skills and commands (USER and PROJECT), each of which you can turn off |
+| `arsenal` | `afterever/claude-mods` (this repo) | 0.3.0 | Button in the footer under the prompt that opens a docked menu: Prompt Upgrade switch, shortcuts to `/better` and `/report`, and your own skills and commands (USER and PROJECT), each of which you can turn off |
 
 ## Install
 
@@ -241,11 +241,11 @@ jellyfish on the desktop. Written against 1.1.0. What changed:
 ## arsenal
 
 My own mod, from an idea in a video by the author of AI Made Easy ([tristenobrien.ai](https://tristenobrien.ai/)):
-a `◆ Arsenal ▾` button, the last row right above the prompt box, opens a menu pane docked on the
+a `[ ◆ Arsenal ▾ ]` button in Claude's orange, in the footer on the first row under the prompt box, opens a menu pane docked on the
 right, with a Prompt Upgrade on/off switch, one-press shortcuts to `/better` and `/report`, and two
 sections for your own commands: **USER** (`~/.claude/skills` and `~/.claude/commands`) and
 **PROJECT** (the same two folders in the current repo). `/arsenal` toggles it from the keyboard.
-Written against 0.2.0. Nothing to configure.
+Written against 0.3.0. Nothing to configure.
 
 - **It shows something when you have `prompt-upgrade` or `work-report` installed, or commands of
   your own.** It lists the session's commands and keeps only the rows whose command exists; with
@@ -277,9 +277,9 @@ Written against 0.2.0. Nothing to configure.
   above the prompt fills as tasks finish; `/waypoints` opens the pane.
 - `/better` opens a pane that asks for a rough prompt; `/report` opens the Work Report pane, and a
   `Work report` chip shows above the prompt.
-- A `◆ Arsenal ▾` button shows as the last row right above the prompt box, under the bands of
-  `ctx`, `agent-pulse` and `subagent-progress`; pressing it (or `/arsenal`) opens a pane docked on
-  the right with the Prompt Upgrade switch and the Launch rows.
+- A `[ ◆ Arsenal ▾ ]` button shows in the footer on the first row under the prompt box, before the
+  `◎ plan` label of `waypoints`; pressing it (or `/arsenal`) opens a pane docked on the right with
+  the Prompt Upgrade switch and the Launch rows.
 - While Claude works, a box above the prompt names the current step with a spinning glyph and a
   timer, its border flashing as calls end; the triangle expands the history.
 

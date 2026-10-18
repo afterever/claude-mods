@@ -1,16 +1,16 @@
 # arsenal
 
-A Claude Code mod that puts the tool mods in this repo, and your own skills and commands, one press away. A `◆ Arsenal ▾` button, the last row right above the prompt box, opens a menu pane docked on the right with a **Prompt Upgrade** switch, shortcuts to `/better` and `/report`, and a **USER** and a **PROJECT** section listing the skills and commands you wrote. You no longer have to remember `/better history` or `/report week`, or what you named your own commands.
+A Claude Code mod that puts the tool mods in this repo, and your own skills and commands, one press away. A `[ ◆ Arsenal ▾ ]` button in Claude's orange, in the footer on the first row under the prompt box, opens a menu pane docked on the right with a **Prompt Upgrade** switch, shortcuts to `/better` and `/report`, and a **USER** and a **PROJECT** section listing the skills and commands you wrote. You no longer have to remember `/better history` or `/report week`, or what you named your own commands.
 
 > **Credit.** The idea comes from a YouTube video by Tristen O'Brien ([tristenobrien.ai](https://tristenobrien.ai/)), who also gave us the idea for prompt-upgrade. In it, a "Tristen's Tools ▼" button in the footer opens a menu of settings and shortcuts. arsenal is that menu for the tools in this repo, under a name that is not a person's. Why it is built the way it is: [DESIGN.md](./DESIGN.md).
 
 ```
   (the other mods' bands)                       ┌ Arsenal ─────────────────────────┐
-                            [ ◆ Arsenal ▴ ]     │ ◆  A R S E N A L  Opus 5.5 · High │
+                                                │ ◆  A R S E N A L  Opus 5.5 · High │
  ────────────────────────────────────────────   │ ──────────────────────────────── │
  > your prompt                                  │ ── S E T T I N G S               │
  ────────────────────────────────────────────   │ ○ Prompt Upgrade        ○ Off    │
-                                                │   upgrade every prompt first     │
+ [ ◆ Arsenal ▴ ] ◎ plan 44% · ~2m               │   upgrade every prompt first     │
                                                 │ ── L A U N C H                   │
                                                 │ u: ✦ Upgrade a prompt            │
                                                 │ h: ◷ Prompt history              │
@@ -29,7 +29,7 @@ A Claude Code mod that puts the tool mods in this repo, and your own skills and 
 
 | Do | Result |
 | --- | --- |
-| Press `◆ Arsenal ▾`, the last row above the prompt box | Opens the menu pane, docked on the right in fullscreen (above the prompt otherwise). The button turns to `▴`; press it again to close. |
+| Press `[ ◆ Arsenal ▾ ]`, in the footer on the first row under the prompt box | Opens the menu pane, docked on the right in fullscreen (above the prompt otherwise). The button turns to `▴`; press it again to close. |
 | `/arsenal` | The same toggle from the keyboard. It works while Claude is busy. |
 | Esc, or the pane's close mark | Closes it, and the button turns back to `▾`. |
 
@@ -78,9 +78,8 @@ These rows have no hotkeys. LAUNCH keeps its own.
 ## What it does not do
 
 - **It is a remote control.** Every row ends in a slash command that already exists. arsenal never writes another mod's state or your skill and command files, and never imports another mod's code. If you uninstall a tool, its rows disappear.
-- **It leaves the status mods alone.** `ctx`, `subagent-progress` and `agent-pulse` keep their bands. The button is drawn after them, as the band's last row.
+- **It leaves the status mods alone.** `ctx`, `subagent-progress` and `agent-pulse` keep their bands. The button is not in the band at all; it sits in the footer, before the labels other mods add there, such as waypoints' plan.
 - **It has no model or effort picker.** There is no "auto model" and no helper-agent model setting.
-- **It yields to surveys.** While Claude asks a question in the band, the button steps aside.
 - **It keeps one thing between sessions: which of your own commands you turned off.** A new session starts with the menu closed.
 - **It makes no model calls and sends nothing anywhere.**
 
@@ -103,4 +102,4 @@ claude plugin test E:\github\claude-mods\arsenal
 
 `hooks/menu.ts` is the arithmetic and wording (model and effort labels, which rows, the columns, off lists, row layout) and `hooks/menu.test.ts` tests it. `hooks/own.ts` is the pure part of finding your own commands (frontmatter, names, the project key) and `hooks/own.test.ts` tests it. `hooks/register.tsx` is the hooks, including the folder and git reads, and `hooks/render.test.ts` runs them in the engine's test kit on the terminal and the desktop surface.
 
-A band mod that should stay above the button draws its own rows first and the tree of the mods beneath it (`await next(e)`) after them, as every band mod in this repo does. DESIGN.md explains why under "Staying the band's last row".
+The button is a `SessionMode` hook: it wraps the engine's footer (`await next(e)`), which already holds the labels other mods added, and draws itself first with one space between. A mod that draws its own tree in that slot would replace the row below it, so add a label to `modes` instead, as waypoints does. DESIGN.md has the probe under "0.3.0: the launcher moves to the footer".

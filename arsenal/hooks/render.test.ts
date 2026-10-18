@@ -60,7 +60,7 @@ type World = {
 }
 
 // The world beneath the plugin: the command list, the model, prompt-upgrade's
-// switch, the panes, and the line and bands other mods draw
+// switch, the panes, and the line and footer other mods draw
 function world(on: On, o: Opts = {}): World {
   const w: World = { runs: [], registered: [], toasts: [], calls: [], steps: [], auto: { on: o.auto ?? false }, model: { value: o.model ?? 'opus' }, store: { ...o.store }, fills: [], rows: [] }
   const panes = new Set(o.panes ?? [])
@@ -151,25 +151,16 @@ function world(on: On, o: Opts = {}): World {
     w.steps.push({ model: e.model, effort: e.effort, agentId: e.agentId })
     return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: 'end_turn' as const, usage: null }
   })
-  // the engine's hint line and the band of a mod beneath this one
+  // the engine's hint line and its footer (the node the labels of other mods,
+  // waypoints' plan among them, are already in)
   on('ui.render', { component: 'PromptHint' }, ($, e) => h($.ui.resolve(e).Box, { key: 'hint-line' }) as any)
-  on('ui.render', { component: 'AbovePrompt' }, ($, e) => h($.ui.resolve(e).Box, { key: 'beneath' }) as any)
+  on('ui.render', { component: 'SessionMode' }, ($, e) => h($.ui.resolve(e).Box, { key: 'engine-footer' }) as any)
   return w
 }
 
 const start = ($: Engine) => $.session.start({ cwd: 'C:/bats', surface: 'terminal', isInteractive: true })
 
 type Surface = 'terminal' | 'desktop'
-
-const bandProps = (over: { hasSurvey?: boolean } = {}) => ({
-  hasSurvey: false,
-  isWorking: false,
-  maxRows: 20,
-  bodyColumns: 100,
-  scroll: { offset: 0, bodyRows: 20 },
-  view: {},
-  ...over,
-})
 
 const paneProps = (bodyColumns: number) => ({
   title: 'Arsenal',
@@ -180,8 +171,8 @@ const paneProps = (bodyColumns: number) => ({
   view: {},
 })
 
-const band = ($: Engine, over: { hasSurvey?: boolean } = {}, surface: Surface = 'terminal') =>
-  $.ui.mount({ plugin: 'arsenal', surface, component: 'AbovePrompt', props: bandProps(over) })
+const footer = ($: Engine, surface: Surface = 'terminal') =>
+  $.ui.mount({ plugin: 'arsenal', surface, component: 'SessionMode', props: { modes: [] } })
 
 const pane = ($: Engine, cols = 48, surface: Surface = 'terminal') =>
   $.ui.mount({ plugin: 'arsenal', surface, component: 'Pane', requestId: 'arsenal', props: paneProps(cols) })
@@ -200,41 +191,46 @@ async function inPane<T>($: Engine, look: (ui: Mounted) => Promise<T>, cols = 48
 
 const hint = ($: Engine) => $.ui.mount({ plugin: 'arsenal', surface: 'terminal', component: 'PromptHint', props: { isDraft: false, isWorking: false, hint: '? for shortcuts' } })
 
-const arrow = async ($: Engine) => ((await (await band($)).find({ key: 'arsenal-toggle' }))?.props as { label?: string } | undefined)?.label
+const arrow = async ($: Engine) => ((await (await footer($)).find({ key: 'arsenal-toggle' }))?.props as { label?: string } | undefined)?.label
 
 /** Opens the menu the way the person does: a press on the launcher. */
 async function open($: Engine) {
-  const ui = await band($)
+  const ui = await footer($)
   await ui.press({ key: 'arsenal-toggle' })
   await ui.unmount()
 }
 
 const texts = async (ui: { findAll: (q: { type: string }) => Promise<{ text: string }[]> }) => (await ui.findAll({ type: 'Text' })).map(t => t.text)
 
-test('a session starts with the menu closed: the bands beneath, then the launcher', async ($, on) => {
+test('a session starts with the menu closed: the launcher in the footer, the engine’s footer wrapped after it', async ($, on) => {
   const w = world(on)
   await start($)
-  const ui = await band($)
-  expect(await ui.find({ key: 'beneath' })).toBeDefined()
+  const ui = await footer($)
   expect(await ui.find({ key: 'arsenal-launcher' })).toBeDefined()
+  expect(await ui.find({ key: 'engine-footer' })).toBeDefined()
   expect(w.calls).toEqual([])
 })
 
-test('the launcher is the band’s last row, after what the mods beneath draw', async ($, on) => {
+test('the launcher comes first on the row, a space before what the engine’s footer holds', async ($, on) => {
   world(on)
   await start($)
-  const ui = await band($)
+  const ui = await footer($)
   const rows = (await ui.findAll({ type: 'Box' })) as unknown as { props: { key?: string }; key?: string }[]
-  const keys = rows.map(r => r.key ?? r.props.key).filter((k): k is string => k === 'beneath' || k === 'arsenal-launcher')
-  expect(keys).toEqual(['beneath', 'arsenal-launcher'])
+  const keys = rows.map(r => r.key ?? r.props.key).filter((k): k is string => k === 'engine-footer' || k === 'arsenal-launcher')
+  expect(keys).toEqual(['arsenal-launcher', 'engine-footer'])
+  expect(await texts(ui)).toEqual(['[ ◆ Arsenal ▾ ]', ' '])
 })
 
-test('the launcher is a primary button that opens the menu as a pane, its arrow turning up', async ($, on) => {
+test('the launcher is a plain button in Claude’s orange that opens the menu as a pane, its arrow turning up', async ($, on) => {
   const w = world(on)
   await start($)
-  const button = await (await band($)).find({ key: 'arsenal-toggle' })
+  const ui = await footer($)
+  const button = await ui.find({ key: 'arsenal-toggle' })
   expect((button?.props as { label?: string }).label).toBe('◆ Arsenal ▾')
-  expect((button?.props as { variant?: string }).variant).toBe('primary')
+  expect((button?.props as { plain?: boolean }).plain).toBe(true)
+  const drawn = (button as unknown as { children: { props: { color?: string }; children: string[] }[] }).children[0]
+  expect(drawn.children).toEqual(['[ ◆ Arsenal ▾ ]'])
+  expect(drawn.props.color).toBe('claude')
   await open($)
   expect(w.calls).toEqual(['open arsenal'])
   expect(await arrow($)).toBe('◆ Arsenal ▴')
@@ -243,13 +239,13 @@ test('the launcher is a primary button that opens the menu as a pane, its arrow 
 test('the hint line under the status line is left to the engine', async ($, on) => {
   world(on)
   await start($)
-  const footer = await hint($)
-  expect(await footer.find({ key: 'hint-line' })).toBeDefined()
-  expect(await footer.find({ key: 'arsenal-toggle' })).toBeUndefined()
+  const line = await hint($)
+  expect(await line.find({ key: 'hint-line' })).toBeDefined()
+  expect(await line.find({ key: 'arsenal-toggle' })).toBeUndefined()
 })
 
 for (const surface of ['terminal', 'desktop'] as const) {
-  test(`the pane draws the menu on ${surface}, and the band keeps no menu`, async ($, on) => {
+  test(`the pane draws the menu on ${surface}, and the footer keeps no menu`, async ($, on) => {
     world(on)
     await start($)
     await open($)
@@ -259,7 +255,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(all).toContain('◆  A R S E N A L')
     expect(all).toContain('── S E T T I N G S')
     expect(all).toContain('── L A U N C H')
-    expect(await (await band($, {}, surface)).find({ key: 'arsenal-menu' })).toBeUndefined()
+    expect(await (await footer($, surface)).find({ key: 'arsenal-menu' })).toBeUndefined()
   })
 }
 
@@ -267,7 +263,7 @@ test('pressing the launcher again closes the pane', async ($, on) => {
   const w = world(on)
   await start($)
   await open($)
-  await (await band($)).press({ key: 'arsenal-toggle' })
+  await (await footer($)).press({ key: 'arsenal-toggle' })
   expect(w.calls).toEqual(['open arsenal', 'close arsenal'])
   expect(await arrow($)).toBe('◆ Arsenal ▾')
 })
@@ -295,12 +291,12 @@ test('after a hot reload an open pane keeps the arrow up', async ($, on) => {
   expect(await arrow($)).toBe('◆ Arsenal ▴')
 })
 
-test('a survey takes the band: the launcher yields to it', async ($, on) => {
+test('the launcher draws on the desktop as well', async ($, on) => {
   world(on)
   await start($)
-  const ui = await band($, { hasSurvey: true })
-  expect(await ui.find({ key: 'arsenal-launcher' })).toBeUndefined()
-  expect(await ui.find({ key: 'beneath' })).toBeDefined()
+  const ui = await footer($, 'desktop')
+  expect(await ui.find({ key: 'arsenal-toggle' })).toBeDefined()
+  expect(await ui.find({ key: 'engine-footer' })).toBeDefined()
 })
 
 test('every Launch row closes the pane, then runs its tool’s own command', async ($, on) => {
@@ -388,8 +384,8 @@ test('a missing tool takes its rows with it, and the section if none are left', 
 test('with neither tool there is no launcher, and /arsenal opens nothing', async ($, on) => {
   const w = world(on, { commands: ['model', 'ctx'] })
   await start($)
-  const ui = await band($)
-  expect(await ui.find({ key: 'beneath' })).toBeDefined()
+  const ui = await footer($)
+  expect(await ui.find({ key: 'engine-footer' })).toBeDefined()
   expect(await ui.find({ key: 'arsenal-launcher' })).toBeUndefined()
   await $.command.run({ command: 'arsenal', args: '' } as any)
   expect(w.calls).toEqual([])

@@ -488,23 +488,25 @@ export const register: Register = on => {
     return r
   })
 
-  // The launcher is the band's last row, against the prompt box: no mod draws
-  // between the box and the status line, and the hint line under that sits
-  // below a tall status line. Every band mod installed here draws its own rows
-  // first and the mods beneath it after, so the last row stays the launcher
-  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    if (e.props.hasSurvey) return next(e)
+  // The launcher sits in the prompt footer (SessionMode), first on the row the
+  // engine's footer draws, which is also where claude-hud's first row starts.
+  // The engine hands its footer over as one opaque node, with the labels other
+  // mods added (waypoints' plan) already in it, so it is wrapped, never
+  // rebuilt from `modes`. A space after the button keeps the two apart
+  on('ui.render', { component: 'SessionMode' }, async ($, e, next) => {
     const tools = await read($, toolsAtom)
     if (!hasRows(tools, (await read($, ownAtom)) ?? NO_OWN)) return next(e)
     const open = (await read($, isOpenAtom)) === true
-    const below = await next(e)
-    const { Box, Button } = $.ui.resolve(e)
+    const footer = await next(e)
+    const { Box, Button, Text } = $.ui.resolve(e)
+    const label = open ? '◆ Arsenal ▴' : '◆ Arsenal ▾'
     return (
-      <Box flexDirection="column">
-        {below}
-        <Box key="arsenal-launcher" justifyContent="flex-end">
-          <Button key="arsenal-toggle" variant="primary" label={open ? '◆ Arsenal ▴' : '◆ Arsenal ▾'} onPress={() => toggleMenu($)} />
-        </Box>
+      <Box key="arsenal-launcher">
+        <Button key="arsenal-toggle" plain label={label} onPress={() => toggleMenu($)}>
+          <Text color="claude">{`[ ${label} ]`}</Text>
+        </Button>
+        <Text> </Text>
+        {footer}
       </Box>
     )
   })

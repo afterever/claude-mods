@@ -34,6 +34,10 @@ not a person's name.
 
 ## Where it draws (as released in 0.1.0, verified live)
 
+> **Superseded in 0.3.0.** The launcher no longer sits in the band: it moved to the prompt footer
+> (`SessionMode`). This section, and "Staying the band's last row" below, are the 0.1.0 and 0.2.0
+> design. Why it moved and how it draws now: "0.3.0: the launcher moves to the footer".
+
 ```
    (ctx / cache-keeper / work-report / agent-pulse … bands, drawn by next(e))
                                    [ ◆ Arsenal ▾ ]   ← (1) AbovePrompt band: the launcher, last row
@@ -165,6 +169,9 @@ nothing.
   open by the reload keeps its arrow up.
 
 ### Staying the band's last row
+
+*(Historical since 0.3.0: arsenal no longer draws in the band. The habit below is still the right one
+for any band mod in this repo, so none of them lands under another mod's row.)*
 
 No API lets a plugin choose where its hook sits in the `AbovePrompt` chain. Each hook only decides
 where the tree of the plugins beneath it (`await next(e)`) goes in its own tree. So the launcher is
@@ -717,6 +724,62 @@ A new version of a mod goes on a branch and through a PR (repo `CLAUDE.md`). The
    work-report installed, as long as the person has commands of their own.
 4. The marketplace entry's description, if it says the menu is only for the repo's tools.
 5. PR titled like the earlier ones ("arsenal 0.2.0: …").
+
+## 0.3.0: the launcher moves to the footer
+
+Probed and built on 2026-10-18 (Sonnet 5.5) with the person watching a real terminal. Read means
+read from the API types; **seen** means the person saw it.
+
+### Why
+
+0.1.0 put the launcher in the band because "nothing a mod draws can sit between the prompt box and
+the statusLine", and the hint line (`PromptHint`) put the button on a row of its own at the very
+bottom. The person then noticed that waypoints draws `◎ plan 44%` in the **footer** at the right
+of the prompt, on the first row under the prompt box, level with claude-hud's first row. That slot
+is `SessionMode`, a render site this design's survey had counted as a text-only label.
+
+### What the probe found (a throwaway mod, `footer-probe`)
+
+- **`SessionMode` takes a tree with a `Button`, and the button can be clicked.** Seen on the terminal:
+  the button sat on the first row below the prompt box, same row as claude-hud's first row; five
+  presses were counted.
+- **The engine hands its footer over as one opaque node** (`{"type":"engine","ref":1}`), and
+  `props.modes` is empty at that point (read from a dump of the hook). Labels other mods add
+  (waypoints' plan) are already inside the node, so the hook wraps `await next(e)` and never rebuilds
+  the row from `modes`. Seen: `[ ◆ Probe ▾ 5 ]◎ plan 0% · 0/3` with the button and waypoints' label
+  both drawn.
+- **No gap** between the two in the first draft. A `Text` holding one space after the button fixes it.
+- **Colour.** `variant="primary"` draws in the surface's accent, which is purplish on the person's
+  theme. `ButtonProps` still has no colour props, but a `plain` Button may hold a `Text` child
+  (the 0.1.0 Settings pill does), and `Text.color` takes a theme key. `claude` is Claude's own
+  orange in the person's theme, so the launcher is a `plain` Button holding
+  `<Text color="claude">[ ◆ Arsenal ▾ ]</Text>`. A theme key follows the person's theme, which a
+  hex would not.
+- **Desktop** (`SessionMode` is raised on terminal and desktop, read from the types): the same hook
+  draws a valid tree on `desktop` in the test kit, and a Desktop `Button` is a native button.
+  **Not seen on a real Desktop session.** ctx's notes say Desktop has no band, which would have left
+  the 0.1.0 launcher out of Desktop; the footer is the way in there.
+
+### What changed
+
+- `ui.render` `AbovePrompt` is gone. `ui.render` `SessionMode` replaces it: no rows → `next(e)`;
+  else `await next(e)`, then a row of the launcher, one space, and that node.
+- The survey rule went with it. `SessionMode` has no `hasSurvey`, and a survey does not take the
+  footer.
+- The button reads `[ ◆ Arsenal ▾ ]`, drawn by the `Text`; the Button's `label` stays
+  `◆ Arsenal ▾` as the control's name, so the arrow logic and `/arsenal` are unchanged.
+- Order in the footer: the launcher first, then everything the engine and other mods draw.
+- Tests: 96 (was 96): the band-order and survey tests became "the launcher comes first on the
+  row, a space before the engine's footer", "a plain button in Claude's orange" and "the
+  launcher draws on the desktop as well".
+
+### Not settled
+
+- How a `plain` Button holding a `Text` is **hovered** on the terminal (the focus/pointer invert).
+- A real Desktop session.
+- Other mods that add a `SessionMode` hook above arsenal: waypoints appends to `modes` and
+  does not draw a tree, so it works either way; a mod that draws its own tree there would replace
+  the row below it. None here does.
 
 ## Alternatives turned down
 
