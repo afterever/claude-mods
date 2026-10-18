@@ -257,5 +257,5 @@ export function nudge(tool) {
 }
 
 export function strictDeny(tool) {
-  return `Waypoints (strict): plan the goal before changing files. Call ${tool} with action "plan" first, then retry this.`
+  return `Waypoints: plan the goal before changing files. Call ${tool} with action "plan" first, then retry this.`
 }

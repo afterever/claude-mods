@@ -231,7 +231,7 @@ test('Recording Mode masks every title, who runs it and the goal check', async (
 
 // ---------- the pane ----------
 
-const paneView = (g: any, o: any = {}) => view(g, { others: [], sessionId: 's1', commandName: 'waypoints', settings: { strict: false, auto: true }, width: 80, ...o })
+const paneView = (g: any, o: any = {}) => view(g, { others: [], sessionId: 's1', commandName: 'waypoints', settings: { auto: true }, width: 80, ...o })
 const lines = (tree: any) => tree.children.map(flat)
 
 test('the pane\'s stats line holds the numbers, elapsed time, the ETA, growth and goal checks', async () => {

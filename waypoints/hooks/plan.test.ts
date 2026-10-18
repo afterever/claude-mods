@@ -46,6 +46,8 @@ test('every word Claude reads names Waypoints and the tool', async () => {
     expect(text.toLowerCase()).not.toContain('goal meter')
     expect(text.toLowerCase()).not.toContain('goal-meter')
   }
+  // strict is no longer an option, so the refusal does not name one
+  expect(strictDeny(TOOL)).not.toContain('strict')
 })
 
 test('the standing line asks for a plan on multi-step work and keeps subagents out of it', async () => {

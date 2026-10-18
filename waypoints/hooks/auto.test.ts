@@ -100,6 +100,14 @@ test('a pane that is already open is not opened twice', async ($, on) => {
   expect(w.opened[0].focus).toBe(true)
 })
 
+test('/waypoints strict on is an unknown word now: it opens the pane and toasts nothing', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await $.command.run({ command: 'waypoints', args: 'strict on' })
+  expect(w.opened.at(-1).id).toBe(PANE)
+  expect(w.toasts).toEqual([])
+})
+
 test('pane off: a plan opens nothing, /waypoints still opens it', { options: { pane: 'off' } }, async ($, on) => {
   const w = world(on)
   await start($)

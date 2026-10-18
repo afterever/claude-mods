@@ -38,6 +38,9 @@ function world(on: On, o: Opts = {}) {
   })
   on('prompt.compose', async () => ({ sections: [{ id: 'intro', text: 'You are Claude Code.', scope: 'shared' }] }))
   on('ui.render', { component: 'AbovePrompt' }, async ($, e) => h($.ui.resolve(e).Box, {}) as any)
+  on('command.run', { command: 'goal' }, async () => ({}) as any)
+  // every other tool answers ok, as the engine's tool would
+  on('tool.call', async () => ({ result: 'ok', text: 'ok' }) as any)
   return { toasts, commands }
 }
 
@@ -47,6 +50,11 @@ const compose = ($: any, traits: string[] = []) =>
   $.prompt.compose({ model: 'claude-sonnet-5-5', promptModel: 'claude-sonnet-5-5', surfaces: ['terminal'], tools: [], outputStyle: null, traits })
 const ids = (r: any) => r.sections.map((s: any) => s.id)
 const mine = (r: any) => r.sections.find((s: any) => s.id === 'waypoints:plan')
+let n = 0
+const edit = ($: any) => $.tool.call({ tool: 'Edit', file_path: 'a.md', old_string: 'a', new_string: 'b', tool_use_id: 'e' + ++n })
+const goal = ($: any) => $.command.run({ command: 'goal', args: 'ship the band' } as any)
+// a refused call resolves errored, with the reason as its text
+const refusal = (r: any) => r.deny ?? r.text
 
 test('the command is /waypoints', async ($, on) => {
   const w = world(on)
@@ -83,8 +91,37 @@ test('/waypoints auto off removes the ask and auto on brings it back, kept betwe
   expect(ids(await compose($))).toEqual(['intro', 'waypoints:plan'])
 })
 
+test('a /goal refuses file edits until Claude has planned, with no setting to turn it off', async ($, on) => {
+  world(on)
+  await start($)
+  await goal($)
+  expect(refusal(await edit($))).toContain('plan the goal before changing files')
+  await $.tool.call({ tool: TOOL, action: 'plan', tasks: [{ title: 'one', size: 'S' }], tool_use_id: 'p1' })
+  expect(((await edit($)) as any).text).toBe('ok')
+})
+
+test('a strict off saved by 2.0 no longer lets a /goal edit before its plan', async ($, on) => {
+  world(on, { stored: { settings: { strict: false, auto: true } } })
+  await start($)
+  await goal($)
+  expect(refusal(await edit($))).toContain('plan the goal before changing files')
+})
+
+test('the guard steps aside when the plan tool did not register', async ($, on) => {
+  world(on, { noTool: true })
+  await start($)
+  await goal($)
+  expect(((await edit($)) as any).text).toBe('ok')
+})
+
+test('edits are never held back outside a /goal', async ($, on) => {
+  world(on)
+  await start($)
+  expect(((await edit($)) as any).text).toBe('ok')
+})
+
 test('a session that saved auto off starts without the ask', async ($, on) => {
-  world(on, { stored: { settings: { strict: false, auto: false } } })
+  world(on, { stored: { settings: { auto: false } } })
   await start($)
   expect(ids(await compose($))).toEqual(['intro'])
 })

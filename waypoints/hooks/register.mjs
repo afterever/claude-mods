@@ -10,8 +10,8 @@
 // - The footer: "◎ goal 69% · ~15m" in every view, terminal and Desktop.
 // - /waypoints: a pane with this chat's whole task trail and every other chat's goal.
 //   It opens by itself when a plan starts (userConfig pane: auto|off).
-//   /waypoints hide|show (the band), /waypoints strict on|off, /waypoints auto on|off,
-//   /waypoints clear.
+//   /waypoints hide|show (the band), /waypoints auto on|off, /waypoints clear.
+// - In a /goal, file edits wait until Claude has planned.
 // - The look (userConfig palette, animation) follows Agent-Pulse's by default.
 // - A standing line in the system prompt asks Claude to plan any multi-step work,
 //   not only a /goal; /waypoints auto off removes it.
@@ -40,7 +40,7 @@ let cwd = ''
 let now = 0
 let toolName = 'mcp__waypoints__tasks'
 let commandName = 'waypoints'
-let settings = { strict: false, auto: true }
+let settings = { auto: true }
 let toolFailed = false
 let hidden = false
 let nudged = false
@@ -417,7 +417,8 @@ export function register(on, opts) {
   on('tool.call', async ($, e, next) => {
     if (e.tool === toolName) return serveTool($, e)
     if (G && G.status === 'running' && G.kind === 'goal' && !G.planAt && !e.agentId) {
-      if (settings.strict && WRITERS.has(e.tool)) return { deny: strictDeny(toolName) }
+      // always on, but never asks for a tool that did not register
+      if (!toolFailed && WRITERS.has(e.tool)) return { deny: strictDeny(toolName) }
       if (e.tool !== 'ToolSearch') callsWithoutPlan += 1
       if (callsWithoutPlan >= NUDGE_AFTER && !nudged) {
         nudged = true
@@ -481,12 +482,6 @@ export function register(on, opts) {
   on('command.run', { command: ['waypoints', 'waypoints-mod'] }, async ($, e) => {
     now = await $.clock.now()
     const [key, value] = String(e.args || '').trim().toLowerCase().split(/\s+/)
-    if (key === 'strict') {
-      settings.strict = value !== 'off'
-      await $.store.set('settings', settings)
-      $.ui.toast(`Strict planning ${settings.strict ? 'on: no file edits in a /goal before the plan' : 'off'}`)
-      return {}
-    }
     if (key === 'auto') {
       settings.auto = value !== 'off'
       await $.store.set('settings', settings)
