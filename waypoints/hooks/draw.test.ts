@@ -307,10 +307,24 @@ test('other chats get a mini route and their own tail; this chat is not listed t
   expect(l.find((x: string) => x.includes('band setting'))).toMatch(/●━✦ +done ✓$/)
 })
 
-test('the pane ends with the commands and where the look is set', async () => {
-  const l = lines(drawPane(el, paneView(midway(), { settings: { strict: true, auto: false } })))
-  expect(l.slice(-1)[0]).toBe('/waypoints hide|show · strict off · auto on · clear · look: /config → Waypoints')
+test('the pane ends with auto\'s state, the commands and where the look is set', async () => {
+  const on = lines(drawPane(el, paneView(midway(), { settings: { auto: true } })))
+  expect(on.slice(-1)[0]).toBe('auto: on · /waypoints hide|show · clear (stop the goal) · look & pane: /config → Waypoints')
+  const off = lines(drawPane(el, paneView(midway(), { settings: { auto: false } })))
+  expect(off.slice(-1)[0]).toBe('auto: off · /waypoints hide|show · clear (stop the goal) · look & pane: /config → Waypoints')
   expect(lines(drawPane(el, paneView(null))).join('\n')).toContain('No goal in this chat')
+})
+
+test('past 100 files the pane names the folder and how to prune it', async () => {
+  const dir = 'C:\\Users\\bats\\.claude\\mods-data\\waypoints\\'
+  const many = lines(drawPane(el, paneView(midway(), { files: { count: 101, dir } })))
+  expect(many.slice(-2)[0]).toBe(`101 old files in ${dir} · /waypoints prune, or delete them while no plan is running`)
+  const few = lines(drawPane(el, paneView(midway(), { files: { count: 100, dir } })))
+  expect(few.join('\n')).not.toContain('old files in')
+})
+
+test('with no other chat the pane says the list covers the last hour', async () => {
+  expect(lines(drawPane(el, paneView(midway()))).join('\n')).toContain('No other chat has a goal in the last hour.')
 })
 
 test('Recording Mode masks the trail, the notes and the other chats', async () => {

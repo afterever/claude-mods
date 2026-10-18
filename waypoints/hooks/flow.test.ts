@@ -120,6 +120,15 @@ test('edits are never held back outside a /goal', async ($, on) => {
   expect(((await edit($)) as any).text).toBe('ok')
 })
 
+test('/waypoints hide and show each say what they did', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await $.command.run({ command: 'waypoints', args: 'hide' } as any)
+  expect(w.toasts.at(-1)).toBe('Waypoints band hidden · /waypoints show brings it back')
+  await $.command.run({ command: 'waypoints', args: 'show' } as any)
+  expect(w.toasts.at(-1)).toBe('Waypoints band shown')
+})
+
 test('a session that saved auto off starts without the ask', async ($, on) => {
   world(on, { stored: { settings: { auto: false } } })
   await start($)

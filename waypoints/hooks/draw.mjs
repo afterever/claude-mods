@@ -20,6 +20,7 @@ import { minutes, clock, clip, basename } from './fmt.mjs'
 import { progress, eta, live, weight } from './plan.mjs'
 import { routeCells, miniRoute, runs } from './route.mjs'
 import { routeSvg, routeAlt, svgWidth } from './svg.mjs'
+import { NOTE_AT } from './prune.mjs'
 
 export const FULL_MS = 8000 // a finished band keeps all its rows this long
 export const SPIN = { frames: ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'], ms: 80 }
@@ -338,11 +339,13 @@ export function drawPane(el, v) {
   const rest = (v.others || []).filter((o) => o.sessionId !== v.sessionId)
   rows.push(Text({ children: [' '] }))
   rows.push(Text({ bold: true, children: [`Other chats (${rest.length})`] }))
-  if (!rest.length) rows.push(Text({ dimColor: true, children: ['No other chat has a goal in the last 12 hours.'] }))
+  if (!rest.length) rows.push(Text({ dimColor: true, children: ['No other chat has a goal in the last hour.'] }))
   for (const o of rest.slice(0, 15)) rows.push(otherRow(el, v, o))
   rows.push(Text({ children: [' '] }))
   const s = v.settings || {}
   const c = v.commandName || 'waypoints'
-  rows.push(Text({ dimColor: true, children: [`/${c} hide|show · strict ${s.strict ? 'off' : 'on'} · auto ${s.auto ? 'off' : 'on'} · clear · look: /config → Waypoints`] }))
+  const f = v.files
+  if (f && f.count > NOTE_AT) rows.push(Text({ dimColor: true, children: [`${f.count} old files in ${f.dir} · /${c} prune, or delete them while no plan is running`] }))
+  rows.push(Text({ dimColor: true, children: [`auto: ${s.auto ? 'on' : 'off'} · /${c} hide|show · clear (stop the goal) · look & pane: /config → Waypoints`] }))
   return Box({ flexDirection: 'column', children: rows })
 }

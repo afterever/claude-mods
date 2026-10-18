@@ -24,11 +24,11 @@ import { newGoal, applyAction, progress, eta, parseCheck, isStopWord, normalizeT
 import { rolesOf, resolveLook } from './palette.mjs'
 import { drawBand, drawPane, statsLine, label, FULL_MS } from './draw.mjs'
 import { createAutoPane } from './pane.mjs'
+import { OTHERS_MS, shownPath } from './prune.mjs'
 
 const DIR = '/.claude/mods-data/waypoints'
 const PANE = 'waypoints'
 const RECENT_MS = 3 * 60000 // a finished goal stays on screen this long
-const OTHERS_MS = 12 * 3600000 // other chats' goals shown in /waypoints
 const REOPEN_MS = 5 * 60000 // a goal closed on its tasks reopens if Claude carries on this soon
 const NUDGE_AFTER = 4 // tool calls into a goal with no plan before the reminder
 const WRITERS = new Set(['Edit', 'Write', 'NotebookEdit', 'MultiEdit'])
@@ -52,6 +52,7 @@ let options = { palette: 'follow', animation: 'follow', pane: 'auto' }
 let look = { palette: 'ember', level: 'subtle' }
 let roles = rolesOf('ember')
 let others = []
+let fileCount = 0 // the data folder's .json files, this chat's included
 let transcriptPath = ''
 const agentNames = new Map()
 const runningAgents = new Set()
@@ -90,9 +91,12 @@ async function restore($) {
 async function loadOthers($) {
   const dir = home + DIR
   const list = []
+  let count = 0
   try {
     for (const entry of await $.fs.list(dir)) {
-      if (entry.kind !== 'file' || !entry.name.endsWith('.json') || entry.name === sessionId + '.json') continue
+      if (entry.kind !== 'file' || !entry.name.endsWith('.json')) continue
+      count += 1
+      if (entry.name === sessionId + '.json') continue
       if (now - (entry.mtimeMs || 0) > OTHERS_MS) continue
       try {
         const g = JSON.parse(await $.fs.read(dir + '/' + entry.name))
@@ -106,6 +110,7 @@ async function loadOthers($) {
   } catch {
     // no folder yet
   }
+  fileCount = count
   others = list.sort((a, b) => (a.status === 'running' ? 0 : 1) - (b.status === 'running' ? 0 : 1) || b.updatedAt - a.updatedAt)
 }
 
@@ -491,6 +496,7 @@ export function register(on, opts) {
     if (key === 'hide' || key === 'show') {
       hidden = key === 'hide'
       $.ui.invalidate('ui.render')
+      $.ui.toast(hidden ? `Waypoints band hidden · /${commandName} show brings it back` : 'Waypoints band shown')
       return {}
     }
     if (key === 'clear') {
@@ -567,7 +573,8 @@ export function register(on, opts) {
     if (e.requestId !== PANE) return next(e)
     const el = $.ui.resolve(e)
     const width = Math.max(50, (e.props && e.props.bodyColumns) || 100)
-    return drawPane(el, { g: G, now, mask, roles, level: look.level, width, others, sessionId, commandName, settings })
+    const files = { count: fileCount, dir: shownPath(home + DIR) }
+    return drawPane(el, { g: G, now, mask, roles, level: look.level, width, others, sessionId, commandName, settings, files })
   })
 }
 
