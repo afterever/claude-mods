@@ -149,7 +149,7 @@ Other chats (2)
   agent-pulse: palette work     ●━●━◉┄○┄◎   60% · ~5m
   work-report: band setting     ●━●━●━●━✦   done ✓
 
-/waypoints hide|show · strict on · auto off · clear · look: /config → Waypoints
+auto: on · /waypoints hide|show · clear (stop the goal) · look & pane: /config → Waypoints
 ```
 
 - **Trail.** One row per task (replaced tasks hidden, dropped ones shown dim with `×`, struck through, and the
@@ -163,7 +163,9 @@ Other chats (2)
 - **Other chats.** Each row: label and title, a **mini route** (2 cells per task: node + leg, ending with `◎`, or
   `✦` when done; one glyph per task when more than 12), then `pct% · ~ETA`, `done ✓`, `stopped` or `planning`.
   Coloured with the same roles.
-- The footer line lists the commands and points to `/config` for the look.
+- The last row shows `auto`'s state (not the word that would flip it), the commands, and points to `/config` for
+  the look and the pane's opening. Past 100 data files, a row above it names the folder and `/waypoints prune`
+  (2.1.0, see Pruning).
 
 ## Auto-opening the pane
 
@@ -240,8 +242,26 @@ and `session.start` runs again on a reload, as Arsenal relies on, so `restore()`
 | `animation` | Animation | `follow`, `off`, `subtle`, `full` | `follow` |
 | `pane` | Pane | `auto`, `off` | `auto` |
 
-`register(on)` becomes `register(on, options)`. The existing `/waypoints strict|auto|hide|show|clear` commands and
-their `$.store` settings are unchanged: they change behaviour, not the look.
+`register(on)` becomes `register(on, options)`. The existing `/waypoints auto|hide|show|clear` commands and the
+`$.store` setting behind `auto` are unchanged: they change behaviour, not the look. A `/goal` refuses file edits
+until Claude has planned, always, unless the task tool did not register (2.1.0).
+
+## Pruning (2.1.0)
+
+Every chat that plans writes `~/.claude/mods-data/waypoints/<session>.json`, and nothing removed them. `$.fs` has no
+delete, so `/waypoints prune` runs the host's own through `$.process.run` with an argv, no shell and no dialog:
+`cmd /d /c del /f /q <paths>` on Windows (`OS` is `Windows_NT`), `rm -f -- <paths>` elsewhere. The person chose
+this over Claude Code's Bash tool and its permission dialog: typing the command is the confirmation.
+
+- **What goes** (`pickPrunable` in `prune.mjs`): other chats' finished goals that ended over an hour ago (the ones
+  the pane no longer lists), any file untouched for 24 hours (`restore()` never loads one that old again), and an
+  unreadable file once it is an hour old (younger, another chat may be writing it). Never this chat's file, never a
+  running goal touched within the day. At most 200 a run, oldest first.
+- **Each path is its own argv entry**, so a space or a quote in a name is just part of it. `cmd` still parses its
+  line, so on Windows a path holding `& | < > ^ % ! "` runs nothing and the toast sends the person to the folder.
+- **The toast counts the files really gone** (`$.fs.exists` after the run), never the files picked.
+- **Seen live** (Windows 11, 2026-10-18, a throwaway probe mod): `cmd /d /c del /f /q` through `$.process.run`
+  deleted `a.json` and `b c.json`, exit code 0.
 
 What a reload loses (agent names, running-agent set, `hidden`, `nudged`, `pendingGoal`, the "person closed it"
 memory) is acceptable; that was true of 1.1 too.
@@ -267,7 +287,7 @@ Module state that a drawing reads can stay in module variables as in 1.1 (the pl
 ## Left alone on purpose
 
 - **The tool contract.** `TOOL_SPEC`, `instruction()`, `standing()`, `nudge()`, `strictDeny()`: not touched, so
-  Claude plans exactly as in 1.1.
+  Claude plans exactly as in 1.1 (2.1.0 only took the option's name out of `strictDeny()`'s words).
 - **The data file** (`~/.claude/mods-data/waypoints/<session>.json`): same fields; other chats running 1.1 still
   read and draw.
 - **The footer** (`SessionMode`): still `◎ plan 44% · ~2m`. It is a plain label; no colour to add. On the terminal it is
