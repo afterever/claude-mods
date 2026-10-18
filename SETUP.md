@@ -21,7 +21,7 @@ Paste this into Claude Code on the new computer:
 | `subagent-progress` | `afterever/claude-mods` (this repo) | 2.1.0 | Progress bar and live panel for subagent work |
 | `prompt-upgrade` | `afterever/claude-mods` (this repo) | 0.1.0 | `/better` turns a rough prompt into a great one before it is sent |
 | `work-report` | `afterever/claude-mods` (this repo) | 0.3.0 | `/report` shows what Claude has done for you: tasks, hours saved, what that is worth |
-| `waypoints` | `afterever/claude-mods` (this repo) | 2.0.2 | Task plan shown as a route above the prompt for a `/goal` or any multi-step work, with a pane that opens by itself; replaces `goal-meter` |
+| `waypoints` | `afterever/claude-mods` (this repo) | 2.0.3 | Task plan shown as a route above the prompt for a `/goal` or any multi-step work, with a pane that opens by itself; replaces `goal-meter` |
 | `skins` | `hellosverre/claude-skins` | 0.5.6 | Colour scheme and words for the transcript |
 | `cache-keeper` | `nateherkai/claude-code-mods` | 1.0.0 | Adds the `session-handoff` skill |
 | `agent-pulse` | `afterever/claude-mods` (this repo) | 1.1.0 | Box above the prompt naming the step Claude is on, in color and motion, with a step history |
