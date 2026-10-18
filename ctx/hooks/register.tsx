@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register, SessionContextBreakdown, Timer } from 'claude-code'
+import type { EngineInterface, Register, RenderElement, SessionContextBreakdown, Timer } from 'claude-code'
 
 import type { CtxDetail, CtxFx, CtxLimit, CtxProjectLog, CtxSample, CtxServer, CtxSnapshot, CtxSpend, CtxWarn } from '../types'
 import type { BarRun, Cell } from './fmt'
@@ -543,7 +543,7 @@ function Spark({
   percent: number
   shade?: (n: number) => string[] | undefined
   mark?: string
-  pulse?: (glyph: string) => unknown
+  pulse?: (glyph: string) => RenderElement
 }) {
   const { Box, Text } = el
   const glyphs = [...sparkline(values, width)]
