@@ -24,7 +24,7 @@ import { newGoal, applyAction, progress, eta, parseCheck, isStopWord, normalizeT
 import { rolesOf, resolveLook } from './palette.mjs'
 import { drawBand, drawPane, statsLine, label, FULL_MS } from './draw.mjs'
 import { createAutoPane } from './pane.mjs'
-import { OTHERS_MS, shownPath } from './prune.mjs'
+import { OTHERS_MS, shownPath, pickPrunable, deleteArgv } from './prune.mjs'
 
 const DIR = '/.claude/mods-data/waypoints'
 const PANE = 'waypoints'
@@ -36,6 +36,7 @@ const WRITERS = new Set(['Edit', 'Write', 'NotebookEdit', 'MultiEdit'])
 let G = null
 let sessionId = ''
 let home = ''
+let win = false // the host is Windows: prune deletes with cmd's del
 let cwd = ''
 let now = 0
 let toolName = 'mcp__waypoints__tasks'
@@ -114,6 +115,44 @@ async function loadOthers($) {
   others = list.sort((a, b) => (a.status === 'running' ? 0 : 1) - (b.status === 'running' ? 0 : 1) || b.updatedAt - a.updatedAt)
 }
 
+// /waypoints prune: deletes what pickPrunable picks with the host's own delete ($.fs has
+// none), no shell and no dialog. Says what happened in words for a toast; the count is the
+// files really gone.
+async function prune($) {
+  const dir = home + DIR
+  const items = []
+  try {
+    for (const entry of await $.fs.list(dir)) {
+      if (entry.kind !== 'file' || !entry.name.endsWith('.json')) continue
+      let goal = null
+      try {
+        goal = JSON.parse(await $.fs.read(dir + '/' + entry.name))
+      } catch {
+        // unreadable: pickPrunable keeps it while it is young
+      }
+      items.push({ name: entry.name, mtimeMs: entry.mtimeMs, goal })
+    }
+  } catch {
+    // no folder yet
+  }
+  const paths = pickPrunable(items, { now, self: sessionId + '.json' }).map((name) => dir + '/' + name)
+  if (!paths.length) return 'Nothing to prune'
+  const argv = deleteArgv(win, paths)
+  if (!argv) return `Prune did not run: delete old files by hand in ${shownPath(dir)}`
+  let r
+  try {
+    r = await $.process.run(argv)
+  } catch (err) {
+    return `Prune did not run: ${clip(String(err && err.message ? err.message : err), 80)}`
+  }
+  let gone = 0
+  for (const p of paths) if (!(await $.fs.exists(p))) gone += 1
+  await loadOthers($)
+  $.ui.invalidate('ui.render')
+  if (!gone) return `Prune did not run: ${clip(r.stderr || 'exit ' + r.exitCode, 80)}`
+  return `Pruned ${gone} old file${gone === 1 ? '' : 's'}`
+}
+
 async function readRecording($) {
   try {
     const path = (home || '.') + '/.claude/mods-data/recording.json'
@@ -182,7 +221,7 @@ async function maybeAutoClose($) {
 }
 
 async function registerCommand($) {
-  const spec = { name: 'waypoints', description: 'Waypoints: this chat\'s goal task list and every chat\'s goal (/waypoints hide|show|strict on|off|auto on|off|clear)', argumentHint: '[hide|show|strict on|off|auto on|off|clear]', immediate: true }
+  const spec = { name: 'waypoints', description: 'Waypoints: this chat\'s goal task list and every chat\'s goal (/waypoints hide|show|auto on|off|clear|prune)', argumentHint: '[hide|show|auto on|off|clear|prune]', immediate: true }
   try {
     await $.command.register(spec)
     return 'waypoints'
@@ -320,6 +359,7 @@ export function register(on, opts) {
   on('session.start', async ($, e, next) => {
     now = await $.clock.now()
     home = (await $.env.get('USERPROFILE')) || (await $.env.get('HOME')) || ''
+    win = (await $.env.get('OS')) === 'Windows_NT'
     sessionId = await $.session.id()
     cwd = await $.session.cwd()
     // where Claude Code keeps this chat's log; a settings-hook event confirms it below
@@ -501,6 +541,12 @@ export function register(on, opts) {
     }
     if (key === 'clear') {
       await stopGoal($, 'stopped')
+      return {}
+    }
+    if (key === 'prune') {
+      const msg = await prune($)
+      if (!(await $.session.surface())) return { text: msg }
+      $.ui.toast(msg)
       return {}
     }
     const surface = await $.session.surface()
