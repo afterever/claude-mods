@@ -422,7 +422,7 @@ goal-meter installed).
 
 Designed on 2026-10-18 (Opus 5.5) in conversation with the person. Nothing in this section is
 built yet. **Read** means read from the engine's API types (`.claude-plugin/types/claude-code/`),
-not run. The list under "Check while building" is what has to be seen working first.
+not run, except in "Settled while building 0.2.0", which a probe answered.
 
 ### The problem
 
@@ -548,7 +548,8 @@ A pure module `hooks/own.ts` (tested in `hooks/own.test.ts`) holds the parsing a
      `~/.claude/skills/synced/` has no `SKILL.md` at its top, so it is skipped by itself. Those are
      the claude.ai skills that the engine lists as `anthropic-skills:…`, not as the person's own.
    - `commands/`: each `*.md` at the top level. The name is the file name without `.md`.
-     Subfolders are left out of 0.2.0 (see "Check while building").
+     Subfolders are left out of 0.2.0 (the engine names them `dir:file`; see "Settled while
+     building 0.2.0").
 4. **Read** each file's frontmatter with `$.fs.read`. Only three keys matter: `name`,
    `argument-hint` and `user-invocable`. `own.ts` has a small parser: the block between a leading
    `---` line and the next one, `key: value` lines, the value with its surrounding quotes taken
@@ -560,8 +561,8 @@ A pure module `hooks/own.ts` (tested in `hooks/own.test.ts`) holds the parsing a
    description shown is the one `list()` gives, the same line as the typeahead's. The folders say
    which section; the engine says what actually runs.
 6. **Duplicates:** a skill and a command of the same name in one section are one row. A name in
-   both USER and PROJECT is shown once, in the section whose file the engine runs (see "Check
-   while building").
+   both USER and PROJECT is shown once, in **USER**: the global one is the one that runs (see
+   "Settled while building 0.2.0").
 
 **When:** at `session.start`, and again each time the menu opens, so a skill added mid-session
 shows up without a restart. A scan reads a handful of small files, so it is not cached beyond the
@@ -639,29 +640,71 @@ projectKey: string
   - turn it back on;
   - `…` on `/handoff` leaves `/handoff ` in the box with the cursor at its end.
 
-### Check while building
+### Settled while building 0.2.0
 
-Things the design rests on that nobody has seen yet. Check each in a probe before writing the
-code that depends on it, and record the answer here as the 0.1.0 questions were.
+Settled on 2026-10-18 (Sonnet 5.5) with a throwaway probe mod, run as `/probe` headless
+(`claude -p "/probe" --plugin-dir …`, with `MSYS_NO_PATHCONV=1` under Git Bash, or it rewrites
+`/probe` into a path) from the subfolder `proj/sub/deep` of a scratch git repo that had a worktree.
+The probe dumped `$.command.list()`, `$.session.root()` and the git calls. **Read** means from the
+API types.
 
 - **Does `$.command.list()` label the person's global and project commands `source: 'user'`?**
-  The type says so ("the user's or project's own file"). If plugin skills turn out to be `user`
-  as well, the folder scan alone decides.
-- **Which name does the engine give a skill:** its frontmatter `name` or its folder's name? Use
-  whichever `list()` shows.
-- **A name in both `~/.claude` and the project:** which one does `/name` run? Show the row in that
-  section only.
+  **Yes, and plugin skills are not.** The list had 175 entries: 58 `builtin`, 95 `plugin`, 3 `mcp`,
+  19 `user`. The `user` ones were the global `handoff`, the scratch project's five, **and** the
+  claude.ai-synced skills (`docx`, `pdf`, `docs`, `chrome-browser`, …). So `source: 'user'` alone
+  is not "the person's own": the folder scan is what leaves the synced ones out (they sit two
+  levels down, in `skills/synced/<bucket>/`). Both halves of step 5 are needed.
+- **Which name does the engine give a skill?** **Its frontmatter `name`.** A skill in `folder-name/`
+  with `name: fancy-name` was listed as `fancy-name`. This is what step 4 says.
+- **A name in both `~/.claude` and the project:** **the global one runs.** With a `zzdupe` command
+  in both, `/zzdupe` ran the global body. `list()` shows both entries (each with its own
+  description) and does not say which wins. So a name found in both is drawn in **USER only**, and
+  PROJECT leaves it out. (The probe's global file was made and removed by hand, so nothing was
+  left in `~/.claude`.)
 - **Which folder does the engine load project commands from** when the session starts in a
-  subfolder of a repo: the repo's top level, `root()`, or every folder up to the top? Scan the same
-  place. If the engine does not load the top level's `.claude/` from a subfolder, scan `root()` but
-  keep the repo-wide key.
-- **`git rev-parse --path-format=absolute`** needs git 2.31 or newer. Check the installed git. If
-  it is older, resolve a relative `--git-common-dir` against the folder git ran in.
-- **Commands in subfolders** (`commands/git/sync.md`): how does `list()` name them? 0.2.0 leaves
-  them out. If the naming is clear, adding them is a small follow-up.
-- **`$.prompt.fill` from a pane press:** does the box get the text, with the cursor at its end,
-  after the pane closes?
-- **A `plain` Button with no `hotkey`** draws its label alone, with no `x:` prefix.
+  subfolder of a repo? **The repo's top level.** Started in `proj/sub/deep`, `list()` held the
+  commands of `proj/.claude/`, though `root()` and `cwd()` were both the subfolder. So the
+  `--show-toplevel` scan reads what the engine loaded, and `root()` is not the place.
+- **`git rev-parse --path-format=absolute --git-common-dir`:** **works on the installed git
+  (2.55)**, answering `…/proj/.git` with forward slashes. Without the flag the answer was
+  `../../.git`, relative to the folder git ran in, so the fallback for an old git is to resolve it
+  against `root()`. `--show-toplevel` also gave forward slashes, while `root()` and `cwd()` have
+  backslashes: normalise before comparing.
+- **Commands in subfolders** (`commands/git/sync.md`): **named `git:sync`**, with the folder as a
+  colon-separated prefix. The naming is clear, so adding them is a small follow-up (scan one more
+  level, name it `dir:file`). 0.2.0 still leaves them out.
+- **`$.prompt.fill` from a pane press:** the types say it puts the text in the box by `mode`
+  (`replace` by default) and answers `isFilled: false` "under a dialog or headless". Where the
+  cursor ends is **not documented**, so it stays on the live check.
+- **A `plain` Button with no `hotkey`** draws "the label alone" (read, `ButtonProps.plain`). The
+  live check still looks at the paint.
+
+### What building changed in this design (0.2.0)
+
+- **LAUNCH is drawn only when it has rows.** 0.1.0 always drew the title, because a menu with no
+  tool had no button. With own commands and neither tool, the menu is USER and PROJECT alone.
+- **Links are tried.** A skill folder or a `.md` that `$.fs.list` reports as a link (`kind:
+  'other'`, `isLink`) is read like any other, since the engine's list decides whether it is real.
+  The directory kind is `'dir'`, not `'directory'`.
+- **An older git is asked twice.** If `--path-format=absolute` is refused, `askGit` asks again for
+  the plain `--git-common-dir`, and `projectPlace` reads that against `root()`.
+- **The pane never asks for fewer than 14 rows.** `paneRows` is the line count plus 2 of slack,
+  floored at 0.1.0's 14, so a menu with only the two tools asks for exactly what it did.
+- **The store is read tolerantly.** `offFromStore` turns anything unexpected into an empty list
+  for that part; it sorts and de-duplicates names and drops empty project lists.
+- **Buttons are keyed `arsenal-<section>-<run|more|edit|pill>[-name]`** (`arsenal-user-run-handoff`,
+  `arsenal-project-pill-seed-db`), unique across both sections.
+
+**Verified** (2026-10-18): `claude plugin test arsenal` (96 pass), `claude plugin validate arsenal`,
+and the real mod run headless beside a probe that read its state (`claude -p "/probe"
+--plugin-dir arsenal --plugin-dir <probe>`) from `sub/deep` of a scratch repo. At `session.start`
+it held USER = `handoff` (with `takesArgs`), PROJECT = the scratch repo's skills and commands
+(`fancy-name`, `hello`), nothing from `skills/synced/`, the `user-invocable: false` skill and the
+`dir:name` command left out, the project's `handoff` dropped for the global one, and `projectKey`
+the repo's `.git`. So `$.command.list()` is ready by `session.start`.
+
+**Not verified**: the paint (the live check below), where the cursor ends after `…`, and `tsc -p
+arsenal` (no TypeScript compiler on the home PC when this was built).
 
 ### Shipping 0.2.0
 
