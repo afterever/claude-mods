@@ -93,11 +93,11 @@ function world(
   on('session.measure', async (_$, e) => ({ changed: e.changed }))
   on('ui.open', async () => ({ value: { isPlaced: true as const } }))
   on('ui.close', async () => ({ value: undefined }))
-  // what draws beneath the band and the footer
+  // what draws beneath the band and the footer: the engine's footer is one node
   on('ui.render', { component: 'AbovePrompt' }, async ($, e) => h($.ui.resolve(e).Box, {}) as any)
-  on('ui.render', { component: 'SessionMode' }, async (_$, e) => {
+  on('ui.render', { component: 'SessionMode' }, async ($, e) => {
     modes.push([...e.props.modes])
-    return null as any
+    return h($.ui.resolve(e).Box, { key: 'engine-footer' }) as any
   })
   return clock
 }
@@ -166,14 +166,24 @@ for (const surface of ['terminal', 'desktop'] as const) {
   })
 }
 
-test('the footer adds ctx N% on desktop only', async ($, on) => {
+// Desktop draws a footer's tree but not the labels in `modes` (seen with ctx's
+// own and waypoints' plan label, 2026-10-18), so the percent is a node
+test('the footer draws ctx N% on desktop only, around the engine’s footer', async ($, on) => {
   const seen: string[][] = []
   const clock = world(on, [], seen)
   await $.session.measure({ context: { window: 1_000_000 }, rateLimits: [], changed: ['context'] })
   await clock.settle()
-  await $.ui.mount({ plugin: 'ctx', surface: 'desktop', component: 'SessionMode', props: { modes: ['auto'] } }).catch(() => undefined)
-  await $.ui.mount({ plugin: 'ctx', surface: 'terminal', component: 'SessionMode', props: { modes: ['auto'] } }).catch(() => undefined)
-  expect(seen).toEqual([['auto', 'ctx 4%'], ['auto']])
+  const footer = (surface: 'terminal' | 'desktop') =>
+    $.ui.mount({ plugin: 'ctx', surface, component: 'SessionMode', props: { modes: ['auto'] } })
+  const desktop = await footer('desktop')
+  expect(await desktop.find({ text: 'ctx 4%' })).toBeDefined()
+  expect(await desktop.find({ key: 'engine-footer' })).toBeDefined()
+  await desktop.unmount()
+  const terminal = await footer('terminal')
+  expect(await terminal.find({ text: 'ctx 4%' })).toBeUndefined()
+  expect(await terminal.find({ key: 'engine-footer' })).toBeDefined()
+  // the labels in `modes` are left as the engine gave them
+  expect(seen).toEqual([['auto'], ['auto']])
 })
 
 const measure = (tokens: number) => ({ context: { window: 1_000_000, tokens }, rateLimits: [], changed: ['context' as const] })

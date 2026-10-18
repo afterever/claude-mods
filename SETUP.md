@@ -17,7 +17,7 @@ Paste this into Claude Code on the new computer:
 
 | Mod | Source | Tested | What it is |
 | --- | --- | --- | --- |
-| `ctx` | `afterever/claude-mods` (this repo) | 0.7.0 | Context window pane and band, compacting on your terms, the plan's pace |
+| `ctx` | `afterever/claude-mods` (this repo) | 0.7.1 | Context window pane and band, compacting on your terms, the plan's pace |
 | `subagent-progress` | `afterever/claude-mods` (this repo) | 2.1.0 | Progress bar and live panel for subagent work |
 | `prompt-upgrade` | `afterever/claude-mods` (this repo) | 0.1.0 | `/better` turns a rough prompt into a great one before it is sent |
 | `work-report` | `afterever/claude-mods` (this repo) | 0.3.0 | `/report` shows what Claude has done for you: tasks, hours saved, what that is worth |

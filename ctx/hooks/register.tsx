@@ -819,13 +819,23 @@ export const register: Register = on => {
     )
   })
 
-  // The footer, for the Desktop app, where the band does not draw; on the
-  // terminal the band already shows the fill
+  // The footer, for the Desktop app, beside the band's own fill; on the
+  // terminal the band is enough. Desktop does not draw the labels in `modes`
+  // (this one and waypoints' plan never showed), only a tree, so the engine's
+  // footer is wrapped, as arsenal's launcher does, and the percent goes first
   on('ui.render', { component: 'SessionMode' }, async ($, e, next) => {
     if (e.surface !== 'desktop') return next(e)
     const s = await read($, snap)
     if (!s) return next(e)
-    return next({ ...e, props: { ...e.props, modes: [...e.props.modes, `ctx ${Math.round(s.percent)}%`] } })
+    const footer = await next(e)
+    const { Box, Text } = $.ui.resolve(e)
+    return (
+      <Box key="ctx-footer">
+        <Text color={fillColor(s.percent)}>{`ctx ${Math.round(s.percent)}%`}</Text>
+        <Text> </Text>
+        {footer}
+      </Box>
+    )
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {

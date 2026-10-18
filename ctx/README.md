@@ -99,8 +99,8 @@ exact count costs a token-count call per change, so each session starts on the e
 ## Requirements
 
 - A Claude Code build that loads mods (plugins that register `hooks`).
-- Version 0.7.0's tests run on Claude Code 2.1.302, and 0.6.2 ran live on 2.1.296; the pace has not
-  been seen live yet. The engine API ctx uses was checked against build 2.1.288 (see
+- Version 0.7.1's tests run on Claude Code 2.1.302, and 0.7.0 ran live on it, on the terminal and
+  Claude Desktop (the pace in the band). The engine API ctx uses was checked against build 2.1.288 (see
   [DESIGN.md](./DESIGN.md)); no older minimum has been tried.
 
 ## Develop
