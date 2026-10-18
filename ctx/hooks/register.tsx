@@ -112,6 +112,8 @@ const ASK_LIMIT = 3
 // What the session spent, per turn, from the engine's cost ledger
 const spend = atom({ plugin: 'ctx', key: 'spend' } as const, EMPTY_SPEND)
 const costOn = atom({ plugin: 'ctx', key: 'costOn' } as const, true)
+// The Desktop footer's `ctx N%`, a second reading beside the band's own fill
+const footerOn = atom({ plugin: 'ctx', key: 'footerOn' } as const, false)
 // The plan's rate-limit windows as the last response reported them, and a
 // minute tick that moves the band's countdown between responses
 const limits = atom({ plugin: 'ctx', key: 'limits' } as const, [])
@@ -249,6 +251,16 @@ async function setCost($: EngineInterface, value: boolean) {
     // for this session still
   }
   $.ui.toast(value ? 'Cost on: dollar figures beside the tokens' : 'Cost off: tokens only')
+}
+
+async function setFooter($: EngineInterface, value: boolean) {
+  await update($, footerOn, () => value)
+  try {
+    await $.store.set('footer', value)
+  } catch {
+    // for this session still
+  }
+  $.ui.toast(value ? 'Footer on: ctx N% in the Desktop footer' : 'Footer off')
 }
 
 // Opens a memory file with the host's default app for it
@@ -510,8 +522,8 @@ export const register: Register = on => {
     try {
       await $.command.register({
         name: 'ctx',
-        description: 'Context window details (/ctx opens the pane; /ctx show|hide|toggle|exact|quick|compact [focus]|autokeep [on|off]|cost [on|off])',
-        argumentHint: '[show|hide|toggle|exact|quick|compact [focus]|autokeep [on|off]|cost [on|off]]',
+        description: 'Context window details (/ctx opens the pane; /ctx show|hide|toggle|exact|quick|compact [focus]|autokeep [on|off]|cost [on|off]|footer [on|off])',
+        argumentHint: '[show|hide|toggle|exact|quick|compact [focus]|autokeep [on|off]|cost [on|off]|footer [on|off]]',
         immediate: true,
       })
     } catch {
@@ -532,6 +544,12 @@ export const register: Register = on => {
       if ((await $.store.get('autokeep')) === true) await update($, autokeep, () => true)
     } catch {
       // autokeep stays off
+    }
+    try {
+      await update($, footerOn, () => false)
+      if ((await $.store.get('footer')) === true) await update($, footerOn, () => true)
+    } catch {
+      // the footer stays off
     }
     try {
       // the ledger as it stands, and the prices earlier sessions taught
@@ -714,6 +732,11 @@ export const register: Register = on => {
       await setCost($, v === 'on' ? true : v === 'off' ? false : !(await read($, costOn)))
       return {}
     }
+    if (arg === 'footer') {
+      const v = rest[0]?.toLowerCase()
+      await setFooter($, v === 'on' ? true : v === 'off' ? false : !(await read($, footerOn)))
+      return {}
+    }
     if (arg === 'hide') {
       await setVisible($, false)
       return {}
@@ -819,12 +842,14 @@ export const register: Register = on => {
     )
   })
 
-  // The footer, for the Desktop app, beside the band's own fill; on the
-  // terminal the band is enough. Desktop does not draw the labels in `modes`
-  // (this one and waypoints' plan never showed), only a tree, so the engine's
-  // footer is wrapped, as arsenal's launcher does, and the percent goes first
+  // The footer, for the Desktop app, when `/ctx footer on` asks for it: the
+  // band already shows the fill, and a hook cannot tell when the person has
+  // collapsed the band. On the terminal the band is enough. Desktop does not
+  // draw the labels in `modes` (this one and waypoints' plan never showed),
+  // only a tree, so the engine's footer is wrapped, as arsenal's launcher
+  // does, and the percent goes first
   on('ui.render', { component: 'SessionMode' }, async ($, e, next) => {
-    if (e.surface !== 'desktop') return next(e)
+    if (e.surface !== 'desktop' || !(await read($, footerOn))) return next(e)
     const s = await read($, snap)
     if (!s) return next(e)
     const footer = await next(e)

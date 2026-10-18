@@ -50,7 +50,7 @@ Keeping the logic pure is what made four releases in one day safe: every rule wi
 | Kind | Survives | Used for |
 | --- | --- | --- |
 | `$.state` atoms | Hot reloads, not new sessions | Everything a drawing reads: `snap`, `history`, `eaters`, `usage`, `mode`, `warned`, `spend`, `costOn`… |
-| `$.store` | New sessions | Whether the pane was open, autokeep and cost on/off, each project's MCP usage log, the price samples (`costSamples`) |
+| `$.store` | New sessions | Whether the pane was open, autokeep, cost and footer on/off, each project's MCP usage log, the price samples (`costSamples`) |
 | Module variables | Nothing | `turnChars`, `pendingMark`, `selfCompact`, the last-count-wins counters |
 
 `mode` (exact or quick) is deliberately session state, not store: an exact count costs a token-count API call per change, so it should not quietly carry over into tomorrow's session.
@@ -289,6 +289,7 @@ Before every release: `claude plugin test ctx`, `claude plugin validate .`, and 
 - **Mid-turn compaction:** `/ctx` runs immediately, so a compact during a turn may be skipped by the engine. The toast says so.
 - **Desktop:** the call that launches programs is CLI-only, so opening a memory file there shows "Couldn't open".
 - **The Desktop footer `ctx N%` never showed, up to 0.7.0.** It appended a label to `modes`, and Desktop does not draw those: with Waypoints' plan running (step 3 of 5, its band on screen and its `◎ plan` label appended to `modes` the same way) the footer held only `Auto`, `◆ Arsenal ▾` and the model. Desktop draws what a hook puts in a tree, as Arsenal's launcher shows. 0.7.1 wraps the engine's footer in a tree and puts `ctx N%` first, the way Arsenal does. Seen live on Desktop (2026-10-18): `ctx 9%` shows next to Arsenal's launcher. Waypoints' footer label has the same gap on Desktop (its band carries the plan there).
+- **The footer is off by default since 0.7.2 (`/ctx footer on`).** With the band always shown it repeated the same percent. It would earn its place only while the band is collapsed, but the engine's collapse (ctrl+x ctrl+a, `[-]`) is not in the `AbovePrompt` props or any other hook input, and ctx's 📊 only opens the pane, so ctx cannot tell when the band is gone; a switch is the honest answer. Kept in the store (`footer`) like `cost` and `autokeep`.
 - **Pace, seen live on 2026-10-18 (0.7.0).** On the terminal, full width: `🐾 39% (3h 8m/+2%) · 24% (4d 15h/-10%)` at the band's right edge; very narrow, the deltas only: `🐾 +1% · -10%`. On Desktop the band shows the pace in full, with the percent green, a small delta over pace yellow and a delta under pace green. The person judged it working by eye, so the colors (`success` standing in for the HUD's blue) and the 130 / 100 / 80 width steps stay as they are. Not yet seen: a `spend_limit` window and an API account's session total in the band (untested on a real account), and the work PC.
 - **`rateLimits` is what the last response reported.** Before a session's first reply it is empty, and between replies the percent can be a few minutes old while the countdown is current. The delta is computed from both, so it drifts from the HUD's by the staleness of the percent.
 - **Token estimates** for single results are characters divided by a learned ratio. They improve as the session goes on but stay approximate, hence the `~`.
@@ -316,3 +317,4 @@ Before every release: `claude plugin test ctx`, `claude plugin validate .`, and 
 | 0.6.2 | Cosmetic: the session total in green, the mod's version at the foot of the pane |
 | 0.7.0 | The plan's pace in the band (the HUD's format and color rule) for subscriptions, the session total for API accounts; the scope rule widened to both budgets |
 | 0.7.1 | Fix: the Desktop footer's `ctx N%` is a tree around the engine's footer, since Desktop does not draw the labels in `modes` |
+| 0.7.2 | The Desktop footer is a switch, `/ctx footer on`, off by default: the band already shows the fill, and ctx cannot see the band collapsed |
