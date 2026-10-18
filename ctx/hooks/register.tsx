@@ -8,6 +8,7 @@ import { addRecent, clipAsk, keepInstructions, mergeInstructions, shouldWarn, wa
 import { addEater, addUsage, calibrate, DEFAULT_CPT, EMPTY_USAGE, estimateTokens, idleSessions, logSession, toolLabel, usageOf } from './usage'
 import { bandPace, paceStep, type PacePiece } from './pace'
 import { VERSION } from './version'
+import { resolveLook, type Look } from './palette'
 import {
   bandSuffix,
   carry,
@@ -79,6 +80,25 @@ const TOAST_TOKENS = 15000
 const EATER_MIN_CHARS = 2000
 // A fall this steep between turns is a compaction or a /clear: what was eaten is gone
 const DROP_RATIO = 0.7
+
+// The `palette` and `animation` options (register sets them) and the look they resolve to: 'follow'
+// takes Agent-Pulse's /config rows. Module state, so a reload with new options starts over from them
+let configured: { palette?: unknown; animation?: unknown } = {}
+let look: Look = resolveLook({}, [])
+
+// Reads Agent-Pulse's rows again; a change redraws everything ctx draws
+async function refreshLook($: EngineInterface) {
+  let rows: unknown = []
+  try {
+    rows = await $.config.list()
+  } catch {
+    // no rows: follow falls back to ember / subtle
+  }
+  const next = resolveLook(configured, rows)
+  if (next.palette === look.palette && next.level === look.level) return
+  look = next
+  $.ui.invalidate('ui.render')
+}
 
 // Characters of tool results the main conversation took in since the last measurement
 let turnChars = 0
@@ -356,7 +376,8 @@ const PANE_ARGS = { id: PANE, title: 'Context window', closeOnEscape: true, colu
 let ticker: Timer | undefined
 
 function startTicker($: EngineInterface) {
-  ticker ??= $.clock.every(TICK_MS, () => void update($, tick, n => n + 1))
+  // the look's fallback refresh rides on the tick, for a change that never reached config.set
+  ticker ??= $.clock.every(TICK_MS, () => void update($, tick, n => n + 1).then(() => refreshLook($)))
 }
 
 function stopTicker() {
@@ -371,7 +392,7 @@ let paceTimer: Timer | undefined
 async function setLimits($: EngineInterface, list: readonly CtxLimit[] | undefined) {
   const next = Array.isArray(list) ? list.map(l => ({ ...l })) : []
   await update($, limits, () => next)
-  if (next.length > 0) paceTimer ??= $.clock.every(PACE_TICK_MS, () => void update($, paceTick, n => n + 1))
+  if (next.length > 0) paceTimer ??= $.clock.every(PACE_TICK_MS, () => void update($, paceTick, n => n + 1).then(() => refreshLook($)))
 }
 
 async function setVisible($: EngineInterface, value: boolean, focus = false) {
@@ -517,8 +538,12 @@ function Item({ el, name, right, truncate = 'truncate-end' }: { el: El; name: st
   )
 }
 
-export const register: Register = on => {
+export const register: Register = (on, options) => {
+  configured = options ?? {}
+  look = resolveLook(configured, [])
+
   on('session.start', async ($, e, next) => {
+    await refreshLook($)
     try {
       await $.command.register({
         name: 'ctx',
@@ -712,6 +737,14 @@ export const register: Register = on => {
     const ledger = (await read($, spend)).ledger
     const r = await next(keep)
     if (e.trigger !== 'precompute' && r.messages && !selfCompact) void priceCompaction($, r, ledger).then(() => afterCompaction($, before))
+    return r
+  })
+
+  // Another plugin's /config change this mod follows: the new value is in the rows once it went through.
+  // Literals, so the engine can read the matcher off the source
+  on('config.set', { key: ['agent-pulse.palette', 'agent-pulse.animation'] }, async ($, e, next) => {
+    const r = await next(e)
+    if (r.deny === undefined) await refreshLook($)
     return r
   })
 

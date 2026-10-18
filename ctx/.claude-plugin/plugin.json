@@ -6,5 +6,32 @@
     "name": "afterever"
   },
   "license": "MIT",
-  "types": "./types/index.d.ts"
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "palette": {
+      "type": "string",
+      "title": "Palette",
+      "description": "follow uses Agent-Pulse's palette (ember when it is not installed); ember is Claude's warm orange range and neon bioluminescent sea colors, both shading the bar's categories and drawing its free space as water; claude and mono keep the engine's category colors and dotted free space, as before 0.8",
+      "default": "follow",
+      "options": [
+        "follow",
+        "ember",
+        "claude",
+        "neon",
+        "mono"
+      ]
+    },
+    "animation": {
+      "type": "string",
+      "title": "Animation",
+      "description": "follow uses Agent-Pulse's level (subtle when it is not installed); off keeps everything still; subtle laps the water's edge, glows what a turn added and breathes near auto-compact; full also lets the water drift and sweeps a wave back in when a compaction frees room",
+      "default": "follow",
+      "options": [
+        "follow",
+        "off",
+        "subtle",
+        "full"
+      ]
+    }
+  }
 }
