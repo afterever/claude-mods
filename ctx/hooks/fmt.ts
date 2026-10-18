@@ -1,4 +1,5 @@
 import type { CtxRow, CtxSnapshot } from '../types'
+import { mix, type Tint } from './palette'
 
 // 33400 -> "33.4k", 1000000 -> "1M", 584 -> "584"
 export function fmtTokens(n: number): string {
@@ -81,16 +82,30 @@ export function barSegments(snap: CtxSnapshot, width: number): Seg[] {
 /** A run of same-styled cells; `scope` is the category it draws, for hover. */
 export type BarRun = { text: string; color: string; bg?: string; dim?: boolean; scope: string }
 
+/** The free space drawn as water: `~` in `water`, the first free cell `≈` in `foam`. */
+export type Water = { water: string; foam: string }
+export const WATER_GLYPH = '~'
+export const FOAM_GLYPH = '≈'
+
 // The bar as runs of cells, `width` cells wide. A cell where one used row
 // ends draws that row's partial block over the next row's color, so the bar
-// is smooth to an eighth of a cell rather than a whole one
-export function barRuns(snap: CtxSnapshot, width: number): BarRun[] {
+// is smooth to an eighth of a cell rather than a whole one. With `tints` the
+// rows take the palette's colors; with `water` the free space is water
+export function barRuns(snap: CtxSnapshot, width: number, tints?: Record<string, Tint>, water?: Water): BarRun[] {
   const segs = barSegments(snap, width)
+  const tint = (s: Seg) => (s.style === 'solid' ? (tints?.[s.name]?.core ?? s.color) : s.color)
   // never empty: whatever the rows hold, free space or a used row covers the width
   const segAt = (e: number) => segs.find(s => s.start <= e && e < s.end) ?? segs[segs.length - 1]!
   const runs: BarRun[] = []
+  let shore = true
   for (let c = 0; c < Math.max(1, width); c++) {
-    const cell = cellOf(segAt(c * 8), segAt(c * 8 + 7), c * 8)
+    let cell = cellOf(segAt(c * 8), segAt(c * 8 + 7), c * 8, tint)
+    if (water && cell.text === FREE_GLYPH) {
+      cell = shore ? { text: FOAM_GLYPH, color: water.foam, scope: cell.scope } : { text: WATER_GLYPH, color: water.water, dim: true, scope: cell.scope }
+      shore = false
+    } else if (water && cell.text === BUFFER_GLYPH) {
+      cell = { ...cell, color: water.water }
+    }
     const last = runs[runs.length - 1]
     if (last && last.color === cell.color && last.bg === cell.bg && last.dim === cell.dim && last.scope === cell.scope) {
       last.text += cell.text
@@ -101,13 +116,13 @@ export function barRuns(snap: CtxSnapshot, width: number): BarRun[] {
   return runs
 }
 
-function cellOf(a: Seg, b: Seg, start: number): BarRun {
+function cellOf(a: Seg, b: Seg, start: number, tint: (s: Seg) => string): BarRun {
   if (a.style === 'solid') {
-    if (a === b) return { text: '█', color: a.color, scope: a.name }
+    if (a === b) return { text: '█', color: tint(a), scope: a.name }
     return {
       text: EIGHTHS[Math.min(7, a.end - start)] ?? '▏',
-      color: a.color,
-      bg: b.style === 'solid' ? b.color : undefined,
+      color: tint(a),
+      bg: b.style === 'solid' ? tint(b) : undefined,
       scope: a.name,
     }
   }
@@ -115,6 +130,114 @@ function cellOf(a: Seg, b: Seg, start: number): BarRun {
   return s.style === 'free'
     ? { text: FREE_GLYPH, color: 'inactive', dim: true, scope: s.name }
     : { text: BUFFER_GLYPH, color: s.color, dim: true, scope: s.name }
+}
+
+/** One cell of the band's bar; `scope` is the category it draws, for hover. */
+export type Cell = { ch: string; color: string; bg?: string; dim?: boolean; scope: string }
+
+const isHex = (c: string) => /^#[0-9a-f]{6}$/i.test(c)
+
+// The band's bar, `width` whole cells: every used row holding anything, and
+// the buffer, get at least one, so a split still reads on a nearly empty 1M
+// window. The cells those minimums need come off Messages (the largest used
+// row) before the free space, so the fill keeps its true length wherever it can
+export function bandCells(snap: CtxSnapshot, width: number, tints: Record<string, Tint>, water?: Water): Cell[] {
+  const w = Math.max(1, width)
+  const freeRow = snap.rows.find(r => r.kind === 'free')
+  const freeName = freeRow?.name ?? 'Free space'
+  const used = snap.rows.filter(r => r.kind === 'used' && r.tokens > 0)
+  const buffer = snap.rows.find(r => r.kind === 'buffer' && r.tokens > 0)
+  type Part = { name: string; color: string; kind: 'used' | 'free' | 'buffer'; tokens: number; n: number }
+  const free = (): Part => ({ name: freeName, color: 'inactive', kind: 'free', tokens: 0, n: w })
+  if (!snap.max) return paint([free()], tints, water)
+
+  // the smallest rows lose their minimum first when there are more rows than cells
+  let kept = used
+  while (kept.length + (buffer ? 1 : 0) > w && kept.length > 0) {
+    const smallest = kept.reduce((a, r) => (r.tokens < a.tokens ? r : a))
+    kept = kept.filter(r => r !== smallest)
+  }
+  const usedTokens = kept.reduce((a, r) => a + r.tokens, 0)
+  const parts: Part[] = [
+    ...kept.map(r => ({ name: r.name, color: r.color, kind: 'used' as const, tokens: r.tokens, n: 0 })),
+    { name: freeName, color: 'inactive', kind: 'free', tokens: Math.max(0, snap.max - usedTokens - (buffer?.tokens ?? 0)), n: 0 },
+    ...(buffer ? [{ name: buffer.name, color: buffer.color, kind: 'buffer' as const, tokens: buffer.tokens, n: 0 }] : []),
+  ]
+  // the ideal shares, rounded by largest remainder so they sum to the width
+  const sum = parts.reduce((a, p) => a + p.tokens, 0) || 1
+  const exact = parts.map(p => (p.tokens / sum) * w)
+  parts.forEach((p, i) => (p.n = Math.floor(exact[i]!)))
+  const order = parts.map((_, i) => i).sort((i, j) => exact[j]! - Math.floor(exact[j]!) - (exact[i]! - Math.floor(exact[i]!)))
+  for (let k = 0, left = w - parts.reduce((a, p) => a + p.n, 0); k < left; k++) parts[order[k % parts.length]!]!.n++
+  // each row in use, and the buffer, at least one cell: from the largest used row while it keeps one, else the water
+  for (const p of parts) {
+    if (p.kind === 'free' || p.n > 0) continue
+    const donors = parts.filter(d => d.kind === 'used' && d.n > 1).sort((a, b) => b.n - a.n)
+    const water = parts.find(d => d.kind === 'free' && d.n > 0)
+    const donor = donors[0] ?? water ?? parts.filter(d => d.n > 1).sort((a, b) => b.n - a.n)[0]
+    if (!donor) break
+    donor.n--
+    p.n++
+  }
+  return paint(parts, tints, water)
+}
+
+function paint(parts: { name: string; color: string; kind: 'used' | 'free' | 'buffer'; n: number }[], tints: Record<string, Tint>, water?: Water): Cell[] {
+  const cells: Cell[] = []
+  let shore = true
+  for (const p of parts) {
+    for (let i = 0; i < p.n; i++) {
+      if (p.kind === 'used') {
+        const t = tints[p.name] ?? { core: p.color, glow: p.color }
+        const color = isHex(t.core) && isHex(t.glow) && p.n > 1 ? mix(t.core, t.glow, i / (p.n - 1)) : t.core
+        cells.push({ ch: '█', color, scope: p.name })
+      } else if (p.kind === 'buffer') {
+        cells.push({ ch: BUFFER_GLYPH, color: water ? water.water : p.color, dim: true, scope: p.name })
+      } else if (!water) {
+        cells.push({ ch: FREE_GLYPH, color: 'inactive', dim: true, scope: p.name })
+      } else {
+        cells.push(shore ? { ch: FOAM_GLYPH, color: water.foam, scope: p.name } : { ch: WATER_GLYPH, color: water.water, dim: true, scope: p.name })
+        shore = false
+      }
+    }
+  }
+  return cells
+}
+
+// Where the used cells end: the water's edge, else the buffer, else the bar's end
+function shoreEnd(cells: readonly Cell[]): number {
+  const edge = edgeOf(cells)
+  if (edge >= 0) return edge
+  const buf = cells.findIndex(c => c.ch === BUFFER_GLYPH)
+  return buf >= 0 ? buf : cells.length
+}
+
+const spanCells = (cells: readonly Cell[], delta: number, max: number) => Math.max(1, Math.round((delta / (max || 1)) * cells.length))
+
+/** The cells a turn added: the last used ones before the edge, at least one. */
+export function growthSpan(cells: readonly Cell[], delta: number, max: number): { from: number; to: number } {
+  const to = shoreEnd(cells)
+  return { from: Math.max(0, to - spanCells(cells, delta, max)), to }
+}
+
+/** The cells a compaction freed: from the edge onward, never into the buffer; empty with no water. */
+export function sweepSpan(cells: readonly Cell[], delta: number, max: number): { from: number; to: number } {
+  const edge = edgeOf(cells)
+  if (edge < 0) return { from: cells.length, to: cells.length }
+  const buf = cells.findIndex((c, i) => i > edge && c.ch === BUFFER_GLYPH)
+  return { from: edge, to: Math.min(buf >= 0 ? buf : cells.length, edge + spanCells(cells, delta, max)) }
+}
+
+/** What breathes near auto-compact: the foam, or the last used cell when no water is left. */
+export function breatheAt(cells: readonly Cell[]): number[] {
+  const edge = edgeOf(cells)
+  if (edge >= 0) return [edge]
+  return [Math.max(0, shoreEnd(cells) - 1)]
+}
+
+/** The first free cell (the water's edge), or -1 on a window with none. */
+export function edgeOf(cells: readonly Cell[]): number {
+  return cells.findIndex(c => c.ch === FOAM_GLYPH || c.ch === FREE_GLYPH)
 }
 
 // The line beneath the bar: a caret under the auto-compact point, labelled on

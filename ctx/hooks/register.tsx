@@ -1,13 +1,16 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register, SessionContextBreakdown, Timer } from 'claude-code'
+import type { EngineInterface, Register, RenderElement, SessionContextBreakdown, Timer } from 'claude-code'
 
-import type { CtxDetail, CtxLimit, CtxProjectLog, CtxSample, CtxServer, CtxSnapshot, CtxSpend, CtxWarn } from '../types'
-import type { BarRun } from './fmt'
+import type { CtxDetail, CtxFx, CtxLimit, CtxProjectLog, CtxSample, CtxServer, CtxSnapshot, CtxSpend, CtxWarn } from '../types'
+import type { BarRun, Cell } from './fmt'
 import type { ApiUsage, Piece, Rates } from './cost'
 import { addRecent, clipAsk, keepInstructions, mergeInstructions, shouldWarn, warnBadge, warnLevel, warnText } from './compact'
 import { addEater, addUsage, calibrate, DEFAULT_CPT, EMPTY_USAGE, estimateTokens, idleSessions, logSession, toolLabel, usageOf } from './usage'
 import { bandPace, paceStep, type PacePiece } from './pace'
 import { VERSION } from './version'
+import { breath, categoryTints, heatKeys, hexHeat, paletteOf, resolveLook, sparkColors, svgTints, waterOf, type Look, type Tint } from './palette'
+import { bandSvg, breathSvg } from './svg'
+import { frameAt, type TideProps } from './tide'
 import {
   bandSuffix,
   carry,
@@ -34,19 +37,24 @@ import {
 } from './cost'
 import {
   ago,
+  bandCells,
   barRuns,
+  breatheAt,
   BUFFER_GLYPH,
   compactMarker,
+  edgeOf,
   fillColor,
   FREE_GLYPH,
   fmtCount,
   fmtDelta,
   fmtShare,
   fmtTokens,
+  growthSpan,
   openerFor,
   shareBar,
   shortPath,
   sparkline,
+  sweepSpan,
   trend,
   trendLabel,
 } from './fmt'
@@ -79,6 +87,25 @@ const TOAST_TOKENS = 15000
 const EATER_MIN_CHARS = 2000
 // A fall this steep between turns is a compaction or a /clear: what was eaten is gone
 const DROP_RATIO = 0.7
+
+// The `palette` and `animation` options (register sets them) and the look they resolve to: 'follow'
+// takes Agent-Pulse's /config rows. Module state, so a reload with new options starts over from them
+let configured: { palette?: unknown; animation?: unknown } = {}
+let look: Look = resolveLook({}, [])
+
+// Reads Agent-Pulse's rows again; a change redraws everything ctx draws
+async function refreshLook($: EngineInterface) {
+  let rows: unknown = []
+  try {
+    rows = await $.config.list()
+  } catch {
+    // no rows: follow falls back to ember / subtle
+  }
+  const next = resolveLook(configured, rows)
+  if (next.palette === look.palette && next.level === look.level) return
+  look = next
+  $.ui.invalidate('ui.render')
+}
 
 // Characters of tool results the main conversation took in since the last measurement
 let turnChars = 0
@@ -119,6 +146,89 @@ const footerOn = atom({ plugin: 'ctx', key: 'footerOn' } as const, false)
 const limits = atom({ plugin: 'ctx', key: 'limits' } as const, [])
 const paceTick = atom({ plugin: 'ctx', key: 'paceTick' } as const, 0)
 const PACE_TICK_MS = 60000
+// The look's effect events (growth, sweep), and how long a one-shot is handed
+// to the bar after it landed: past that a redraw, a reload or a resume never replays it
+const fx = atom({ plugin: 'ctx', key: 'fx' } as const, {})
+const GROWTH_LIVE_MS = 1800
+const SWEEP_LIVE_MS = 1500
+// A compaction is heard twice (the drop on session.measure, then afterCompaction): one sweep
+const SWEEP_GUARD_MS = 2000
+const turnRunning = atom({ plugin: 'ctx', key: 'turnRunning' } as const, false)
+const fxTick = atom({ plugin: 'ctx', key: 'fxTick' } as const, 0)
+
+async function noteFx($: EngineInterface, kind: keyof CtxFx, delta: number) {
+  if (delta <= 0) return
+  try {
+    const now = await $.clock.now()
+    await update($, fx, f => {
+      const last = f[kind]
+      if (kind === 'sweep' && last && now - last.at < SWEEP_GUARD_MS) return f
+      return { ...f, [kind]: { id: (last?.id ?? 0) + 1, at: now, delta } }
+    })
+    playFx($, now)
+  } catch {
+    // a missed effect is only a missed glow
+  }
+}
+
+// Desktop has no Client, so its pane plays a one-shot by redraws: a tick while one is live, then none
+const FX_FRAME_MS = 80
+let fxTimer: Timer | undefined
+let fxUntil = 0
+
+function playFx($: EngineInterface, at: number) {
+  fxUntil = Math.max(fxUntil, at + GROWTH_LIVE_MS + 100)
+  fxTimer ??= $.clock.every(FX_FRAME_MS, () => {
+    void $.clock.now().then(now => {
+      if (now > fxUntil) {
+        fxTimer?.cancel()
+        fxTimer = undefined
+      }
+      return update($, fxTick, n => n + 1)
+    })
+  })
+}
+
+// The bar's motion for the look in force: the foam laps and the water drifts,
+// the cells breathe near auto-compact, and a one-shot plays while it is live
+function tideOf(cells: Cell[], max: number, f: CtxFx, now: number, warn: CtxWarn): TideProps {
+  const edge = edgeOf(cells)
+  const props: TideProps = { cells, level: look.level === 'full' ? 'full' : 'subtle', edge }
+  if (look.level === 'off') return props
+  const p = paletteOf(look.palette)
+  const water = waterOf(look)
+  if (water && edge >= 0) props.lap = [water.foam, water.water]
+  if (water && look.level === 'full') props.drift = water.foam
+  if (warn !== 'none') props.breathe = { at: breatheAt(cells), colors: breath(p.heat[warn === 'imminent' ? 2 : 0]) }
+  if (f.growth && now - f.growth.at < GROWTH_LIVE_MS) props.growth = { id: f.growth.id, ...growthSpan(cells, f.growth.delta, max), colors: [...p.sparkle] }
+  if (look.level === 'full' && f.sweep && now - f.sweep.at < SWEEP_LIVE_MS) {
+    const span = sweepSpan(cells, f.sweep.delta, max)
+    const shore = cells[Math.max(0, edge - 1)]?.color ?? p.hex.tool
+    if (span.to > span.from) props.sweep = { id: f.sweep.id, ...span, shore, water: water?.water ?? shore, foam: water?.foam ?? shore }
+  }
+  return props
+}
+
+// The band's bar for Desktop: the same cells and one-shots as the terminal's, drawn by bandSvg
+function pill(s: CtxSnapshot, width: number, f: CtxFx, now: number, warn: CtxWarn) {
+  // an SVG takes no theme keys: the dots and the buffer of claude and mono draw in the palette's idle grey
+  const idle = paletteOf(look.palette).hex.idle
+  const cells = bandCells(s, width, svgTints(look, s.rows), waterOf(look)).map(c => (/^#/.test(c.color) ? c : { ...c, color: idle }))
+  const t = tideOf(cells, s.max, f, now, warn)
+  const tick = s.compactAt && s.max ? Math.min(width - 1, Math.floor((s.compactAt / s.max) * width)) : undefined
+  return bandSvg({
+    cells,
+    level: look.level,
+    edge: t.edge,
+    ...(tick !== undefined ? { tick } : {}),
+    ...(warn !== 'none' && look.level !== 'off' ? { warn: hexHeat(look, warn === 'imminent' ? 2 : 0) } : {}),
+    ...(t.growth ? { growth: t.growth } : {}),
+    ...(t.sweep ? { sweep: { id: t.sweep.id, from: t.sweep.from, to: t.sweep.to } } : {}),
+  })
+}
+
+const moves = (t: TideProps) => Boolean(t.lap || t.breathe || t.growth || t.sweep || (t.level === 'full' && t.drift))
+
 // A compaction's summary when none has been seen yet, in tokens
 const SUMMARY_TOKENS = 8000
 
@@ -202,6 +312,7 @@ async function afterCompaction($: EngineInterface, before: number | undefined) {
   await refresh($)
   const s = await read($, snap)
   if (before === undefined || !s) return
+  await noteFx($, 'sweep', before - s.total)
   let text = `Compacted ${fmtTokens(before)} → ~${fmtTokens(s.total)} (${fmtDelta(s.total - before)})`
   if (await read($, costOn)) {
     const sp = await read($, spend)
@@ -356,7 +467,8 @@ const PANE_ARGS = { id: PANE, title: 'Context window', closeOnEscape: true, colu
 let ticker: Timer | undefined
 
 function startTicker($: EngineInterface) {
-  ticker ??= $.clock.every(TICK_MS, () => void update($, tick, n => n + 1))
+  // the look's fallback refresh rides on the tick, for a change that never reached config.set
+  ticker ??= $.clock.every(TICK_MS, () => void update($, tick, n => n + 1).then(() => refreshLook($)))
 }
 
 function stopTicker() {
@@ -371,7 +483,7 @@ let paceTimer: Timer | undefined
 async function setLimits($: EngineInterface, list: readonly CtxLimit[] | undefined) {
   const next = Array.isArray(list) ? list.map(l => ({ ...l })) : []
   await update($, limits, () => next)
-  if (next.length > 0) paceTimer ??= $.clock.every(PACE_TICK_MS, () => void update($, paceTick, n => n + 1))
+  if (next.length > 0) paceTimer ??= $.clock.every(PACE_TICK_MS, () => void update($, paceTick, n => n + 1).then(() => refreshLook($)))
 }
 
 async function setVisible($: EngineInterface, value: boolean, focus = false) {
@@ -426,6 +538,17 @@ function Bar({ el, runs }: { el: El; runs: BarRun[] }) {
   )
 }
 
+// The band's bar held still: one Text per run of like cells, each in its category's hover group
+function Cells({ el, cells }: { el: El; cells: Cell[] }) {
+  const runs: BarRun[] = []
+  for (const c of cells) {
+    const last = runs[runs.length - 1]
+    if (last && last.color === c.color && last.bg === c.bg && Boolean(last.dim) === Boolean(c.dim) && last.scope === c.scope) last.text += c.ch
+    else runs.push({ text: c.ch, color: c.color, scope: c.scope, ...(c.bg ? { bg: c.bg } : {}), ...(c.dim ? { dim: true } : {}) })
+  }
+  return Bar({ el, runs })
+}
+
 // "81.9k/1M·" dim, then the percent bold in green, amber or red
 function Fill({ el, s }: { el: El; s: CtxSnapshot }) {
   const { Box, Text } = el
@@ -440,24 +563,48 @@ function Fill({ el, s }: { el: El; s: CtxSnapshot }) {
 // The fill per turn: dim history, the latest reading lit in the fill's color
 // The fill per turn: dim history, compactions lit in blue, the latest
 // reading in the fill's color
-function Spark({ el, values, marks, width, percent }: { el: El; values: readonly number[]; marks: readonly boolean[]; width: number; percent: number }) {
+// With `shade` the past glyphs take the look's colours (Messages' core to glow), and `mark` is the
+// compactions' colour (the water's); `pulse` draws the newest point while a turn runs
+function Spark({
+  el,
+  values,
+  marks,
+  width,
+  percent,
+  shade,
+  mark = 'permission',
+  pulse,
+}: {
+  el: El
+  values: readonly number[]
+  marks: readonly boolean[]
+  width: number
+  percent: number
+  shade?: (n: number) => string[] | undefined
+  mark?: string
+  pulse?: (glyph: string) => RenderElement
+}) {
   const { Box, Text } = el
   const glyphs = [...sparkline(values, width)]
   const flags = alignFlags(marks, values.length).slice(-glyphs.length)
-  const runs: { text: string; kind: 'past' | 'mark' | 'last' }[] = []
+  const colors = shade?.(glyphs.length)
+  const runs: { text: string; kind: 'past' | 'mark' | 'last'; color?: string }[] = []
   glyphs.forEach((g, i) => {
     const kind = i === glyphs.length - 1 ? 'last' : flags[i] ? 'mark' : 'past'
+    const color = kind === 'past' ? colors?.[i] : undefined
     const run = runs[runs.length - 1]
-    if (run && run.kind === kind) run.text += g
-    else runs.push({ text: g, kind })
+    if (run && run.kind === kind && run.color === color) run.text += g
+    else runs.push({ text: g, kind, ...(color ? { color } : {}) })
   })
   return (
     <Box flexDirection="row" flexShrink={0}>
       {runs.map(r =>
         r.kind === 'past' ? (
-          <Text color="claude" dimColor>{r.text}</Text>
+          r.color ? <Text color={r.color}>{r.text}</Text> : <Text color="claude" dimColor>{r.text}</Text>
         ) : r.kind === 'mark' ? (
-          <Text color="permission" bold>{r.text}</Text>
+          <Text color={mark} bold>{r.text}</Text>
+        ) : pulse ? (
+          pulse(r.text)
         ) : (
           <Text color={fillColor(percent)} bold>{r.text}</Text>
         ),
@@ -496,11 +643,20 @@ function Pace({ el, pieces }: { el: El; pieces: PacePiece[] }) {
   )
 }
 
-function Swatch({ el, kind, color, scope }: { el: El; kind: string; color: string; scope: string }) {
+function Swatch({ el, kind, color, scope, water }: { el: El; kind: string; color: string; scope: string; water?: string }) {
   const { Text } = el
   const hover = { scope: SCOPE + scope, inverse: true }
-  if (kind === 'free') return <Text color="inactive" dimColor hover={hover}>{FREE_GLYPH}</Text>
-  if (kind === 'buffer') return <Text color={color} dimColor hover={hover}>{BUFFER_GLYPH}</Text>
+  if (kind === 'free')
+    return water ? (
+      <Text color={water} dimColor hover={hover}>
+        ~
+      </Text>
+    ) : (
+      <Text color="inactive" dimColor hover={hover}>
+        {FREE_GLYPH}
+      </Text>
+    )
+  if (kind === 'buffer') return <Text color={water ?? color} dimColor hover={hover}>{BUFFER_GLYPH}</Text>
   return <Text color={color} dimColor={kind === 'deferred'} hover={hover}>■</Text>
 }
 
@@ -517,8 +673,12 @@ function Item({ el, name, right, truncate = 'truncate-end' }: { el: El; name: st
   )
 }
 
-export const register: Register = on => {
+export const register: Register = (on, options) => {
+  configured = options ?? {}
+  look = resolveLook(configured, [])
+
   on('session.start', async ($, e, next) => {
+    await refreshLook($)
     try {
       await $.command.register({
         name: 'ctx',
@@ -595,7 +755,9 @@ export const register: Register = on => {
         if (prev !== undefined && tokens < prev * DROP_RATIO) {
           await update($, eaters, () => [])
           await update($, warned, () => 'none')
+          await noteFx($, 'sweep', prev - tokens)
         } else if (prev !== undefined) {
+          if (tokens > prev) await noteFx($, 'growth', tokens - prev)
           const chars = turnChars
           await update($, cptAtom, cpt => calibrate(cpt, chars, tokens - prev))
         }
@@ -650,6 +812,11 @@ export const register: Register = on => {
   // and a clean one is kept, here and for later sessions, to learn prices from
   on('turn.start', async ($, e, next) => {
     try {
+      await update($, turnRunning, () => true)
+    } catch {
+      // the pulse is decoration
+    }
+    try {
       const was = (await read($, spend)).samples
       const s = await update($, spend, startTurn)
       // state hands back copies: a new sample shows in the length or the newest one
@@ -687,6 +854,7 @@ export const register: Register = on => {
   on('turn.complete', async ($, e, next) => {
     const r = await next(e)
     try {
+      if (!e.agentId) await update($, turnRunning, () => false)
       await update($, spend, s => turnDone(s, e.agentId))
     } catch {
       // the answer stands either way
@@ -712,6 +880,14 @@ export const register: Register = on => {
     const ledger = (await read($, spend)).ledger
     const r = await next(keep)
     if (e.trigger !== 'precompute' && r.messages && !selfCompact) void priceCompaction($, r, ledger).then(() => afterCompaction($, before))
+    return r
+  })
+
+  // Another plugin's /config change this mod follows: the new value is in the rows once it went through.
+  // Literals, so the engine can read the matcher off the source
+  on('config.set', { key: ['agent-pulse.palette', 'agent-pulse.animation'] }, async ($, e, next) => {
+    const r = await next(e)
+    if (r.deny === undefined) await refreshLook($)
     return r
   })
 
@@ -784,6 +960,16 @@ export const register: Register = on => {
     const marks = await read($, compacted)
     const w = await warning($)
     const hot = w.level === 'imminent' ? 'error' : 'warning'
+    // the bar: whole cells in the look's colours; a Tide client while anything moves
+    const nowMs = await $.clock.now()
+    const cells = s ? bandCells(s, barWidth, categoryTints(look, s.rows), waterOf(look)) : []
+    const tide = s ? tideOf(cells, s.max, await read($, fx), nowMs, w.level) : undefined
+    const live = Boolean(tide && e.surface === 'terminal' && 'Client' in el && moves(tide))
+    const Client = 'Client' in el ? (el as { Client: any }).Client : undefined
+    const heat = paletteOf(look.palette).heat[w.level === 'imminent' ? 2 : 0]
+    // Desktop: the bar is an SVG pill, its motion in CSS; its colours always hex
+    const Svg = e.surface !== 'terminal' && 'Svg' in el ? (el as { Svg: any }).Svg : undefined
+    const svgBar = s && Svg ? pill(s, barWidth, await read($, fx), nowMs, w.level) : undefined
     // the warning badge takes the sparkline's place on a band under 100 columns
     const cols = e.props.bodyColumns ?? 80
     const roomy = wide && (w.level === 'none' || cols >= 100)
@@ -806,8 +992,26 @@ export const register: Register = on => {
         <Box flexDirection="row" justifyContent="space-between" width="100%" columnGap={2}>
           {s ? (
             <Box flexDirection="row" columnGap={1} flexShrink={1}>
-              {w.level === 'none' ? <Text dimColor>ctx</Text> : <Text color={hot} bold>ctx</Text>}
-              {Bar({ el, runs: barRuns(s, barWidth) })}
+              {w.level === 'none' ? (
+                <Text dimColor>ctx</Text>
+              ) : live && Client ? (
+                <Client
+                  key="ctx-word"
+                  module="./tide.tsx"
+                  props={{ cells: [...'ctx'].map(ch => ({ ch, color: heat, scope: 'word' })), level: 'subtle', edge: -1, breathe: { at: [0, 1, 2], colors: breath(heat) } }}
+                  width={3}
+                  height={1}
+                />
+              ) : (
+                <Text color={hot} bold>ctx</Text>
+              )}
+              {svgBar ? (
+                <Svg key="ctx-pill" source={svgBar.source} alt={`context ${Math.round(s.percent)}% full`} width={svgBar.width} height={svgBar.height} />
+              ) : live && Client && tide ? (
+                <Client key="ctx-tide" module="./tide.tsx" props={tide} width={barWidth} height={1} />
+              ) : (
+                Cells({ el, cells: tide ? frameAt(tide, 0, {}) : cells })
+              )}
               {Fill({ el, s })}
               {roomy && past.length >= 2 && Spark({ el, values: past, marks, width: 10, percent: s.percent })}
               {roomy && step !== undefined && step !== 0 && <Text dimColor>{fmtDelta(step)}</Text>}
@@ -880,11 +1084,28 @@ export const register: Register = on => {
     const w = await warning($)
     await read($, tick)
     const now = await $.clock.now()
+    const paneFx = await read($, fx)
+    // Desktop redraws its one-shots on this tick
+    if (e.surface !== 'terminal') await read($, fxTick)
+    const paneSvg = e.surface !== 'terminal' && 'Svg' in el
+    const Svg = paneSvg ? (el as { Svg: any }).Svg : undefined
+    const running = await read($, turnRunning)
     // the body as the surface measured it: the person may drag the dock narrower
     const width = Math.max(20, e.props.bodyColumns || PANE_ARGS.columns)
     if (!s) return <Text dimColor>No context data yet. It fills in after the first response.</Text>
 
     const used = Math.max(1, s.total)
+    // the look: the rows' tints, the water, the heat scale; claude and mono keep 0.7's colours
+    const tints = categoryTints(look, s.rows)
+    const water = waterOf(look)
+    const pal = paletteOf(look.palette)
+    const hk = heatKeys(look)
+    const Client = 'Client' in el ? (el as { Client: any }).Client : undefined
+    const moving = e.surface === 'terminal' && Client !== undefined && look.level !== 'off'
+    // each section's gauge in its category's colour (slash commands share the skills')
+    const GAUGE_ROW: Record<string, string> = { mcp: 'MCP tools', memory: 'Memory files', skills: 'Skills', agents: 'Custom agents', commands: 'Skills' }
+    const gaugeColor = (key: string) =>
+      !water ? 'claude' : key === 'eaters' ? pal.hex.tool : key === 'dead' ? pal.hex.idle : ((tints[GAUGE_ROW[key] ?? ''] as Tint | undefined)?.core ?? pal.hex.tool)
     const section = (key: string, hotkey: string, title: string, tokens: number, count: string) => {
       const g = shareBar(tokens, used, GAUGE)
       return (
@@ -893,7 +1114,7 @@ export const register: Register = on => {
             <Button key={'sec-' + key} label={`${open.includes(key) ? '▾' : '▸'} ${title}`} hotkey={hotkey} plain onPress={() => toggleOpen($, key)} />
           </Box>
           <Box flexDirection="row" flexShrink={0}>
-            <Text color="claude">{g.fill}</Text>
+            <Text color={gaugeColor(key)}>{g.fill}</Text>
             <Text color="inactive" dimColor>{g.rest}</Text>
           </Box>
           <Text dimColor>{fmtTokens(tokens).padStart(6)}</Text>
@@ -946,7 +1167,7 @@ export const register: Register = on => {
     const sumOf = (xs: { tokens: number }[]) => xs.reduce((a, x) => a + x.tokens, 0)
     const deadTokens = sumOf(idleServers) + sumOf(idleSkills) + sumOf(idleAgents)
     const eatenTokens = eaten.reduce((a, x) => a + estimateTokens(x.chars, cpt), 0)
-    const heat = (t: number) => (t >= TOAST_TOKENS ? 'error' : t >= 5000 ? 'warning' : 'inactive')
+    const heat = (t: number) => (t >= TOAST_TOKENS ? hk[2] : t >= 5000 ? hk[0] : 'inactive')
     const status = want !== s.detail ? 'counting…' : s.detail === 'full' ? 'exact count' : 'estimated'
 
     return (
@@ -957,11 +1178,23 @@ export const register: Register = on => {
           </Box>
           {Fill({ el, s })}
         </Box>
-        {w.level !== 'none' && (
-          <Text color={w.level === 'imminent' ? 'error' : 'warning'} bold wrap="wrap">
-            {(w.level === 'imminent' ? '⚠ Auto-compact is close' : '⚠ Auto-compact is coming') + ' · c compacts on your terms'}
-          </Text>
-        )}
+        {w.level !== 'none' &&
+          (paneSvg && look.level !== 'off' ? (
+            // Desktop: the ⚠ breathes in an SVG of its own, the words stay text
+            <Box flexDirection="row" columnGap={1}>
+              {(() => {
+                const b = breathSvg(hexHeat(look, w.level === 'imminent' ? 2 : 0))
+                return <Svg key="ctx-warn" source={b.source} alt="warning" width={b.width} height={b.height} />
+              })()}
+              <Text color={w.level === 'imminent' ? hk[2] : hk[0]} bold wrap="wrap">
+                {(w.level === 'imminent' ? 'Auto-compact is close' : 'Auto-compact is coming') + ' · c compacts on your terms'}
+              </Text>
+            </Box>
+          ) : (
+            <Text color={w.level === 'imminent' ? hk[2] : hk[0]} bold wrap="wrap">
+              {(w.level === 'imminent' ? '⚠ Auto-compact is close' : '⚠ Auto-compact is coming') + ' · c compacts on your terms'}
+            </Text>
+          ))}
         {cold && (
           <Box flexDirection="column">
             <Text color="warning" bold wrap="wrap">{`⚠ cache likely expired · idle ${fmtIdle(idleMs)}`}</Text>
@@ -972,19 +1205,58 @@ export const register: Register = on => {
             {rates && after !== undefined && after < winTokens && muted(`  c compact first: re-writes ~${fmtTokens(after)} ≈ ~${fmtUsd(rewrite(after, rates))}`)}
           </Box>
         )}
-        {Bar({ el, runs: barRuns(s, width) })}
+        {(() => {
+          // the exact bar in the look's colours, as cells, so it can lap and glow like the band's
+          const cells: Cell[] = barRuns(s, width, tints, water).flatMap(r =>
+            [...r.text].map(ch => ({ ch, color: r.color, scope: r.scope, ...(r.bg ? { bg: r.bg } : {}), ...(r.dim ? { dim: true } : {}) })),
+          )
+          const t = tideOf(cells, s.max, paneFx, now, w.level)
+          if (moving && moves(t) && Client) return <Client key="ctx-pane-tide" module="./tide.tsx" props={t} width={cells.length} height={1} />
+          if (e.surface === 'terminal') return Cells({ el, cells: frameAt(t, 0, {}) })
+          // Desktop: still water, and a one-shot played by the redraws playFx drives
+          const { lap: _lap, drift: _drift, breathe: _breathe, ...still } = t
+          const frame = Math.floor(now / 100)
+          const at = (x?: { at: number }) => (x ? Math.floor(x.at / 100) : undefined)
+          return Cells({ el, cells: frameAt(still, frame, { growth: at(paneFx.growth), sweep: at(paneFx.sweep) }) })
+        })()}
         {marker && <Text color="inactive" dimColor>{marker}</Text>}
         {past.length >= 2 && (
           <Box flexDirection="column">
             <Box flexDirection="row" columnGap={1}>
               <Text color="inactive" dimColor>trend</Text>
-              {Spark({ el, values: past, marks, width: Math.max(8, Math.min(HISTORY_LIMIT, width - 6 - (turnCount ? turnCount.length + 1 : 0))), percent: s.percent })}
+              {Spark({
+                el,
+                values: past,
+                marks,
+                width: Math.max(8, Math.min(HISTORY_LIMIT, width - 6 - (turnCount ? turnCount.length + 1 : 0))),
+                percent: s.percent,
+                shade: n => sparkColors(look, tints['Messages'], n),
+                ...(water ? { mark: water.water } : {}),
+                ...(running && moving && Client
+                  ? {
+                      pulse: (glyph: string) => (
+                        <Client
+                          key="ctx-spark-pulse"
+                          module="./tide.tsx"
+                          props={{
+                            cells: [{ ch: glyph, color: fillColor(s.percent), scope: 'trend' }],
+                            level: 'subtle',
+                            edge: -1,
+                            breathe: { at: [0], colors: breath(tints['Messages']?.core ?? pal.hex.tool) },
+                          }}
+                          width={1}
+                          height={1}
+                        />
+                      ),
+                    }
+                  : {}),
+              })}
               {turnCount && <Text color="inactive" dimColor>{turnCount}</Text>}
             </Box>
             <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
               <Text color="inactive" dimColor>{trendLabel({ delta: pace.delta, perTurn: pace.perTurn })}</Text>
               {pace.turnsLeft !== undefined && (
-                <Text color={pace.turnsLeft <= 3 ? 'error' : pace.turnsLeft <= 10 ? 'warning' : 'inactive'} dimColor={pace.turnsLeft > 10} bold={pace.turnsLeft <= 10}>
+                <Text color={pace.turnsLeft <= 3 ? hk[2] : pace.turnsLeft <= 10 ? hk[0] : 'inactive'} dimColor={pace.turnsLeft > 10} bold={pace.turnsLeft <= 10}>
                   {`· ~${pace.turnsLeft} ${pace.turnsLeft === 1 ? 'turn' : 'turns'} to auto-compact`}
                 </Text>
               )}
@@ -1029,7 +1301,7 @@ export const register: Register = on => {
           .filter(r => r.tokens > 0 || r.kind === 'free')
           .map(r => (
             <Box flexDirection="row" width="100%" columnGap={1}>
-              {Swatch({ el, kind: r.kind, color: r.color, scope: r.name })}
+              {Swatch({ el, kind: r.kind, color: tints[r.name]?.core ?? r.color, scope: r.name, ...(water ? { water: water.water } : {}) })}
               <Box flexGrow={1} flexShrink={1}>
                 <Text wrap="truncate-end" dimColor={r.kind === 'deferred'} hover={{ scope: SCOPE + r.name, bold: true }}>
                   {r.name}
@@ -1080,7 +1352,7 @@ export const register: Register = on => {
               <Text>{'  Slash commands'}</Text>
             </Box>
             <Box flexDirection="row" flexShrink={0}>
-              <Text color="claude">{shareBar(s.commandTokens, used, GAUGE).fill}</Text>
+              <Text color={gaugeColor('commands')}>{shareBar(s.commandTokens, used, GAUGE).fill}</Text>
               <Text color="inactive" dimColor>{shareBar(s.commandTokens, used, GAUGE).rest}</Text>
             </Box>
             <Text dimColor>{fmtTokens(s.commandTokens).padStart(6)}</Text>
@@ -1116,7 +1388,7 @@ export const register: Register = on => {
                   <Text dimColor wrap="truncate-end">{'    ' + v.name}</Text>
                 </Box>
                 {v.streak >= 2 ? (
-                  <Text color={v.streak >= 5 ? 'warning' : 'inactive'} dimColor={v.streak < 5}>{`idle ${v.streak} sessions`}</Text>
+                  <Text color={v.streak >= 5 ? hk[0] : 'inactive'} dimColor={v.streak < 5}>{`idle ${v.streak} sessions`}</Text>
                 ) : (
                   <Text color="inactive" dimColor>no calls</Text>
                 )}

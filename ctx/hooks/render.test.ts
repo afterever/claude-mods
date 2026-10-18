@@ -368,8 +368,8 @@ test('compact keeps the files and requests, toasts the drop, marks the sparkline
   await $.session.measure(measure(30_000))
   await $.session.measure(measure(42_000))
   await clock.settle()
-  // (the Messages row shares the color: its bar run and swatch are not bold)
-  const lit = (await ui.findAll({ type: 'Text' })).filter(t => t.props.color === 'permission' && t.props.bold)
+  // in the water's colour (0.8.0); the Messages row's bar run and swatch are not bold
+  const lit = (await ui.findAll({ type: 'Text' })).filter(t => t.props.color === '#9fa8e0' && t.props.bold)
   expect(lit).toHaveLength(1)
   expect(lit[0]!.text).toBe('▁')
 })
@@ -715,4 +715,247 @@ test("a gateway's spend limit shows as a percent, with no pace", async ($, on) =
   expect(await texts(band)).toContain('spend ')
   expect(await texts(band)).toContain('34%')
   expect((await texts(band)).includes('🐾 ')).toBe(false)
+})
+
+// 0.8.0, the look: the band's bar is a Tide client on the terminal, Text when nothing moves
+const tides = async (ui: any) =>
+  ((await ui.findAll({ type: 'Client' })) as { props: { module?: string; width?: number; props?: any } }[])
+    .map(n => n.props)
+    .filter(p => p.module?.endsWith('tide.tsx'))
+const barTide = async (ui: any) => (await tides(ui)).find(p => (p.width ?? 0) >= 8)
+// the bar's runs (a find hands back no hover): the Texts made only of bar glyphs
+const BAR_GLYPHS = /^[█▏▎▍▌▋▊▉≈~·░]+$/
+const barRuns = async (ui: any) => ((await ui.findAll({ type: 'Text' })) as { text: string; props: { color?: string } }[]).filter(t => BAR_GLYPHS.test(t.text))
+const barText = async (ui: any) => (await barRuns(ui)).map(t => t.text).join('')
+const mountBand = ($: Engine, cols = 120) => $.ui.mount({ plugin: 'ctx', surface: 'terminal', component: 'AbovePrompt', props: bandProps(cols) })
+
+test('the band draws its bar as one 16-cell Tide client', async ($, on) => {
+  const clock = world(on, [])
+  await $.session.measure(measure(36_500))
+  await clock.settle()
+  const tide = await barTide(await mountBand($))
+  expect(tide?.width).toBe(16)
+  expect(tide?.props.cells).toHaveLength(16)
+  expect(tide?.props.cells.map((c: { ch: string }) => c.ch).join('')).toBe('██≈~~~~~~~~~~~~░')
+  // the foam laps at subtle; nothing drifts
+  expect(tide?.props.lap).toHaveLength(2)
+  expect(tide?.props.level).toBe('subtle')
+})
+
+test('under 70 columns the bar is 8 cells', async ($, on) => {
+  const clock = world(on, [])
+  await $.session.measure(measure(36_500))
+  await clock.settle()
+  expect((await barTide(await mountBand($, 60)))?.props.cells).toHaveLength(8)
+})
+
+test('animation off draws the bar as Text and mounts no Client', { options: { animation: 'off' } }, async ($, on) => {
+  const clock = world(on, [])
+  await $.session.measure(measure(36_500))
+  await clock.settle()
+  const band = await mountBand($)
+  expect(await tides(band)).toEqual([])
+  expect(await barText(band)).toBe('██≈~~~~~~~~~~~~░')
+})
+
+test('palette claude draws engine colours and dots, and nothing moves', { options: { palette: 'claude' } }, async ($, on) => {
+  const clock = world(on, [])
+  await $.session.measure(measure(36_500))
+  await clock.settle()
+  const band = await mountBand($)
+  expect(await tides(band)).toEqual([])
+  expect(await barText(band)).toBe('██·············░')
+  // System prompt and Messages, each a whole cell in the engine's own colour
+  expect((await barRuns(band)).filter(t => t.text === '█').map(t => t.props.color)).toEqual(['promptBorder', 'permission'])
+})
+
+test("follow takes agent-pulse's palette from the config rows", async ($, on) => {
+  const clock = world(on, [])
+  on('config.list', async () => ({ value: [{ key: 'agent-pulse.palette', value: 'mono' }] }) as any)
+  await $.session.start({ cwd: 'C:/bats', surface: 'terminal', isInteractive: true })
+  await $.session.measure(measure(36_500))
+  await clock.settle()
+  expect(await barText(await mountBand($))).toBe('██·············░')
+})
+
+test('a turn that grows the window passes a growth glow once', async ($, on) => {
+  const clock = world(on, [])
+  await $.session.measure(measure(36_500))
+  await $.session.measure(measure(60_000))
+  await clock.settle()
+  const g = (await barTide(await mountBand($)))?.props.growth
+  expect(g?.id).toBe(1)
+  expect(g?.to - g?.from).toBeGreaterThan(0)
+  await clock.advance(1900)
+  expect((await barTide(await mountBand($)))?.props.growth).toBeUndefined()
+})
+
+test('a compaction passes a sweep at full only', { options: { animation: 'full' } }, async ($, on) => {
+  const clock = world(on, [])
+  await $.session.measure(measure(150_000))
+  await $.session.measure(measure(30_000))
+  await clock.settle()
+  const t = await barTide(await mountBand($))
+  expect(t?.props.sweep?.id).toBe(1)
+  expect(t?.props.drift).toBeDefined()
+})
+
+test('subtle never sweeps', async ($, on) => {
+  const clock = world(on, [])
+  await $.session.measure(measure(150_000))
+  await $.session.measure(measure(30_000))
+  await clock.settle()
+  expect((await barTide(await mountBand($)))?.props.sweep).toBeUndefined()
+})
+
+test('near auto-compact the ctx word and the foam breathe', async ($, on) => {
+  const clock = world(on, [])
+  for (const t of [300_000, 400_000, 500_000, 800_000]) await $.session.measure(measure(t))
+  await clock.settle()
+  const band = await mountBand($)
+  const all = await tides(band)
+  const word = all.find(p => p.width === 3)
+  expect(word?.props.cells.map((c: { ch: string }) => c.ch).join('')).toBe('ctx')
+  // imminent: the palette's red, breathing
+  expect(word?.props.breathe.colors).toHaveLength(20)
+  expect(word?.props.breathe.colors[10]).toBe('#ff5c5c')
+  const bar = await barTide(band)
+  expect(bar?.props.breathe.at).toEqual([bar?.props.edge])
+})
+
+test('animation off keeps the hot ctx word still', { options: { animation: 'off' } }, async ($, on) => {
+  const clock = world(on, [])
+  for (const t of [300_000, 400_000, 500_000, 800_000]) await $.session.measure(measure(t))
+  await clock.settle()
+  const band = await mountBand($)
+  expect(await tides(band)).toEqual([])
+  const word = ((await band.findAll({ type: 'Text', text: 'ctx' })) as any[]).pop()
+  expect(word.props.color).toBe('error')
+})
+
+// 0.8.0, the look in the pane
+const mountPane = ($: Engine, cols = 48) => $.ui.mount({ plugin: 'ctx', surface: 'terminal', component: 'Pane', requestId: 'ctx', props: paneProps(cols) })
+const EMBER = { tool: '#d97757', water: '#9fa8e0', amber: '#f6d36b', red: '#ff5c5c' }
+
+test('the pane bar is exact, in palette colours, with water', async ($, on) => {
+  const clock = world(on, [])
+  await $.session.measure(measure(36_500))
+  await clock.settle()
+  const bar = await barTide(await mountPane($))
+  expect(bar?.width).toBe(48)
+  const glyphs = bar?.props.cells.map((c: { ch: string }) => c.ch).join('') as string
+  expect(glyphs).toHaveLength(48)
+  expect(glyphs).toMatch(/^[█▏▎▍▌▋▊▉]+≈~+░+$/)
+  expect(bar?.props.cells.some((c: { color: string }) => c.color === EMBER.tool)).toBe(true)
+})
+
+test('swatches match their category', async ($, on) => {
+  const clock = world(on, [])
+  await $.session.measure(measure(36_500))
+  await clock.settle()
+  const swatches = ((await (await mountPane($)).findAll({ type: 'Text', text: '■' })) as any[]).map(t => t.props.color)
+  expect(swatches).toContain(EMBER.tool)
+})
+
+test('the newest sparkline point pulses while a turn runs', async ($, on) => {
+  const clock = world(on, [])
+  on('turn.start', async (_$, e) => ({ turnId: e.turnId }))
+  on('turn.complete', async () => ({ text: '' }))
+  for (const t of [20_000, 26_000]) await $.session.measure(measure(t))
+  await clock.settle()
+  await $.turn.start({ text: 'go', turnId: 't1' } as any)
+  const pane = await mountPane($)
+  const pulse = async () => (await tides(pane)).filter(p => p.width === 1)
+  expect(await pulse()).toHaveLength(1)
+  await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' } as any)
+  expect(await pulse()).toHaveLength(0)
+})
+
+test('section gauges take their category colour', async ($, on) => {
+  const clock = world(on, [])
+  await $.session.measure(measure(36_500))
+  await clock.settle()
+  const fills = ((await (await mountPane($)).findAll({ type: 'Text' })) as any[]).filter(t => /^█+[▏▎▍▌▋▊▉]?$|^[▏▎▍▌▋▊▉]$/.test(t.text)).map(t => t.props.color)
+  // MCP tools in agent-pulse's agent colour, no longer all `claude`
+  expect(fills).toContain('#8cc7b5')
+  expect(fills).not.toContain('claude')
+})
+
+test('heat comes from the palette', async ($, on) => {
+  const clock = world(on, [])
+  for (const t of [300_000, 400_000, 500_000, 800_000]) await $.session.measure(measure(t))
+  await clock.settle()
+  const pane = await mountPane($)
+  const warn = ((await pane.findAll({ type: 'Text' })) as any[]).find(t => t.text.startsWith('⚠ Auto-compact is close'))
+  expect(warn.props.color).toBe(EMBER.red)
+  const left = ((await pane.findAll({ type: 'Text' })) as any[]).find(t => t.text.includes('turns to auto-compact'))
+  expect(left.props.color).toBe(EMBER.red)
+})
+
+test('claude palette: the pane keeps 0.7 colours', { options: { palette: 'claude' } }, async ($, on) => {
+  const clock = world(on, [])
+  for (const t of [300_000, 400_000, 500_000, 800_000]) await $.session.measure(measure(t))
+  await clock.settle()
+  const pane = await mountPane($)
+  const warn = ((await pane.findAll({ type: 'Text' })) as any[]).find(t => t.text.startsWith('⚠ Auto-compact is close'))
+  expect(warn.props.color).toBe('error')
+  expect(((await pane.findAll({ type: 'Text', text: '■' })) as any[]).map(t => t.props.color)).toContain('permission')
+  expect(await barText(pane)).toMatch(/·+/)
+})
+
+// 0.8.0, Desktop: an SVG pill in the band; the pane keeps a Text bar, for the hover link to its rows
+const svgs = async (ui: any) => ((await ui.findAll({ type: 'Svg' })) as { props: { width?: number; source?: string } }[]).map(n => n.props)
+
+test('the Desktop band draws an Svg and no Client', async ($, on) => {
+  const clock = world(on, [])
+  await $.session.measure(measure(36_500))
+  await clock.settle()
+  const band = await $.ui.mount({ plugin: 'ctx', surface: 'desktop', component: 'AbovePrompt', props: bandProps(120) })
+  const pill = (await svgs(band)).find(p => p.width === 128)
+  expect(pill?.source).toContain('class="wave"')
+  expect(await tides(band)).toEqual([])
+  expect(await band.find({ text: '4%' })).toBeDefined()
+})
+
+test('the Desktop band in claude still draws hex colours', { options: { palette: 'claude' } }, async ($, on) => {
+  const clock = world(on, [])
+  await $.session.measure(measure(36_500))
+  await clock.settle()
+  const band = await $.ui.mount({ plugin: 'ctx', surface: 'desktop', component: 'AbovePrompt', props: bandProps(120) })
+  const pill = (await svgs(band)).find(p => p.width === 128)
+  expect(pill?.source).not.toMatch(/(fill|stop-color)="(permission|promptBorder|inactive)"/)
+  expect(pill?.source).not.toContain('class="wave"')
+})
+
+test('the Desktop pane keeps a Text bar and no Svg in it', async ($, on) => {
+  const clock = world(on, [])
+  await $.session.measure(measure(36_500))
+  await clock.settle()
+  const pane = await $.ui.mount({ plugin: 'ctx', surface: 'desktop', component: 'Pane', requestId: 'ctx', props: paneProps(48) })
+  expect(await svgs(pane)).toEqual([])
+  expect(await tides(pane)).toEqual([])
+  expect(await barText(pane)).toMatch(/≈~+/)
+})
+
+test('the Desktop pane plays a growth by redraws, then stops', async ($, on) => {
+  const clock = world(on, [])
+  await $.session.measure(measure(36_500))
+  await clock.settle()
+  const pane = await $.ui.mount({ plugin: 'ctx', surface: 'desktop', component: 'Pane', requestId: 'ctx', props: paneProps(48) })
+  await $.session.measure(measure(60_000))
+  await clock.advance(300)
+  const colours = async () => ((await barRuns(pane)) as { props: { color?: string } }[]).map(t => t.props.color)
+  // the ember sparkle is on the bar while the glow plays
+  expect((await colours()).some(c => ['#ffe3b0', '#f6c177', '#f3a97c', '#e8957a'].includes(c ?? ''))).toBe(true)
+  await clock.advance(2000)
+  expect((await colours()).some(c => c === '#ffe3b0')).toBe(false)
+})
+
+test('the Desktop pane breathes its warning glyph', async ($, on) => {
+  const clock = world(on, [])
+  for (const t of [300_000, 400_000, 500_000, 800_000]) await $.session.measure(measure(t))
+  await clock.settle()
+  const pane = await $.ui.mount({ plugin: 'ctx', surface: 'desktop', component: 'Pane', requestId: 'ctx', props: paneProps(48) })
+  expect((await svgs(pane)).filter(p => p.width === 10)).toHaveLength(1)
+  expect(await pane.find({ text: 'Auto-compact is close · c compacts on your terms' })).toBeDefined()
 })
