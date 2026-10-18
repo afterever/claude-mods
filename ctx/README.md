@@ -70,6 +70,7 @@ the prompt. In the fullscreen layout (110+ columns) this docks beside the transc
 | `/ctx compact [focus]` (`c`) | Compact now, telling the summary your focus, the files you edited and your latest requests |
 | `/ctx autokeep on` or `off` (`k`) | Give every compaction the same keep list, auto-compact included. Off by default |
 | `/ctx cost on` or `off` (`p`) | Show or hide the dollar figures. On by default |
+| `/ctx footer on` or `off` | Show `ctx N%` in the footer of Claude Desktop, beside the band's own fill. Off by default; the terminal never shows it |
 | `m` `f` `s` `a` `h` `d` in the pane | Open MCP tools, memory files, skills, agents, heaviest results, unused so far |
 | `r` in the pane | Count again |
 | `Esc` | Close the pane when it has focus |
@@ -99,7 +100,7 @@ exact count costs a token-count call per change, so each session starts on the e
 ## Requirements
 
 - A Claude Code build that loads mods (plugins that register `hooks`).
-- Version 0.7.1's tests run on Claude Code 2.1.302, and 0.7.0 ran live on it, on the terminal and
+- Version 0.7.2's tests run on Claude Code 2.1.302, and 0.7.0 ran live on it, on the terminal and
   Claude Desktop (the pace in the band). The engine API ctx uses was checked against build 2.1.288 (see
   [DESIGN.md](./DESIGN.md)); no older minimum has been tried.
 

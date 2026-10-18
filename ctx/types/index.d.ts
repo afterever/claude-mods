@@ -166,6 +166,8 @@ declare module 'claude-code' {
       spend: CtxSpend
       /** Whether dollar figures are shown. */
       costOn: boolean
+      /** Whether the Desktop footer shows `ctx N%`; off until `/ctx footer on`. */
+      footerOn: boolean
       /** The plan's rate-limit windows as the last response reported them; empty off a subscription. */
       limits: CtxLimit[]
       /** Bumped once a minute while there are windows, so the band's countdown moves. */

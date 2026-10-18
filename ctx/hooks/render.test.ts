@@ -1,4 +1,4 @@
-import { test, expect, mock } from 'claude-code/testing'
+import { test, expect, mock, type Engine } from 'claude-code/testing'
 import type { On, SessionContextBreakdown } from 'claude-code'
 
 import { fmtUsd } from './cost'
@@ -167,23 +167,56 @@ for (const surface of ['terminal', 'desktop'] as const) {
 }
 
 // Desktop draws a footer's tree but not the labels in `modes` (seen with ctx's
-// own and waypoints' plan label, 2026-10-18), so the percent is a node
-test('the footer draws ctx N% on desktop only, around the engine’s footer', async ($, on) => {
-  const seen: string[][] = []
-  const clock = world(on, [], seen)
+// own and waypoints' plan label, 2026-10-18), so the percent is a node. It is
+// off until `/ctx footer on`: the band already shows the fill there
+const footerMount = ($: Engine, surface: 'terminal' | 'desktop') =>
+  $.ui.mount({ plugin: 'ctx', surface, component: 'SessionMode', props: { modes: ['auto'] } })
+
+test('the footer is off by default: the engine’s footer alone, on both surfaces', async ($, on) => {
+  const clock = world(on, [])
   await $.session.measure({ context: { window: 1_000_000 }, rateLimits: [], changed: ['context'] })
   await clock.settle()
-  const footer = (surface: 'terminal' | 'desktop') =>
-    $.ui.mount({ plugin: 'ctx', surface, component: 'SessionMode', props: { modes: ['auto'] } })
-  const desktop = await footer('desktop')
+  for (const surface of ['desktop', 'terminal'] as const) {
+    const ui = await footerMount($, surface)
+    expect(await ui.find({ text: 'ctx 4%' })).toBeUndefined()
+    expect(await ui.find({ key: 'engine-footer' })).toBeDefined()
+    await ui.unmount()
+  }
+})
+
+test('/ctx footer on draws ctx N% on desktop only, around the engine’s footer, and keeps it', async ($, on) => {
+  const seen: string[][] = []
+  const stored: Record<string, unknown> = {}
+  const toasts: string[] = []
+  const clock = world(on, [], seen, [], toasts, stored)
+  await $.session.measure({ context: { window: 1_000_000 }, rateLimits: [], changed: ['context'] })
+  await clock.settle()
+  await $.command.run({ command: 'ctx', args: 'footer on' } as any)
+  expect(toasts).toContain('Footer on: ctx N% in the Desktop footer')
+  expect(stored.footer).toBe(true)
+  const desktop = await footerMount($, 'desktop')
   expect(await desktop.find({ text: 'ctx 4%' })).toBeDefined()
   expect(await desktop.find({ key: 'engine-footer' })).toBeDefined()
   await desktop.unmount()
-  const terminal = await footer('terminal')
+  const terminal = await footerMount($, 'terminal')
   expect(await terminal.find({ text: 'ctx 4%' })).toBeUndefined()
   expect(await terminal.find({ key: 'engine-footer' })).toBeDefined()
+  await terminal.unmount()
   // the labels in `modes` are left as the engine gave them
-  expect(seen).toEqual([['auto'], ['auto']])
+  expect(seen.every(m => m.length === 1 && m[0] === 'auto')).toBe(true)
+  await $.command.run({ command: 'ctx', args: 'footer off' } as any)
+  expect(stored.footer).toBe(false)
+  const off = await footerMount($, 'desktop')
+  expect(await off.find({ text: 'ctx 4%' })).toBeUndefined()
+})
+
+test('a new session remembers the footer switch', async ($, on) => {
+  const clock = world(on, [], [], [], [], { footer: true })
+  await $.session.start({ cwd: 'C:/bats', surface: 'desktop', isInteractive: true })
+  await $.session.measure({ context: { window: 1_000_000 }, rateLimits: [], changed: ['context'] })
+  await clock.settle()
+  const ui = await footerMount($, 'desktop')
+  expect(await ui.find({ text: 'ctx 4%' })).toBeDefined()
 })
 
 const measure = (tokens: number) => ({ context: { window: 1_000_000, tokens }, rateLimits: [], changed: ['context' as const] })
