@@ -275,6 +275,125 @@ The columns are a starting point and are to be tuned by looking at a real termin
 
 **Out of scope on purpose:** a pane section for the windows (the band is the whole feature), history of past windows, a forecast of when a limit runs out, and the HUD's other usage options (bars, remaining-percent mode, reset as wall-clock time).
 
+### 0.8.0: the look (design)
+
+**The problem.** In two days `agent-pulse`, `waypoints` 2.0 and `subagent-progress` 2.1 got a shared look: a palette whose colours shade from a core to a glow, motion in steps (`off` / `subtle` / `full`), one-shot sparkles and sweeps, and SVG on Desktop. ctx, in the same band, still draws flat theme keys, and the person finds it plain next to them. Its bar is the worst of it. On a 1M window at 8% everything used fits in about 1.3 of the band's 16 cells, so the eighth-block bar draws `▎▎▍` slivers in four colours, each over the next one's background, followed by 13 dots. It reads as scraps, not as a gauge.
+
+**What the person decided**
+
+- The category split in the band's bar stays: it is useful.
+- **Each category in use gets at least one whole cell** in the band's bar, which stays an honest 0→max gauge otherwise (chosen over zooming the split to fill the bar, and over a split chip next to a separate gauge).
+- **The colours come from the palette, following agent-pulse**, as waypoints and subagent-progress do. The engine's category colours are theme keys (`promptBorder`, `permission`, `inactive`…), which cannot be mixed, so they cannot shade or shimmer.
+- **Four effects, each meaning something:** a turn's growth glows, the bar breathes as auto-compact nears, a compaction sweeps, and Desktop gets an SVG bar.
+- **The pane gets the same treatment**, not just the band.
+- **No character.** A mascot felt like too much. The bar becomes a small seascape instead, **Tide**: free space is open water, the used categories are the shore building out into it, and a compaction is the water rushing back in over what was shore. The jellyfish (Claude) and the crabs (subagents) get a sea to live in, with no third character beside them.
+
+**Principles**, borrowed from `agent-pulse/DESIGN.md` and held here too:
+
+- **Every effect carries meaning.** The water is the room left. The glow is what the last turn ate. The breathing is "auto-compact is near". The wave is "room came back". Nothing moves just to be busy.
+- **The text stays text.** The fill (`81.9k/1M·8%`), the badge, the pace and every pane row stay hook-drawn `Text`, so they truncate and the tests can read them.
+- **No layout shifts.** The band's bar is always 16 cells (8 under 70 columns), whatever it draws.
+- **Honest numbers first.** The look changes no figure. The one distortion, the minimum cell, is in the band only, and the pane's bar stays exact.
+
+#### Settings and `follow`
+
+`userConfig` gains `palette` (`follow`, `ember`, `claude`, `neon`, `mono`) and `animation` (`follow`, `off`, `subtle`, `full`), both defaulting to `follow`, worded like waypoints' two. `follow` takes agent-pulse's value from the `$.config.list()` rows `agent-pulse.palette` and `agent-pulse.animation` (confirmed live for waypoints), with `ember` and `subtle` when agent-pulse is not installed. Resolve at `session.start` and in a `config.set` hook for those keys, then `$.ui.invalidate('ui.render')`. The fallback is ctx's existing ticks (the pane's 15 s, the pace's 60 s); ctx adds no timer for this.
+
+`hooks/palette.ts` is a **copy** of agent-pulse's `palette.ts` (palettes, `paletteOf`, `levelOf`, `mix`, `shadeOf`, `shimmerOf`, `agentColorOf`) plus `resolveLook`, with a comment at the top that it must be kept in step. A test pins a few values, as waypoints' does.
+
+#### Colours
+
+Each category takes a phase colour, so a palette means the same thing across the four bands. **(builder's call: the mapping)**
+
+| Category | Phase |
+| --- | --- |
+| Messages | `tool` (Claude's coral in ember: the category that grows) |
+| System prompt | `requesting` |
+| System tools | `composing` |
+| MCP tools | `agent` |
+| Memory files | `writing` |
+| Skills | `thinking` |
+| Custom agents, and any category name not listed | the palette's `agents` list by name, skipping a colour already taken |
+| Free space (the water) | `compacting` core, dimmed; the foam is its glow |
+| Autocompact buffer | stays `░`, dim, in the water's colour |
+
+In `ember` and `neon` the listed categories must get distinct hex colours, and a test checks it. Each category's own cells shade core→glow from left to right. A one-cell category is its core.
+
+**`claude` and `mono` draw today's colours:** the engine's theme keys and `·` for free space, with no shading and no water, so choosing `claude` gets 0.7's colours back. The band's bar still uses the whole cells, at least one each, on every palette: the slivers are not coming back. **(builder's call: the person did not choose this, so say it in the README.)** The effects still play there, in the palette's `sparkle` and `heat` colours.
+
+The fill text's green/amber/red (`fillColor`) and the pace's colours (claude-hud's rule, 0.7.0) stay as they are. They are readings with a colour code of their own.
+
+#### The band's bar (terminal)
+
+- **Whole cells, at least one each.** The band no longer uses eighth blocks. Every used category with tokens > 0 gets at least one `█`, and so does the buffer when present. The rest is shared out by largest remainder, and **the extra cells come from the largest segment** (free space first, then the largest used category), so the bar never grows past its width. If the minimums don't fit (a narrow 8-cell bar with many categories), the smallest categories lose their minimum first and fold into the cell of their neighbour on the left. The pure function goes in `fmt.ts` beside `barRuns` (for example `bandCells(snap, width)`).
+- **Tide.** Free cells are `~` in the water colour, and the first free cell (the water's edge) is foam, `≈`. ASCII `~` and `≈` (U+2248) only: `∼` (U+223C) is ambiguous-width and some terminals and locales draw it two cells wide, which would push the 📊 out of place.
+
+| Level | Water |
+| --- | --- |
+| `off` | still: `████≈~~~~~~~~~~░` |
+| `subtle` | the foam laps: the edge cell steps between `≈` and `~`, and between core and glow, about once a second |
+| `full` | the foam laps, and the water drifts: a brighter `~` moves along the free cells, a step every ~600 ms **(builder's call: the timings, tuned by eye)** |
+
+- **The whole bar is one `Client`** (`hooks/tide.tsx`) with a fixed width. It takes the cells (glyph, colour, background) and the effect props below, and runs its motion on the surface's frame clock, so the hooks never run per frame. The `ctx` word at the band's left is a second, 3-cell `Client`, so it can breathe.
+
+#### The effects
+
+| Effect | Trigger | What it draws | Levels |
+| --- | --- | --- | --- |
+| **Growth glow** | `session.measure` with the API's figure up from the last one (no drop) | for about 1.5 s the cells between the last used cell before and after shimmer through the palette's `sparkle`; if the growth moved no cell, the last used cell glows | `subtle`, `full` |
+| **Breathing** | `warnLevel` is `near` (amber, `heat[0]`) or `imminent` (red, `heat[2]`) | the `ctx` word and the foam (the last used cell in `claude` / `mono`) breathe from the dimmed colour up to the full one, about a 2 s cycle, for as long as the warning stands | `subtle`, `full`; `off` draws them still in the hot colour, as today |
+| **Compaction sweep** | a compaction lands (`afterCompaction`, or a drop past `DROP_RATIO` on `session.measure`) | a wave runs from the old edge back to the new one over about 1.2 s; the cells it passes turn from shore to water, foam at its crest | `full` |
+
+- A sweep wins over a growth glow, and breathing continues underneath both.
+- One-shot effects carry the id of their event (for example the history length at that reading), so a redraw (the 15 s and 60 s ticks) never replays them. The `Client` plays an id once and then rests.
+- The hooks pass what each effect needs as props. The `Client` holds only its frame.
+
+#### The pane
+
+- **The big bar stays exact**, eighth blocks included. With hex colours the partial cell on a boundary blends the two categories cleanly at 48 columns. It gets the Tide water and the same three effects, through the same `Client`. Its width follows `bodyColumns`, so its props change when the dock is dragged narrower; that's fine for a `Client`, which is fixed within one render.
+- **Swatches** (`■`) take their category's palette colour, so the swatch, the bar run and the row still match.
+- **The trend sparkline** shades along its length from Messages' dimmed core to its glow. Compaction marks take the water colour (today `permission`, blue). The newest point keeps the fill colour (green/amber/red). At `subtle` and `full` it pulses gently while a main-loop turn is running (`turn.start` to `turn.complete`) through a 1-cell `Client`.
+- **Section gauges** shade in their own category's colours: MCP tools in MCP's, Memory in memory's, Skills, Agents, Slash commands in theirs. Heaviest results and Unused so far use `tool` and `idle`. Today they are all flat `claude`.
+- **Heat** takes the palette's `heat` scale where fixed theme keys are used today: a heaviest result over 15k (`heat[2]`) or over 5k (`heat[0]`), `idle 5+ sessions` (`heat[0]`), `~N turns to auto-compact` at 10 or fewer (`heat[0]`) and 3 or fewer (`heat[2]`), and the auto-compact warning line.
+- **Unchanged:** the buttons and the footer row, the compact marker `▲` line (dim), the cost block and its colours, and the hover link between a bar run and its row (see "To confirm live" below).
+
+#### Desktop
+
+`e.surface !== 'terminal'` (`Svg` draws empty on the terminal; see `agent-pulse/DESIGN.md`).
+
+- **The band's bar is an `Svg` pill** about the width of 16 terminal cells (~130 px, 10–12 px high) **(builder's call)**, following the band's own rule of at least one cell each (a minimum segment width of ~8 px). Used segments are rects with a `linearGradient` core→glow. Free space is water: a soft gradient in the water colour with a wave line along its top that drifts by a CSS `@keyframes` translate (`subtle`, `full`), plus a few faint glints (`full`). The buffer is a hatched `pattern`. A thin glowing tick marks the auto-compact point.
+- **Effects in CSS:** the growth glow is a one-shot animation on the added span, the breathing animates the tick's and the edge's glow amber or red, and the compaction is a wave sweeping over the freed span (`full`). Every SVG has `@media (prefers-reduced-motion: reduce)`.
+- **The SVG source must not change between redraws** unless the data did (agent-pulse's rule: a new source restarts its animations). No time and nothing per-second goes in it; one-shots carry their event's id in a class or element id, so they play once.
+- **The pane's bar on Desktop stays hook-drawn `Text`**, not an SVG: the person chose the hover link to the category rows over the SVG look, and `SvgProps` has no hover scope. It is the terminal pane's exact bar in palette hex with Tide's `~` water and `≈` foam, drawn still (Desktop has no `Client`). The growth glow and the compaction sweep play there by hook redraws at ~12 fps for their 1.5 s only, and the breathing goes on the warning line's `⚠` through a CSS-animated 1-glyph `Svg` (or still, in the hot colour, if that proves awkward). Only the band's bar is an SVG on Desktop.
+- The Desktop footer's `ctx N%` is unchanged.
+
+#### Code layout (builder's call)
+
+| File | Holds |
+| --- | --- |
+| `hooks/palette.ts` | The copy of agent-pulse's palettes and helpers, `resolveLook`, the category → colour map, the water colours |
+| `hooks/fmt.ts` | `bandCells` (whole cells, at least one each); the exact `barRuns` gains hex colours from the map |
+| `hooks/tide.ts` | Pure: the water glyphs per level and frame, the growth and sweep spans, which effect wins |
+| `hooks/tide.tsx` | The `Client`s: the bar, the breathing word, the 1-cell pulse |
+| `hooks/svg.ts` | Pure: the Desktop bar's SVG source from the cells, palette and level |
+| `hooks/register.tsx` | Resolves the look, records the effect ids (atoms, so a hot reload keeps them), draws |
+| `.claude-plugin/plugin.json` | `userConfig.palette`, `userConfig.animation`; version 0.8.0 |
+
+Unit tests: `bandCells` (the width never changes, everything in use gets a cell, order kept, the narrow fallback), the water glyphs at each level, the growth and sweep spans, palette distinctness, `resolveLook`. Render tests: the band draws the bar `Client` on the terminal and an `Svg` on Desktop, `claude` draws whole cells in the engine's theme keys with `·` free space, `off` passes no motion, a one-shot's id doesn't change on a tick redraw.
+
+#### To confirm live, before building on it
+
+- **Does a `Client`'s `Text` keep a `hover` scope?** If not, the band loses its bar's hover (acceptable: in the band it only inverts the run) but the pane must keep the link to its rows. Then the pane's bar stays hook-drawn `Text`, its one-shots play by hook redraws at ~12 fps for their 1.5 s only, and the pane's breathing moves to a 1-cell `Client` on the warning line's `⚠`.
+- **Does a `Client` keep its state when its props change**, or does it remount and restart its effect on every band redraw? subagent-progress had the same question for its crabs.
+- `~` and `≈` are one cell wide in Windows Terminal and in Desktop's band font.
+
+#### Out of scope, and what would make it a failure
+
+- No character, sprite or mascot.
+- No new figures, and no change to a number, a threshold or the pace's colours.
+- Nothing that moves without a reason: water that churns at `subtle`, or a glow on every redraw, would fail this even if it works.
+- No change in the band's width or height, and no `Client` around text that has to truncate.
+
 ## Testing
 
 - **Unit tests** (`fmt.test.ts`, `usage.test.ts`, `compact.test.ts`, `cost.test.ts`) cover every rule with a number in it. The price fit is tested against Opus 5.5's list prices. It has to recover them exactly from clean turns, and when a mispriced turn is mixed in. With 1% noise and a small extra charge on most turns, it has to come within 5% (it lands within about 1%). When a behaviour was found wrong, a test pinning the right behaviour came first (the pace floor's `warnLevel(120_000, 967_000, 9)` → `none`).
