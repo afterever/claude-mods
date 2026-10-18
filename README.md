@@ -127,7 +127,7 @@ arsenal/
   DESIGN.md                       why it is built the way it is, and what was verified
   .claude-plugin/plugin.json      name, version, state contract
   hooks/hooks.json                points at register.tsx
-  hooks/register.tsx              the mod: launcher in the band, menu pane, /arsenal, header
+  hooks/register.tsx              the mod: launcher in the footer, menu pane, /arsenal, header
   hooks/menu.ts, menu.test.ts     model and effort labels, which rows, the columns, off lists
   hooks/own.ts, own.test.ts       your own commands: frontmatter, names, the project key
   hooks/render.test.ts            the launcher and pane drawn on terminal and desktop, presses
