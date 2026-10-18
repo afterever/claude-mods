@@ -15,7 +15,9 @@ Claude Code's context window is the budget every session spends. When it fills, 
 
 Each feature below maps to one of these questions. A feature that answered none of them was not added.
 
-From 0.6.0 the same questions are also answered in dollars. Cost is not a fifth question: every request sends the whole window again, so cost is the price of the window itself. The rule that keeps this in scope is **ctx prices context decisions, not the session**. A dollar figure belongs here only if it changes a decision about the window (compact now, turn a server off, compact before resuming). Session and daily totals are billing, and `/cost` and status lines already show them, so ctx has no billing display of its own. The one session figure it does draw (0.6.1) is the session total in the pane, there only as the denominator for the last turn's dollars. The rule is not allowed to lean on what else the person has installed: it once did ("the status line already shows them"), which was true only where a status line like claude-hud was set up.
+From 0.6.0 the same questions are also answered in dollars. Cost is not a fifth question: every request sends the whole window again, so cost is the price of the window itself. The rule that keeps this in scope is **ctx prices context decisions, not the session**. A dollar figure belongs here only if it changes a decision about the window (compact now, turn a server off, compact before resuming). Daily and weekly totals are billing history, and `/cost` and status lines show them, so ctx has none. The session figures it draws are readings of a budget being spent: the session total (0.6.1, in the pane as the denominator for the last turn's dollars; since 0.7.0 also in the band on an account with no rate-limit windows) and the plan's pace (0.7.0). The rule is not allowed to lean on what else the person has installed: it once did ("the status line already shows them"), which was true only where a status line like claude-hud was set up.
+
+From 0.7.0 the rule widens by one budget. A session spends from two accounts, the context window and the plan's rate limits (the five-hour and seven-day windows on a subscription), and the same decisions run both down: a bloated window makes every request dearer, so it eats the limit faster, and compacting, switching an idle server off or finishing a long task before resuming slow both. ctx now draws a **live gauge of each budget** and still has **no billing history**: no daily or weekly totals, no per-model breakdown, no report. A figure belongs here if it is a live reading of a budget the session is spending from. The reason the old rule leaned on, that a status line already shows these figures, never held where claude-hud is not set up, and that includes Claude Desktop.
 
 ## Principles
 
@@ -26,7 +28,7 @@ These came out of the review of 0.1.0 and held for every later release.
 - **Pushed, not polled.** Refresh on the engine's own events (`session.measure`, `tool.call`, `session.compact`), never on a timer that counts. The only timer redraws "updated 12s ago" and does no work.
 - **Survive a hot reload.** Anything a drawing reads lives in `$.state` atoms, which the host keeps across reloads. Module variables hold only what is safe to lose (an in-flight counter, a pending flag).
 - **One glance, then detail on demand.** The band is one line. The pane opens sections only when asked (`m`, `f`, `s`, `a`, `h`, `d`).
-- **Same mod on every surface.** The render tests draw the pane and band on both the terminal and Desktop. Desktop gets the footer because it has no band.
+- **Same mod on every surface.** The render tests draw the pane and band on both the terminal and Desktop. Desktop draws the band too (seen live, 2026-10-18), so a feature is designed as a band feature first. The notes up to 0.6.2 say Desktop has no band; that was wrong.
 
 ## Architecture
 
@@ -65,7 +67,7 @@ The bar, the rows and the sections use the breakdown, because only it has catego
 | Event | What ctx does |
 | --- | --- |
 | `session.start` | Registers `/ctx`, counts once, loads the project log and autokeep, reopens the pane if it was open |
-| `session.measure` | Records the API's figure and the cost ledger, learns characters per token, warns, recounts, writes the project log |
+| `session.measure` | Records the API's figure, the cost ledger and (0.7.0) the plan's rate-limit windows, learns characters per token, warns, recounts, writes the project log |
 | `turn.start` | Freezes the last turn's spend; a clean one becomes a price sample |
 | `turn.step` | Observes each model request's token counts (main loop and subagents); never touches the stream |
 | `turn.complete` | Closes the main-loop turn; counts a subagent's run |
@@ -214,7 +216,7 @@ With that evidence, and idle time past the lifetime, the pane shows `⚠ cache l
 
 Two figures the pane showed without a reference point, and one cosmetic tightening. No new state, no new events.
 
-- **Session total, in the pane only.** `session $14.20 · last turn was 13% of it` is the first line of the cost block. 0.6.0 left the session total out because claude-hud already showed it, but that assumed a setup: Claude Code's default terminal footer shows no cost, and `/cost` only answers when asked. The total earns its place as the denominator for figures the pane already prints (`last turn +$1.84`, `~$58.5 until auto-compact`, `waiting costs ~$76 more`), which mean little without knowing what the session has spent. It stays out of the band, which is one line where the turn's dollars already compete for width and which would repeat a status line for the people who have one, and out of the Desktop footer, which keeps to one number. It is the ledger ctx already records (`spend.ledger`), the same figure as `/cost`, subagents and compactions included. `/ctx cost off` hides it with every other dollar figure. A share under 1% reads `<1%`, and the share never passes 100%.
+- **Session total, in the pane only.** `session $14.20 · last turn was 13% of it` is the first line of the cost block. 0.6.0 left the session total out because claude-hud already showed it, but that assumed a setup: Claude Code's default terminal footer shows no cost, and `/cost` only answers when asked. The total earns its place as the denominator for figures the pane already prints (`last turn +$1.84`, `~$58.5 until auto-compact`, `waiting costs ~$76 more`), which mean little without knowing what the session has spent. It stays out of the band on a subscription, whose band shows the plan's pace instead, and out of the Desktop footer, which keeps to one number; since 0.7.0 an account with no rate-limit windows gets it in the band. It is the ledger ctx already records (`spend.ledger`), the same figure as `/cost`, subagents and compactions included. `/ctx cost off` hides it with every other dollar figure. A share under 1% reads `<1%`, and the share never passes 100%.
 - **Turn count, on the trend line.** `trend ▁▁▇█ · 23 turns`. The sparkline can't be counted by eye: the band draws at most 10 glyphs, 48 readings are kept, and a repeated reading adds nothing. The number is the engine's own `$.session.turns()`, read when the pane draws. The 15-second tick redraws the pane, so a count that trails by a turn corrects itself. The total only: a "since compaction" count was considered and left out. The sparkline gives up the label's columns, so the line doesn't wrap in a narrow dock. A failed call hides the count and nothing else.
 - **The fill text is tighter.** `65.1k / 1M 7%` became `65.1k/1M·7%`, two columns saved. The `·` is the cost suffix's separator, and also the bar's free-space glyph. It is told apart by being dim, sitting after the label, and the percent beside it being bold and colored. The pane's header draws the same component, so it matches.
 
@@ -222,6 +224,56 @@ Two figures the pane showed without a reference point, and one cosmetic tighteni
 
 - **The session total is green.** In `session $0.84 · last turn was 35% of it` only the amount is drawn in the theme's `success` color; the label and the share stay dim. It is the figure the line is about, and the rest of the cost block is dim. The line is three sibling `Text`s and not a nested one, since a child can't undo its parent's dim.
 - **The pane ends with `ctx v0.6.2`.** The host gives a hooks module no way to read its own manifest: `node:fs` is refused, and so is a JSON import (only code files load). So `hooks/version.ts` holds a copy, and no test can compare it with `plugin.json`. Bump both on every release; the pre-release checklist below compares them.
+
+### 0.7.0: the plan's pace
+
+**The problem.** claude-hud shows how fast the plan's limits are being spent: `⏳ 25% (3h 40m/+3%) 🐾 22% (4d 16h/-11%)`, the percent used, the time left in the window, and how far ahead of or behind an even spend that is. Claude Desktop has no claude-hud, and it is where the work moved. The data is not the engine's secret: `$.session.usage().rateLimits` (and `session.measure`'s `rateLimits`, raised when a window moves a whole point) hold each window as `{ kind: 'five_hour' | 'seven_day' | 'spend_limit', percentUsed, resetsAt }`. A probe mod (`pace-probe`, throwaway) read it on the terminal and drew the HUD's numbers.
+
+**Where it lives: the band, right-aligned, in ctx.** The band is a `space-between` row, the fill group on the left and the 📊 toggle on the right, and on a wide screen the middle is empty. The pace is a third child between them, so it costs no row. The alternatives, and why not:
+
+- **The footer** (`SessionMode`), where the probe drew it. It shares the first footer row with claude-hud, Arsenal's launcher and Waypoints' plan label, and was judged too small for all of them.
+- **A separate `pace` mod.** A mod cannot draw into another mod's row, so it would be a third band row under ctx and agent-pulse, or the crowded footer.
+- **Arsenal's pane.** It is a remote control, and its pane is not always open; a gauge that has to be opened is not a gauge.
+- **A Desktop footer.** Not needed: Desktop draws the band (see Principles).
+
+**What it shows, by the kind of account.**
+
+| Account | The band's pace section |
+| --- | --- |
+| Subscription: `rateLimits` has `five_hour` and/or `seven_day` | the pace, below |
+| No such windows, and the ledger exists (an API or enterprise account billed by use) | the session total, `$14.20`, drawn in `success` like the pane's |
+| A gateway `spend_limit` window and no other | its percent only (`34%`): the window's length is not given, so there is no pace to compute. **Untested**, no such account here |
+| Neither (before the first reply, or no ledger) | nothing, and no placeholder |
+
+Both windows always show when both exist; the HUD's `sevenDayThreshold` that hides the weekly window while it is comfortable is not copied. `/ctx cost off` hides the session total with every other dollar figure and leaves the pace, which is a percent and not a dollar. The session total is in the band only for an account that has no windows to show. 0.6.1 had kept it out, because the band is one line where the turn's dollars already compete for width and a status line would repeat it; on an API account it is the one reading of the budget being spent, and it takes the room the pace would have had.
+
+**The format is the HUD's**, with the 🐾 opening the section once and a dim `·` between the windows:
+
+```
+🐾 25% (3h 40m/-2%) · 22% (4d 16h/-11%)
+```
+
+- **Time left** is the HUD's `formatDuration`: minutes rounded up, `45m` under an hour, `3h 40m` under a day (`3h` on the hour), `4d 16h` from a day up (`4d` on the day).
+- **The delta** is the user's HUD Patch 3, read from its code (`claude-hud-modifications.md`). The share of the window gone is `(now − (resetsAt − window)) / window × 100`, **rounded to a whole percent and clamped to 0–100**, and the delta is `round(used − gone)`, `+` at 0 or more and `-` below. It is rounded twice, the share first and then the difference. The HUD's own sample, 82% used with 100 of 168 hours left, prints `+42%` where truncating the exact difference (41.5) would print `+41`. The windows are 5 hours and 7 days.
+- **The colors are the HUD's, as the user's HUD draws them.** The *delta* is colored by its value: below 0 (under an even spend) `success`, 0 to 15 `warning`, above 15 `error`. The *percent* is colored by how much of the window is used: 90% or more `error`, 75% or more `warning`, else `success`. `success` stands in for the HUD's blue, which the theme does not have, and it reads like the green fill percent beside it; if it does not look right it is a one-line change in a later release. The HUD's own projection grade (`usagePace`) is switched off in that setup, so there is no `▲` marker and ctx does not copy it. The 🐾, the countdown and the `·` stay dim.
+- **A window past its reset, or with no `resetsAt`, shows the percent alone,** as the HUD does: with no time to print it has no pace to print either.
+
+**It shrinks in three steps**, by the band's width, and then gives way to the fill group, which has the priority:
+
+| Step | Shows | From (columns) |
+| --- | --- | --- |
+| Full | `🐾 25% (3h 40m/-2%) · 22% (4d 16h/-11%)` | 130 |
+| No countdown | `🐾 25% (-2%) · 22% (-11%)` | 100 |
+| Deltas only | `🐾 -2% · -11%` | 80 |
+| Hidden | nothing | below 80 |
+
+The columns are a starting point and are to be tuned by looking at a real terminal at each width. **Desktop passes the band no `bodyColumns`** (the band falls back to 80), and Desktop has room, so on `desktop` the pace is always the full step. The decision reads `e.surface`, and does not trust the 80.
+
+**It needs a clock.** The data only moves when a response lands, but `3h 40m` and the delta move every minute. ctx's one ticker runs only while the pane is open, redrawing "updated 12s ago". The pace gets its own 60-second tick, started at `session.start` and cancelled on unload, that only bumps an atom the band reads. It does no work, which keeps "pushed, not polled" intact: the numbers come from the engine's push, and the tick only redraws what the clock changes.
+
+**The arithmetic is a pure module**, `hooks/pace.ts` (windows, time left, delta, the grade, the steps), tested without an engine like `fmt.ts` and `cost.ts`. `register.tsx` reads `rateLimits`, keeps them in a `$.state` atom so a hot reload keeps them, and draws.
+
+**Out of scope on purpose:** a pane section for the windows (the band is the whole feature), history of past windows, a forecast of when a limit runs out, and the HUD's other usage options (bars, remaining-percent mode, reset as wall-clock time).
 
 ## Testing
 
@@ -236,6 +288,9 @@ Before every release: `claude plugin test ctx`, `claude plugin validate .`, and 
 - **Not yet seen live:** `/ctx compact` compacting in a real session, and autokeep's instructions reaching a real auto-compaction. Running `/ctx compact` between turns should show exactly one "Compacted" toast.
 - **Mid-turn compaction:** `/ctx` runs immediately, so a compact during a turn may be skipped by the engine. The toast says so.
 - **Desktop:** the call that launches programs is CLI-only, so opening a memory file there shows "Couldn't open".
+- **The `ctx N%` Desktop footer may be dead code.** It was written because Desktop was thought to have no band, and a Desktop screenshot (2026-10-18) shows the band and no `ctx 9%` in the footer. Check it live before removing it.
+- **Pace is seen on the terminal only.** The probe drew the HUD's numbers there. The band on Desktop, the colors against the theme, the `▲` and the width steps are all unseen until the mod is live. A `spend_limit` window and an API account's session total in the band are untested on a real account.
+- **`rateLimits` is what the last response reported.** Before a session's first reply it is empty, and between replies the percent can be a few minutes old while the countdown is current. The delta is computed from both, so it drifts from the HUD's by the staleness of the percent.
 - **Token estimates** for single results are characters divided by a learned ratio. They improve as the session goes on but stay approximate, hence the `~`.
 - **Idle streaks are tracked for MCP servers only.** Skills and agents are counted per session, not across sessions.
 - **History is per session.** A new session's trend starts empty and shows from the second turn.
@@ -259,3 +314,4 @@ Before every release: `claude plugin test ctx`, `claude plugin validate .`, and 
 | 0.6.0 | What the context costs: last-turn dollars from the ledger, learned prices, carrying cost, compaction payback, cache expiry, idle overhead in dollars |
 | 0.6.1 | Reference points: the session total (pane) as the turn's denominator, a turn count beside the trend, a tighter fill text in the band |
 | 0.6.2 | Cosmetic: the session total in green, the mod's version at the foot of the pane |
+| 0.7.0 | The plan's pace in the band (the HUD's format and color rule) for subscriptions, the session total for API accounts; the scope rule widened to both budgets |
