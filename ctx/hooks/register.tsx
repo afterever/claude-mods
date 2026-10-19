@@ -37,6 +37,7 @@ import {
 } from './cost'
 import {
   ago,
+  bandBarWidth,
   bandCells,
   barRuns,
   breatheAt,
@@ -210,7 +211,7 @@ function tideOf(cells: Cell[], max: number, f: CtxFx, now: number, warn: CtxWarn
 }
 
 // The band's bar for Desktop: the same cells and one-shots as the terminal's, drawn by bandSvg
-function pill(s: CtxSnapshot, width: number, f: CtxFx, now: number, warn: CtxWarn) {
+function pill(s: CtxSnapshot, width: number, f: CtxFx, now: number, warn: CtxWarn, fine?: { cellPx: number; label?: string }) {
   // an SVG takes no theme keys: the dots and the buffer of claude and mono draw in the palette's idle grey
   const idle = paletteOf(look.palette).hex.idle
   const cells = bandCells(s, width, svgTints(look, s.rows), waterOf(look)).map(c => (/^#/.test(c.color) ? c : { ...c, color: idle }))
@@ -220,6 +221,7 @@ function pill(s: CtxSnapshot, width: number, f: CtxFx, now: number, warn: CtxWar
     cells,
     level: look.level,
     edge: t.edge,
+    ...(fine ? { cellPx: fine.cellPx, ...(fine.label ? { label: fine.label } : {}) } : {}),
     ...(tick !== undefined ? { tick } : {}),
     ...(warn !== 'none' && look.level !== 'off' ? { warn: hexHeat(look, warn === 'imminent' ? 2 : 0) } : {}),
     ...(t.growth ? { growth: t.growth } : {}),
@@ -461,7 +463,17 @@ async function refresh($: EngineInterface) {
 
 // The pane docks beside the transcript in the fullscreen layout (from 110
 // columns), like /diff; on the main screen it sits above the prompt instead
-const PANE_ARGS = { id: PANE, title: 'Context window', closeOnEscape: true, columns: 48, rows: 26 } as const
+const PANE_ARGS = { id: PANE, title: 'Context', closeOnEscape: true, columns: 48, rows: 26 } as const
+
+// Desktop's pane bar is an Svg drawn at 2 px a cell, so it fills the pane to the pixel. A cell
+// of the surface's code font is taken as 8 px, as the band's pill is; the pane's width is the
+// narrower of the two measures the surface gives (either may be missing), less a margin
+const PANE_CELL_PX = 2
+function paneBarPx(viewportColumns?: number, bodyColumns?: number): number {
+  const known = [viewportColumns, bodyColumns].filter((c): c is number => typeof c === 'number' && c > 0)
+  const columns = known.length > 0 ? Math.min(...known) : PANE_ARGS.columns
+  return Math.max(120, Math.min(560, columns * 8 - 16))
+}
 
 // Redraws "updated 12s ago" while the pane is open
 let ticker: Timer | undefined
@@ -955,14 +967,16 @@ export const register: Register = (on, options) => {
     const old = await read($, stale)
     const past = await read($, history)
     const wide = (e.props.bodyColumns ?? 80) >= 70
-    const barWidth = wide ? 16 : 8
     const step = trend(past).delta
     const marks = await read($, compacted)
     const w = await warning($)
+    // Desktop passes no bodyColumns, so its pill stays at the 80-column step
+    const barWidth = bandBarWidth(e.props.bodyColumns ?? 80, w.level !== 'none')
     const hot = w.level === 'imminent' ? 'error' : 'warning'
     // the bar: whole cells in the look's colours; a Tide client while anything moves
     const nowMs = await $.clock.now()
-    const cells = s ? bandCells(s, barWidth, categoryTints(look, s.rows), waterOf(look)) : []
+    const tints = s ? categoryTints(look, s.rows) : {}
+    const cells = s ? bandCells(s, barWidth, tints, waterOf(look)) : []
     const tide = s ? tideOf(cells, s.max, await read($, fx), nowMs, w.level) : undefined
     const live = Boolean(tide && e.surface === 'terminal' && 'Client' in el && moves(tide))
     const Client = 'Client' in el ? (el as { Client: any }).Client : undefined
@@ -1013,7 +1027,18 @@ export const register: Register = (on, options) => {
                 Cells({ el, cells: tide ? frameAt(tide, 0, {}) : cells })
               )}
               {Fill({ el, s })}
-              {roomy && past.length >= 2 && Spark({ el, values: past, marks, width: 10, percent: s.percent })}
+              {roomy &&
+                past.length >= 2 &&
+                // the pane's colours: Messages' core to glow along the line, compactions in the water's
+                Spark({
+                  el,
+                  values: past,
+                  marks,
+                  width: 10,
+                  percent: s.percent,
+                  shade: n => sparkColors(look, tints['Messages'], n),
+                  ...(waterOf(look) ? { mark: waterOf(look)!.water } : {}),
+                })}
               {roomy && step !== undefined && step !== 0 && <Text dimColor>{fmtDelta(step)}</Text>}
               {wide &&
                 lastTurn &&
@@ -1027,7 +1052,7 @@ export const register: Register = (on, options) => {
               {old && <Text color="warning">⚠ stale</Text>}
             </Box>
           ) : (
-            <Text dimColor>Context window</Text>
+            <Text dimColor>Context</Text>
           )}
           <Box flexDirection="row" columnGap={2} flexShrink={0}>
             {pace.length > 0 && Pace({ el, pieces: pace })}
@@ -1123,6 +1148,15 @@ export const register: Register = (on, options) => {
       )
     }
     const marker = compactMarker(s, width)
+    // Desktop: block and wave glyphs fall back to fonts of their own widths, so a Text bar of
+    // `width` cells overruns the pane and wraps. An Svg fills the measured width in pixels instead,
+    // and carries the auto-compact marker with it
+    const paneBar = Svg
+      ? pill(s, Math.floor(paneBarPx(e.viewport?.columns, e.props.bodyColumns) / PANE_CELL_PX), paneFx, now, w.level, {
+          cellPx: PANE_CELL_PX,
+          ...(s.compactAt ? { label: `auto-compact ${fmtTokens(s.compactAt)}` } : {}),
+        })
+      : undefined
     const pace = trend(past, s.compactAt)
     // the engine's own count of finished turns; the sparkline can't be counted
     // by eye (it is capped and skips repeats). A failed call just hides it.
@@ -1174,7 +1208,7 @@ export const register: Register = (on, options) => {
       <Box flexDirection="column">
         <Box flexDirection="row" justifyContent="space-between" width="100%" columnGap={2}>
           <Box flexShrink={1}>
-            <Text bold wrap="truncate-end">{s.model || 'Context window'}</Text>
+            <Text bold wrap="truncate-end">{s.model || 'Context'}</Text>
           </Box>
           {Fill({ el, s })}
         </Box>
@@ -1205,7 +1239,8 @@ export const register: Register = (on, options) => {
             {rates && after !== undefined && after < winTokens && muted(`  c compact first: re-writes ~${fmtTokens(after)} ≈ ~${fmtUsd(rewrite(after, rates))}`)}
           </Box>
         )}
-        {(() => {
+        {paneBar && <Svg key="ctx-pane-pill" source={paneBar.source} alt={`context ${Math.round(s.percent)}% full`} width={paneBar.width} height={paneBar.height} />}
+        {!paneBar && (() => {
           // the exact bar in the look's colours, as cells, so it can lap and glow like the band's
           const cells: Cell[] = barRuns(s, width, tints, water).flatMap(r =>
             [...r.text].map(ch => ({ ch, color: r.color, scope: r.scope, ...(r.bg ? { bg: r.bg } : {}), ...(r.dim ? { dim: true } : {}) })),
@@ -1219,7 +1254,7 @@ export const register: Register = (on, options) => {
           const at = (x?: { at: number }) => (x ? Math.floor(x.at / 100) : undefined)
           return Cells({ el, cells: frameAt(still, frame, { growth: at(paneFx.growth), sweep: at(paneFx.sweep) }) })
         })()}
-        {marker && <Text color="inactive" dimColor>{marker}</Text>}
+        {marker && !paneBar && <Text color="inactive" dimColor>{marker}</Text>}
         {past.length >= 2 && (
           <Box flexDirection="column">
             <Box flexDirection="row" columnGap={1}>

@@ -10,6 +10,9 @@ type Cell = { ch: string; color: string; bg?: string; dim?: boolean; scope: stri
 
 const CELL_PX = 8
 const H = 12
+// The row under a labelled bar, and the width a 10 px label character is taken to need
+const LABEL_H = 14
+const LABEL_CHAR = 5.6
 const REDUCED = '@media (prefers-reduced-motion: reduce){*{animation:none!important}}'
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')
@@ -39,11 +42,16 @@ export type BandSvg = {
   warn?: string
   growth?: { id: number; from: number; to: number; colors: readonly string[] }
   sweep?: { id: number; from: number; to: number }
+  /** Pixels a cell takes; 8 unless the bar is drawn at a width of its own (the pane's). */
+  cellPx?: number
+  /** Words under the bar at the tick, with a caret; needs a tick. */
+  label?: string
 }
 
-/** The band's bar on Desktop: a rounded pill, `cells.length × 8` by 12 px. */
+/** The bar on Desktop: a rounded pill, `cells.length × cellPx` (8) by 12 px, a label's row under it when asked. */
 export function bandSvg(o: BandSvg): { source: string; width: number; height: number } {
-  const W = o.cells.length * CELL_PX
+  const px = o.cellPx ?? CELL_PX
+  const W = o.cells.length * px
   const moving = o.level !== 'off'
   const segs = segments(o.cells)
   const water = segs.find(s => s.kind === 'free')
@@ -52,8 +60,8 @@ export function bandSvg(o: BandSvg): { source: string; width: number; height: nu
   const defs: string[] = [`<clipPath id="c"><rect width="${W}" height="${H}" rx="${H / 2}"/></clipPath>`]
   const body: string[] = []
   segs.forEach((s, i) => {
-    const x = s.from * CELL_PX
-    const w = (s.to - s.from) * CELL_PX
+    const x = s.from * px
+    const w = (s.to - s.from) * px
     if (s.kind === 'used') {
       defs.push(`<linearGradient id="u${i}" x1="0" x2="1"><stop offset="0" stop-color="${esc(s.first)}"/><stop offset="1" stop-color="${esc(s.last)}"/></linearGradient>`)
       body.push(`<rect x="${x}" width="${w}" height="${H}" fill="url(#u${i})"/>`)
@@ -72,15 +80,15 @@ export function bandSvg(o: BandSvg): { source: string; width: number; height: nu
       body.push(`<rect x="${x}" width="${w}" height="${H}" fill="${esc(s.first)}" opacity="0.18"/>`)
     }
   })
-  if (foam && hasWater) body.push(`<rect class="${o.warn ? 'edge breathe' : 'edge'}" x="${o.edge * CELL_PX}" width="1.5" height="${H}" fill="${esc(o.warn ?? foam)}"/>`)
-  if (o.tick !== undefined) body.push(`<rect class="tick${o.warn ? ' breathe' : ''}" x="${Math.min(W - 1.5, o.tick * CELL_PX)}" width="1.5" height="${H}" fill="${esc(o.warn ?? '#ffffff')}" opacity="0.85"/>`)
+  if (foam && hasWater) body.push(`<rect class="${o.warn ? 'edge breathe' : 'edge'}" x="${o.edge * px}" width="1.5" height="${H}" fill="${esc(o.warn ?? foam)}"/>`)
+  if (o.tick !== undefined) body.push(`<rect class="tick${o.warn ? ' breathe' : ''}" x="${Math.min(W - 1.5, o.tick * px)}" width="1.5" height="${H}" fill="${esc(o.warn ?? '#ffffff')}" opacity="0.85"/>`)
   if (moving && o.growth && o.growth.to > o.growth.from) {
     const c = o.growth.colors[Math.floor(o.growth.colors.length / 2)] ?? '#ffffff'
-    body.push(`<rect id="g${o.growth.id}" class="grow" x="${o.growth.from * CELL_PX}" width="${(o.growth.to - o.growth.from) * CELL_PX}" height="${H}" fill="${esc(c)}"/>`)
+    body.push(`<rect id="g${o.growth.id}" class="grow" x="${o.growth.from * px}" width="${(o.growth.to - o.growth.from) * px}" height="${H}" fill="${esc(c)}"/>`)
   }
   if (o.level === 'full' && o.sweep && o.sweep.to > o.sweep.from) {
-    const from = o.sweep.from * CELL_PX
-    const span = (o.sweep.to - o.sweep.from) * CELL_PX
+    const from = o.sweep.from * px
+    const span = (o.sweep.to - o.sweep.from) * px
     body.push(
       `<rect id="s${o.sweep.id}" class="sweep" x="${from}" width="${span}" height="${H}" fill="${esc(foam ?? '#ffffff')}" style="transform-origin:${from}px 0"/>`,
     )
@@ -101,10 +109,21 @@ export function bandSvg(o: BandSvg): { source: string; width: number; height: nu
         '.sweep{transform:scaleX(0);animation:sweep 1.2s ease-in 1}',
       ].join('')
     : ''
+  // the auto-compact caret and its words under the bar: after the tick when they fit, else ending at it
+  const labelled = o.label !== undefined && o.tick !== undefined
+  const total = labelled ? H + LABEL_H : H
+  let under = ''
+  if (labelled) {
+    const tx = Math.min(W - 3, o.tick! * px + 0.75)
+    const fits = tx + 6 + o.label!.length * LABEL_CHAR <= W
+    under =
+      `<path d="M${(tx - 3).toFixed(1)} ${H + 8} l3 -5 l3 5z" fill="#8a8f98"/>` +
+      `<text x="${(fits ? tx + 7 : tx + 3).toFixed(1)}" y="${H + 12}" font-size="10" fill="#8a8f98"${fits ? '' : ' text-anchor="end"'}>${esc(o.label!)}</text>`
+  }
   const source =
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">` +
-    `<style>${css}${REDUCED}</style><defs>${defs.join('')}</defs><g clip-path="url(#c)">${body.join('')}</g></svg>`
-  return { source, width: W, height: H }
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${total}" viewBox="0 0 ${W} ${total}">` +
+    `<style>${css}${REDUCED}</style><defs>${defs.join('')}</defs><g clip-path="url(#c)">${body.join('')}</g>${under}</svg>`
+  return { source, width: W, height: total }
 }
 
 /** The pane's ⚠ near auto-compact, breathing in `color`: 10 by 12 px. */

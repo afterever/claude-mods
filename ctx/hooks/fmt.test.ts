@@ -4,6 +4,7 @@ import type { CtxSnapshot } from '../types'
 import { categoryTints } from './palette'
 import {
   ago,
+  bandBarWidth,
   bandCells,
   breatheAt,
   growthSpan,
@@ -303,4 +304,24 @@ test('sweepSpan: the freed cells from the edge, never the buffer', () => {
 test('breatheAt: the foam, or the last used cell on a full window', () => {
   expect(breatheAt(band16)).toEqual([4])
   expect(breatheAt(fullBand)).toEqual([14])
+})
+
+test('bandBarWidth: the bar grows with the band, so a near-empty window overstates less', () => {
+  expect([40, 69].map(c => bandBarWidth(c, false))).toEqual([8, 8])
+  expect([70, 120, 129].map(c => bandBarWidth(c, false))).toEqual([16, 16, 16])
+  expect([130, 159].map(c => bandBarWidth(c, false))).toEqual([24, 24])
+  expect([160, 240].map(c => bandBarWidth(c, false))).toEqual([32, 32])
+})
+
+test('bandBarWidth: a standing warning keeps the bar at 16, the badge needs the room', () => {
+  expect(bandBarWidth(200, true)).toBe(16)
+  expect(bandBarWidth(60, true)).toBe(8)
+})
+
+test('a longer bar overstates a near-empty window less: the share drawn is closer to the true one', () => {
+  // 18k used of 1M is under 2%; each of the four rows still gets its cell
+  const near = window8(1000)
+  const share = (w: number) => usedCells(bandCells(near, w, tints)) / w
+  expect(share(32)).toBeLessThan(share(16))
+  expect(share(16)).toBeLessThan(share(8))
 })
