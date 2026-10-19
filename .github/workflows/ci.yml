@@ -36,16 +36,12 @@ jobs:
         os: [ubuntu-latest]
         mod:
           - agent-pulse
+          - arsenal
           - ctx
           - prompt-upgrade
           - subagent-progress
           - waypoints
           - work-report
-        include:
-          # arsenal's tests fake a Windows filesystem (C:/home, C:/bats) and
-          # fail on Linux, so they run where they were written
-          - os: windows-latest
-            mod: arsenal
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
