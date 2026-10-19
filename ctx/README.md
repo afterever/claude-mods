@@ -10,8 +10,9 @@ terminal. It only observes. It never compacts, rewrites or turns anything off un
   turn's cost, the plan's pace (or an API account's session total) at the right, and a 📊 button
   that opens the pane. Each category in use gets at least one whole cell of the bar, so the split
   reads even on a nearly empty 1M window, and the free space is water (`████≈~~~~~~~~~~░`). The
-  bar is 16 cells, 24 from 130 columns and 32 from 160 (8 under 70), so the minimum cells
-  overstate a near-empty window less; while an auto-compact warning stands it stays at 16.
+  bar is 16 cells, 24 from 130 columns, 32 from 160, 48 from 200 and 64 from 240 (8 under 70), so
+  the minimum cells overstate a near-empty window less; while an auto-compact warning stands it
+  stays at 16 until 200 columns.
 - **The pane** is the full breakdown: categories, trend, cost, MCP servers, memory files, skills,
   agents, the heaviest results and what has gone unused.
 - **The Desktop app** draws the same band.
@@ -132,7 +133,7 @@ only. The band's trend takes the pane's colours.
 ## Requirements
 
 - A Claude Code build that loads mods (plugins that register `hooks`).
-- Version 0.8.1's tests run on Claude Code 2.1.303. 0.7.0 ran live on 2.1.302, on the terminal and
+- Version 0.8.2's tests run on Claude Code 2.1.303. 0.7.0 ran live on 2.1.302, on the terminal and
   Claude Desktop (the pace in the band); 0.8.0's look was seen live on Windows. The engine API ctx uses was checked against build 2.1.288 (see
   [DESIGN.md](./DESIGN.md)); no older minimum has been tried.
 

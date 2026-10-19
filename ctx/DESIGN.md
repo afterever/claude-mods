@@ -408,6 +408,10 @@ Seen live on 0.8.0, on the person's laptop, in both apps. Three things came out 
 
 *Not seen live yet:* the Desktop pane's Svg fit (8 px a column and the 16 px margin are first guesses read off one screenshot; the viewport's column count on Desktop is the engine's, unchecked), and the 24 and 32-cell bars at their band widths.
 
+### 0.8.2: a longer bar on a very wide band
+
+Seen live on 0.8.1: the Desktop pane was right, and the terminal's 32-cell bar looked short on a very wide screen, with a gap of a hundred columns between the cost suffix and the pace at the right edge. `bandBarWidth` gains two steps, **48 cells from 200 columns and 64 from 240**, on the same arithmetic as 0.8.1: the fill, the 10-glyph trend, the delta, the cost suffix and the pace take about 107 columns beside the bar, and a standing warning's badge and carrying cost about 33 more, so 48 cells need 155 columns (188 with a warning) and 64 need 171 (204). The warning no longer caps the bar at 16 from 200 columns, where the row has room for both; below 200 it still does. A near-empty window still overstates (six cells are 9% of 64), only less. The steps are 8 / 16 / 24 / 32 / 48 / 64 at 70 / 130 / 160 / 200 / 240 columns. *Not seen live:* the 48 and 64-cell bars at their widths.
+
 ## Testing
 
 - **Unit tests** (`fmt.test.ts`, `usage.test.ts`, `compact.test.ts`, `cost.test.ts`) cover every rule with a number in it. The price fit is tested against Opus 5.5's list prices. It has to recover them exactly from clean turns, and when a mispriced turn is mixed in. With 1% noise and a small extra charge on most turns, it has to come within 5% (it lands within about 1%). When a behaviour was found wrong, a test pinning the right behaviour came first (the pace floor's `warnLevel(120_000, 967_000, 9)` → `none`).
@@ -454,3 +458,4 @@ Before every release: `claude plugin test ctx`, `claude plugin validate .`, and 
 | 0.7.2 | The Desktop footer is a switch, `/ctx footer on`, off by default: the band already shows the fill, and ctx cannot see the band collapsed |
 | 0.8.0 | The look: palette colours that follow agent-pulse, whole cells in the band, Tide water, growth glow, breathing near auto-compact, compaction sweep, an SVG bar on Desktop |
 | 0.8.1 | The bar's scale: a longer band bar on a wide band (24, 32 cells), an SVG bar in Desktop's pane at the pane's width, the band's trend in the pane's colours, the pane titled `Context` |
+| 0.8.2 | A longer band bar on a very wide band: 48 cells from 200 columns, 64 from 240 |

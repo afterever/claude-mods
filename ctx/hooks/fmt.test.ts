@@ -310,12 +310,17 @@ test('bandBarWidth: the bar grows with the band, so a near-empty window overstat
   expect([40, 69].map(c => bandBarWidth(c, false))).toEqual([8, 8])
   expect([70, 120, 129].map(c => bandBarWidth(c, false))).toEqual([16, 16, 16])
   expect([130, 159].map(c => bandBarWidth(c, false))).toEqual([24, 24])
-  expect([160, 240].map(c => bandBarWidth(c, false))).toEqual([32, 32])
+  expect([160, 199].map(c => bandBarWidth(c, false))).toEqual([32, 32])
+  expect([200, 239].map(c => bandBarWidth(c, false))).toEqual([48, 48])
+  expect([240, 400].map(c => bandBarWidth(c, false))).toEqual([64, 64])
 })
 
-test('bandBarWidth: a standing warning keeps the bar at 16, the badge needs the room', () => {
-  expect(bandBarWidth(200, true)).toBe(16)
+test('bandBarWidth: a standing warning keeps the bar at 16 until the band is wide enough for the badge too', () => {
+  expect(bandBarWidth(199, true)).toBe(16)
   expect(bandBarWidth(60, true)).toBe(8)
+  // from 200 columns the worst-case row (badge and carrying cost) fits beside a 48-cell bar
+  expect(bandBarWidth(200, true)).toBe(48)
+  expect(bandBarWidth(240, true)).toBe(64)
 })
 
 test('a longer bar overstates a near-empty window less: the share drawn is closer to the true one', () => {
