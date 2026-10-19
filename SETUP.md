@@ -22,8 +22,8 @@ Paste this into Claude Code on the new computer:
 | `prompt-upgrade` | `afterever/claude-mods` (this repo) | 0.1.0 | `/better` turns a rough prompt into a great one before it is sent |
 | `work-report` | `afterever/claude-mods` (this repo) | 0.3.0 | `/report` shows what Claude has done for you: tasks, hours saved, what that is worth |
 | `waypoints` | `afterever/claude-mods` (this repo) | 2.1.0 | Task plan shown as a route above the prompt for a `/goal` or any multi-step work, with a pane that opens by itself; replaces `goal-meter` |
-| `skins` | `hellosverre/claude-skins` | 0.5.6 | Colour scheme and words for the transcript |
-| `cache-keeper` | `nateherkai/claude-code-mods` | 1.0.0 | Adds the `session-handoff` skill |
+| `skins` | `hellosverre/claude-skins` | 0.5.13 | Colour scheme and words for the transcript |
+| `superpowers` | `obra/superpowers` | 7.0.0 | Skills library: brainstorming, planning, test-driven development, debugging and review workflows |
 | `agent-pulse` | `afterever/claude-mods` (this repo) | 1.1.0 | Box above the prompt naming the step Claude is on, in color and motion, with a step history |
 | `arsenal` | `afterever/claude-mods` (this repo) | 0.3.0 | Button in the footer under the prompt that opens a docked menu: Prompt Upgrade switch, shortcuts to `/better` and `/report`, and your own skills and commands (USER and PROJECT), each of which you can turn off |
 
@@ -31,8 +31,8 @@ Paste this into Claude Code on the new computer:
 
 ```
 claude plugin marketplace add afterever/claude-mods
-claude plugin marketplace add nateherkai/claude-code-mods
 claude plugin marketplace add hellosverre/claude-skins
+claude plugin marketplace add obra/superpowers
 
 claude plugin install ctx@afterever-mods
 claude plugin install subagent-progress@afterever-mods
@@ -41,13 +41,18 @@ claude plugin install work-report@afterever-mods
 claude plugin install agent-pulse@afterever-mods
 claude plugin install arsenal@afterever-mods
 claude plugin install waypoints@afterever-mods
-claude plugin install cache-keeper@nateherk-mods
 claude plugin install skins@hellosverre-mods
+claude plugin install superpowers@superpowers-dev
 ```
 
 Restart Claude Code afterwards: an installed plugin is not hot-reloaded. Pick up new versions of
 the mods in this repo with `claude plugin marketplace update afterever-mods` and then
 `claude plugin update <name>@afterever-mods`.
+
+**Auto-update.** `afterever-mods`, `hellosverre-mods` and `superpowers-dev` check for new versions
+by themselves. It is a per-marketplace setting, `"autoUpdate": true` beside `source` in
+`extraKnownMarketplaces` in `~/.claude/settings.json`, and the `/plugin` menu toggles the same
+thing. A new version still needs a restart to load.
 
 ## ctx
 
@@ -99,7 +104,7 @@ Nothing to configure, but the figures are estimates from settings you can change
 
 My own mod, a fork of Nate Herk's `goal-meter` 1.0.0 (renamed; imported with its history). It gives
 Claude one tool, `mcp__waypoints__tasks`, that holds the task plan the bar shows, and `/waypoints`
-opens the pane. Written against 2.0.0. Nothing to add to the global `~/.claude/CLAUDE.md`: the mod
+opens the pane. Written against 2.1.0. Nothing to add to the global `~/.claude/CLAUDE.md`: the mod
 puts one line in the system prompt asking Claude to plan work of 3 or more steps, and a `/goal` asks
 for a plan on its own. `/waypoints auto off` removes the line.
 
@@ -120,7 +125,7 @@ for a plan on its own. `/waypoints auto off` removes the line.
 
 ## skins
 
-`skins` is third-party, written against 0.5.6. Two things on top of it are mine and live nowhere
+`skins` is third-party, written against 0.5.13. Two things on top of it are mine and live nowhere
 else: one setting, `/skin words claude`, and a made skin called `cupertino`. Set the words, then
 build the skin.
 
@@ -210,10 +215,17 @@ restart.
 - **`zebra` `#1C1C1E`** is a step off a pure black background. On a `#1E1E1E`-style terminal
   background it is nearly invisible; `tables` is `off`, so it is not seen.
 
-## cache-keeper
+## superpowers
 
-Third-party, installed as is. It adds the `session-handoff` skill, which writes a structured
-end-of-session summary. Nothing to configure.
+Third-party, written against 7.0.0, installed as is. It adds a library of skills for Claude Code
+(brainstorming, planning, test-driven development, debugging, code review) and a start-of-session
+hook that points Claude at them. Nothing to configure.
+
+- **Install it from the author's marketplace, `obra/superpowers`,** not the copy in
+  `claude-plugins-official`: it is the same plugin, and the author's repository is where new
+  versions appear first.
+- **Coming from the official copy:** `claude plugin uninstall superpowers@claude-plugins-official`
+  before installing, or both load.
 
 ## agent-pulse
 
@@ -223,8 +235,7 @@ it, with color, motion and small charts added on the terminal and the desktop ap
 jellyfish on the desktop. Written against 1.1.0. What changed:
 [agent-pulse/README.md](./agent-pulse/README.md); why: [agent-pulse/DESIGN.md](./agent-pulse/DESIGN.md).
 
-**Do not install `whats-agent-doing` next to it,** or two boxes show. Remove it first with
-`claude plugin uninstall whats-agent-doing@tzafrir`, and the `tzafrir` marketplace with it.
+**Do not install `whats-agent-doing` next to it,** or two boxes show.
 
 - **Set it in `/config`:** type `Animation` to find its three rows. Mine are **Animation `full`**,
   Palette `ember` (the default since 1.1.0), Sound `off`. `subtle` is the default and calmer; `off` keeps the colors and
@@ -267,6 +278,8 @@ Written against 0.3.0. Nothing to configure.
 ## Check it worked
 
 - `claude plugin list` shows the nine plugins above.
+- A new chat starts with the superpowers skills available (`superpowers:brainstorming` and the
+  rest show in the skill list).
 - `/ctx` opens the context pane, and the band shows above the prompt.
 - Run a few subagents: the progress bar fills and ends in a green Done row; `/agents-info` toggles
   the panel.
