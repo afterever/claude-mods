@@ -8,6 +8,9 @@
   any change to a mod's code under `hooks/`. This is how `subagent-progress` 2.0.0 and
   `prompt-upgrade` 0.1.0 landed.
 - **If unsure which one it is, treat it as larger** and use a branch.
+- **A pull request must pass CI to merge:** `.github/workflows/ci.yml` validates the manifests
+  and runs every mod's tests. Nobody can force-push to or delete `master`; only the repo admin
+  can skip the CI requirement, which is what lets a prose commit go straight to `master`.
 
 ## Mods that draw in the band
 
