@@ -1,11 +1,10 @@
 name: CI
 
-# Runs on pull requests only. Prose-only changes (docs, READMEs, SETUP.md)
-# go straight to master and skip this.
+# Runs on every pull request, markdown-only ones too: these jobs are required
+# checks on master, and a skipped workflow would leave them pending forever.
+# Prose-only changes that go straight to master never trigger it.
 on:
   pull_request:
-    paths-ignore:
-      - "**.md"
   workflow_dispatch:
 
 permissions:
