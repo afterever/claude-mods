@@ -753,8 +753,8 @@ test('a wide band draws a longer bar, so a near-empty window overstates less', a
   const clock = world(on, [])
   await $.session.measure(measure(36_500))
   await clock.settle()
-  // the step each band width takes: 16 to 129 columns, 24 from 130, 32 from 160
-  for (const [cols, width] of [[129, 16], [130, 24], [160, 32]] as const) {
+  // the step each band width takes: 16 to 129 columns, 24 from 130, 32 from 160, 48 from 200, 64 from 240
+  for (const [cols, width] of [[129, 16], [130, 24], [160, 32], [200, 48], [240, 64]] as const) {
     const band = await mountBand($, cols)
     const tide = await barTide(band)
     expect(tide?.width).toBe(width)
@@ -763,11 +763,14 @@ test('a wide band draws a longer bar, so a near-empty window overstates less', a
   }
 })
 
-test('a standing warning keeps the bar at 16 however wide the band', async ($, on) => {
+test('a standing warning keeps the bar at 16 until the band has room for the badge too', async ($, on) => {
   const clock = world(on, [])
   for (const t of [300_000, 400_000, 500_000, 800_000]) await $.session.measure(measure(t))
   await clock.settle()
-  expect((await barTide(await mountBand($, 200)))?.width).toBe(16)
+  const narrow = await mountBand($, 199)
+  expect((await barTide(narrow))?.width).toBe(16)
+  await narrow.unmount()
+  expect((await barTide(await mountBand($, 200)))?.width).toBe(48)
 })
 
 test('under 70 columns the bar is 8 cells', async ($, on) => {
