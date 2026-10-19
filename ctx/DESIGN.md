@@ -292,7 +292,7 @@ The columns are a starting point and are to be tuned by looking at a real termin
 
 - **Every effect carries meaning.** The water is the room left. The glow is what the last turn ate. The breathing is "auto-compact is near". The wave is "room came back". Nothing moves just to be busy.
 - **The text stays text.** The fill (`81.9k/1M·8%`), the badge, the pace and every pane row stay hook-drawn `Text`, so they truncate and the tests can read them.
-- **No layout shifts.** The band's bar is always 16 cells (8 under 70 columns), whatever it draws.
+- **No layout shifts.** The band's bar is a fixed width for its band (16 cells, 8 under 70 columns; 0.8.1 grows it on a wide band, see below), whatever it draws.
 - **Honest numbers first.** The look changes no figure. The one distortion, the minimum cell, is in the band only, and the pane's bar stays exact.
 
 #### Settings and `follow`
@@ -364,7 +364,7 @@ The fill text's green/amber/red (`fillColor`) and the pace's colours (claude-hud
 - **The band's bar is an `Svg` pill** about the width of 16 terminal cells (~130 px, 10–12 px high) **(builder's call)**, following the band's own rule of at least one cell each (a minimum segment width of ~8 px). Used segments are rects with a `linearGradient` core→glow. Free space is water: a soft gradient in the water colour with a wave line along its top that drifts by a CSS `@keyframes` translate (`subtle`, `full`), plus a few faint glints (`full`). The buffer is a hatched `pattern`. A thin glowing tick marks the auto-compact point.
 - **Effects in CSS:** the growth glow is a one-shot animation on the added span, the breathing animates the tick's and the edge's glow amber or red, and the compaction is a wave sweeping over the freed span (`full`). Every SVG has `@media (prefers-reduced-motion: reduce)`.
 - **The SVG source must not change between redraws** unless the data did (agent-pulse's rule: a new source restarts its animations). No time and nothing per-second goes in it; one-shots carry their event's id in a class or element id, so they play once.
-- **The pane's bar on Desktop stays hook-drawn `Text`**, not an SVG: the person chose the hover link to the category rows over the SVG look, and `SvgProps` has no hover scope. It is the terminal pane's exact bar in palette hex with Tide's `~` water and `≈` foam, drawn still (Desktop has no `Client`). The growth glow and the compaction sweep play there by hook redraws at ~12 fps for their 1.5 s only, and the breathing goes on the warning line's `⚠` through a CSS-animated 1-glyph `Svg` (or still, in the hot colour, if that proves awkward). Only the band's bar is an SVG on Desktop.
+- **The pane's bar on Desktop stays hook-drawn `Text`**, not an SVG: the person chose the hover link to the category rows over the SVG look, and `SvgProps` has no hover scope. *(Reversed in 0.8.1: it overran the pane, see below.)* It is the terminal pane's exact bar in palette hex with Tide's `~` water and `≈` foam, drawn still (Desktop has no `Client`). The growth glow and the compaction sweep play there by hook redraws at ~12 fps for their 1.5 s only, and the breathing goes on the warning line's `⚠` through a CSS-animated 1-glyph `Svg` (or still, in the hot colour, if that proves awkward). Only the band's bar is an SVG on Desktop.
 - The Desktop footer's `ctx N%` is unchanged.
 
 #### Code layout (builder's call)
@@ -393,6 +393,20 @@ Unit tests: `bandCells` (the width never changes, everything in use gets a cell,
 - No new figures, and no change to a number, a threshold or the pace's colours.
 - Nothing that moves without a reason: water that churns at `subtle`, or a glow on every redraw, would fail this even if it works.
 - No change in the band's width or height, and no `Client` around text that has to truncate.
+
+### 0.8.1: the bar's scale
+
+Seen live on 0.8.0, on the person's laptop, in both apps. Three things came out of it, none of them a new figure.
+
+**The terminal's bar overstated a near-empty window.** `ctx ██████~~~~~~~~~░ 50.4k/1M·5%` drew 37% of the bar for 5%. This is the minimum cell the person chose in 0.8.0 (each category in use gets one whole cell): six categories on a 1M window are six cells whatever they hold, and 16 cells make that 37%. The design noted the overstatement for "fewer cells than categories" and accepted it; seen on a real window it read as a wrong number. Three fixes were weighed. A true fill, folding the smallest categories into a neighbour until there is room, is the most honest and loses the split on a near-empty window. One colour below a threshold is simple and jumps at the threshold. **A longer bar on a wide band was chosen**: `bandBarWidth(columns, warning)` in `fmt.ts` gives 8 under 70 columns, 16 to 129, 24 from 130, 32 from 160, so the same six cells are 19% of 32. It still overstates a near-empty window, only less (the person chose this over the honest-fill option, knowing it). The steps come from the band's worst case, not a measurement: the fill, the 10-glyph trend, the delta, the cost suffix and the pace take about 107 columns beside the bar at 130, so a 32-cell bar only fits from 160. **A standing auto-compact warning keeps the bar at 16**, because the badge and the carrying cost then need the room. Desktop passes the band no `bodyColumns`, so its pill stays at the 80-column step, 16 cells.
+
+**Desktop's pane bar overran the pane and wrapped.** 0.8.0 drew it as `Text`, `width` cells wide, on the belief that a cell is a cell. On Desktop the block glyphs (`█`) fall back to a font of their own width, wider than `~`, so 48 cells did not fit a pane that holds 48 of the code font's, and the last `~~` wrapped under the bar. A `Text` bar cannot be sized in cells on Desktop. The pane's bar is now an `Svg` drawn by the same `bandSvg` as the band's pill, at 2 px a cell (`PANE_CELL_PX`), so it fills the pane to the pixel and carries the `▲ auto-compact` marker as a caret and words under it (the marker's spaces were font-dependent too). Its width is the narrower of `e.viewport.columns` and `bodyColumns` (either may be missing; Desktop hands the band no `bodyColumns`) at 8 px a column, less 16, between 120 and 560 px. **This gives up the hover link between the bar and its category rows on Desktop**, which 0.8.0 had chosen over the SVG look; the terminal keeps it. At 2 px a cell the minimum cell is 2 px, so the overstatement is gone there.
+
+**The band's trend takes the pane's colours.** `Spark` is given `shade` and `mark` in the band too: Messages' core to glow along the glyphs, compactions in the water's colour, the newest point in the fill's colour. `claude` and `mono` keep theme keys, as in the pane.
+
+**The pane is titled `Context`**, not `Context window` (the tab, the band's placeholder before the first reading, and the pane header's fallback when the model is unknown).
+
+*Not seen live yet:* the Desktop pane's Svg fit (8 px a column and the 16 px margin are first guesses read off one screenshot; the viewport's column count on Desktop is the engine's, unchecked), and the 24 and 32-cell bars at their band widths.
 
 ## Testing
 
@@ -439,3 +453,4 @@ Before every release: `claude plugin test ctx`, `claude plugin validate .`, and 
 | 0.7.1 | Fix: the Desktop footer's `ctx N%` is a tree around the engine's footer, since Desktop does not draw the labels in `modes` |
 | 0.7.2 | The Desktop footer is a switch, `/ctx footer on`, off by default: the band already shows the fill, and ctx cannot see the band collapsed |
 | 0.8.0 | The look: palette colours that follow agent-pulse, whole cells in the band, Tide water, growth glow, breathing near auto-compact, compaction sweep, an SVG bar on Desktop |
+| 0.8.1 | The bar's scale: a longer band bar on a wide band (24, 32 cells), an SVG bar in Desktop's pane at the pane's width, the band's trend in the pane's colours, the pane titled `Context` |

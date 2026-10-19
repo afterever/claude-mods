@@ -52,6 +52,28 @@ test('bandSvg: near auto-compact the tick and the edge breathe', () => {
   expect(source).toContain('#ff5c5c')
 })
 
+test('bandSvg: cellPx sets the width a cell takes, so the pane can fill its own width', () => {
+  const fine = Array.from({ length: 100 }, (_, i) => cell(i < 10 ? '█' : i === 10 ? '≈' : '~', i < 10 ? '#d97757' : '#9fa8e0', i < 10 ? 'Messages' : 'Free space', i > 10))
+  const a = bandSvg({ cells: fine, level: 'subtle', edge: 10, tick: 80, cellPx: 3 })
+  expect(a.width).toBe(300)
+  expect(a.source).toContain('width="300"')
+  // the edge sits at its cell's pixel, and the default stays 8 px a cell
+  expect(a.source).toContain('x="30"')
+  expect(bandSvg({ cells: CELLS, level: 'subtle', edge: 3 }).width).toBe(128)
+})
+
+test('bandSvg: a marker label adds a caret and the words beneath the bar, inside the width', () => {
+  const plain = bandSvg({ cells: CELLS, level: 'subtle', edge: 3, tick: 10 })
+  const m = bandSvg({ cells: CELLS, level: 'subtle', edge: 3, tick: 10, label: 'auto-compact 167k' })
+  expect(m.width).toBe(plain.width)
+  expect(m.height).toBeGreaterThan(plain.height)
+  expect(m.source).toContain('auto-compact 167k')
+  // the label would run past the right edge from the tick, so it ends at the tick instead
+  expect(m.source).toContain('text-anchor="end"')
+  // none without a tick
+  expect(bandSvg({ cells: CELLS, level: 'subtle', edge: 3, label: 'auto-compact 167k' }).source).not.toContain('auto-compact')
+})
+
 test('breathSvg is a 10 by 12 warning glyph', () => {
   const b = breathSvg('#f6d36b')
   expect(b.width).toBe(10)

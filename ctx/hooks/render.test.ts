@@ -103,7 +103,7 @@ function world(
 }
 
 const paneProps = (bodyColumns: number) => ({
-  title: 'Context window',
+  title: 'Context',
   isFocused: true,
   bodyColumns,
   placement: 'dock' as const,
@@ -144,6 +144,13 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await $.session.measure({ context: { window: 1_000_000 }, rateLimits: [], changed: ['context'] })
     await clock.settle()
     const ui = await $.ui.mount({ plugin: 'ctx', surface, component: 'Pane', requestId: 'ctx', props: paneProps(30) })
+    if (surface === 'desktop') {
+      // an Svg bar, 8 px a cell less a margin, carrying its own marker
+      const bar = ((await ui.findAll({ type: 'Svg' })) as { props: { width?: number; source?: string } }[]).map(n => n.props).find(p => p.source?.includes('auto-compact 967k'))
+      expect(bar).toBeDefined()
+      expect(bar!.width).toBeLessThanOrEqual(30 * 8)
+      return
+    }
     const marker = (await ui.findAll({ type: 'Text', text: 'auto-compact 967k ▲' })).pop()
     expect(marker).toBeDefined()
     expect(marker!.text.length).toBeLessThanOrEqual(30)
@@ -742,6 +749,27 @@ test('the band draws its bar as one 16-cell Tide client', async ($, on) => {
   expect(tide?.props.level).toBe('subtle')
 })
 
+test('a wide band draws a longer bar, so a near-empty window overstates less', async ($, on) => {
+  const clock = world(on, [])
+  await $.session.measure(measure(36_500))
+  await clock.settle()
+  // the step each band width takes: 16 to 129 columns, 24 from 130, 32 from 160
+  for (const [cols, width] of [[129, 16], [130, 24], [160, 32]] as const) {
+    const band = await mountBand($, cols)
+    const tide = await barTide(band)
+    expect(tide?.width).toBe(width)
+    expect(tide?.props.cells).toHaveLength(width)
+    await band.unmount()
+  }
+})
+
+test('a standing warning keeps the bar at 16 however wide the band', async ($, on) => {
+  const clock = world(on, [])
+  for (const t of [300_000, 400_000, 500_000, 800_000]) await $.session.measure(measure(t))
+  await clock.settle()
+  expect((await barTide(await mountBand($, 200)))?.width).toBe(16)
+})
+
 test('under 70 columns the bar is 8 cells', async ($, on) => {
   const clock = world(on, [])
   await $.session.measure(measure(36_500))
@@ -823,7 +851,31 @@ test('near auto-compact the ctx word and the foam breathe', async ($, on) => {
   expect(bar?.props.breathe.at).toEqual([bar?.props.edge])
 })
 
-test('animation off keeps the hot ctx word still', { options: { animation: 'off' } }, async ($, on) => {
+// the trend in the band, shaded like the pane's: Messages' core to glow, not one theme key
+const SPARK_GLYPHS = /^[▁▂▃▄▅▆▇█]+$/
+const sparkColours = async (ui: any) =>
+  ((await ui.findAll({ type: 'Text' })) as { text: string; props: { color?: string } }[]).filter(t => SPARK_GLYPHS.test(t.text)).map(t => t.props.color)
+
+test("the band's trend takes the palette's colours, as the pane's does", async ($, on) => {
+  const clock = world(on, [])
+  for (const t of [20_000, 26_000, 40_000, 52_000]) await $.session.measure(measure(t))
+  await clock.settle()
+  const colours = await sparkColours(await mountBand($))
+  expect(colours.length).toBeGreaterThan(0)
+  // the shaded past points are hex; the newest keeps the fill's theme key
+  expect(colours.some(c => /^#[0-9a-f]{6}$/i.test(c ?? ''))).toBe(true)
+  expect(colours[colours.length - 1]).toBe('success')
+})
+
+test("the band's trend in claude keeps the 0.7 colours", { options: { palette: 'claude' } }, async ($, on) => {
+  const clock = world(on, [])
+  for (const t of [20_000, 26_000, 40_000, 52_000]) await $.session.measure(measure(t))
+  await clock.settle()
+  const colours = await sparkColours(await mountBand($))
+  expect(colours.some(c => /^#/.test(c ?? ''))).toBe(false)
+})
+
+test('animation off keeps the hot ctx word still',{ options: { animation: 'off' } }, async ($, on) => {
   const clock = world(on, [])
   for (const t of [300_000, 400_000, 500_000, 800_000]) await $.session.measure(measure(t))
   await clock.settle()
@@ -903,7 +955,7 @@ test('claude palette: the pane keeps 0.7 colours', { options: { palette: 'claude
   expect(await barText(pane)).toMatch(/·+/)
 })
 
-// 0.8.0, Desktop: an SVG pill in the band; the pane keeps a Text bar, for the hover link to its rows
+// 0.8.0, Desktop: an SVG pill in the band (0.8.1: and in the pane, at the pane's width)
 const svgs = async (ui: any) => ((await ui.findAll({ type: 'Svg' })) as { props: { width?: number; source?: string } }[]).map(n => n.props)
 
 test('the Desktop band draws an Svg and no Client', async ($, on) => {
@@ -927,14 +979,33 @@ test('the Desktop band in claude still draws hex colours', { options: { palette:
   expect(pill?.source).not.toContain('class="wave"')
 })
 
-test('the Desktop pane keeps a Text bar and no Svg in it', async ($, on) => {
+// A Text bar of `width` cells overran Desktop's pane and wrapped (seen live, 0.8.0): block and
+// wave glyphs fall back to fonts of their own widths. The pane's bar is an Svg of the pane's pixels.
+test('the Desktop pane draws its bar as an Svg that fits the pane, and no Text bar', async ($, on) => {
   const clock = world(on, [])
   await $.session.measure(measure(36_500))
   await clock.settle()
   const pane = await $.ui.mount({ plugin: 'ctx', surface: 'desktop', component: 'Pane', requestId: 'ctx', props: paneProps(48) })
-  expect(await svgs(pane)).toEqual([])
+  const bar = (await svgs(pane)).find(p => (p.width ?? 0) > 128)
+  // 48 cells of 8 px less the margin
+  expect(bar?.width).toBe(368)
+  expect(bar?.source).toContain('class="wave"')
+  expect(bar?.source).toContain('auto-compact 967k')
   expect(await tides(pane)).toEqual([])
-  expect(await barText(pane)).toMatch(/≈~+/)
+  // the foam only the water's edge draws: no Text bar
+  expect(await barText(pane)).not.toContain('≈')
+})
+
+test('the Desktop pane takes the narrower of the viewport and the body columns, and has a floor', async ($, on) => {
+  const clock = world(on, [])
+  await $.session.measure(measure(36_500))
+  await clock.settle()
+  const wide = await $.ui.mount({ plugin: 'ctx', surface: 'desktop', component: 'Pane', requestId: 'ctx', props: paneProps(200) })
+  // capped, so a very wide pane does not draw a bar the eye can't take in
+  expect((await svgs(wide)).find(p => (p.width ?? 0) > 128)?.width).toBe(560)
+  await wide.unmount()
+  const tiny = await $.ui.mount({ plugin: 'ctx', surface: 'desktop', component: 'Pane', requestId: 'ctx', props: paneProps(10) })
+  expect((await svgs(tiny)).find(p => (p.width ?? 0) > 100)?.width).toBe(120)
 })
 
 test('the Desktop pane plays a growth by redraws, then stops', async ($, on) => {

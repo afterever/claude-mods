@@ -132,8 +132,18 @@ function cellOf(a: Seg, b: Seg, start: number, tint: (s: Seg) => string): BarRun
     : { text: BUFFER_GLYPH, color: s.color, dim: true, scope: s.name }
 }
 
+// How many cells the band's bar takes. Every row in use gets a whole cell, so
+// a near-empty window draws as many cells as it has rows (six rows on a 1M window
+// at 5% fill 6 of 16, which reads as ~40%); a longer bar shrinks that overstatement,
+// where the band has the room. A standing warning keeps it at 16: the badge needs the width
+export function bandBarWidth(columns: number, warning: boolean): number {
+  if (columns < 70) return 8
+  if (warning || columns < 130) return 16
+  return columns < 160 ? 24 : 32
+}
+
 /** One cell of the band's bar; `scope` is the category it draws, for hover. */
-export type Cell = { ch: string; color: string; bg?: string; dim?: boolean; scope: string }
+export type Cell ={ ch: string; color: string; bg?: string; dim?: boolean; scope: string }
 
 const isHex = (c: string) => /^#[0-9a-f]{6}$/i.test(c)
 
