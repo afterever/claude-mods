@@ -854,6 +854,24 @@ test('near auto-compact the ctx word and the foam breathe', async ($, on) => {
   expect(bar?.props.breathe.at).toEqual([bar?.props.edge])
 })
 
+test('the band starts with a battery: full, and flat near auto-compact', async ($, on) => {
+  const clock = world(on, [])
+  const battery = async (band: any, glyph: string) => ((await band.findAll({ type: 'Text', text: glyph })) as any[]).length
+  // before the first reading the band says Context, with no battery
+  const empty = await mountBand($)
+  expect([await battery(empty, '🔋'), await battery(empty, '🪫')]).toEqual([0, 0])
+  await empty.unmount()
+  await $.session.measure(measure(36_500))
+  await clock.settle()
+  const calm = await mountBand($)
+  expect([await battery(calm, '🔋'), await battery(calm, '🪫')]).toEqual([1, 0])
+  await calm.unmount()
+  for (const t of [300_000, 400_000, 500_000, 800_000]) await $.session.measure(measure(t))
+  await clock.settle()
+  const hot = await mountBand($)
+  expect([await battery(hot, '🔋'), await battery(hot, '🪫')]).toEqual([0, 1])
+})
+
 // the trend in the band, shaded like the pane's: Messages' core to glow, not one theme key
 const SPARK_GLYPHS = /^[▁▂▃▄▅▆▇█]+$/
 const sparkColours = async (ui: any) =>
