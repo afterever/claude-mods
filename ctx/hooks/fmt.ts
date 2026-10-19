@@ -136,7 +136,7 @@ function cellOf(a: Seg, b: Seg, start: number, tint: (s: Seg) => string): BarRun
 // a near-empty window draws as many cells as it has rows (six rows on a 1M window
 // at 5% fill 6 of 16, which reads as ~40%); a longer bar shrinks that overstatement,
 // where the band has the room. A standing warning keeps it at 16 until 240 columns: the badge
-// and the carrying cost need the width (about 140 columns beside the bar in the worst case)
+// and the carrying cost need the width (about 143 columns beside the bar in the worst case)
 export function bandBarWidth(columns: number, warning: boolean): number {
   if (columns < 70) return 8
   if (columns < 130 || (warning && columns < 240)) return 16

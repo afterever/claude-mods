@@ -1006,6 +1006,8 @@ export const register: Register = (on, options) => {
         <Box flexDirection="row" justifyContent="space-between" width="100%" columnGap={2}>
           {s ? (
             <Box flexDirection="row" columnGap={1} flexShrink={1}>
+              {/* an emoji ignores the text colour, so the battery goes flat where the word breathes */}
+              <Text>{w.level === 'none' ? '🔋' : '🪫'}</Text>
               {w.level === 'none' ? (
                 <Text dimColor>ctx</Text>
               ) : live && Client ? (
