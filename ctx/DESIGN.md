@@ -404,7 +404,7 @@ Before every release: `claude plugin test ctx`, `claude plugin validate .`, and 
 
 ## Known limits and open questions
 
-- **0.8.0's look is not yet seen live** (2026-10-18): the person tests it by eye in a new session. Unanswered by a probe, and so to watch for: whether a `Client`'s `Text` keeps the hover link between the pane's bar and its rows (the typings say `ClientElements` keeps `hover`), whether `~` and `≈` are one cell wide in Windows Terminal, and the timings, which are first guesses to tune.
+- **0.8.0's look, seen live on 2026-10-18** in a new Windows session on the installed 0.8.0: the person judged it "looking perfect", so the first-guess timings (1 s lap, 600 ms drift, 1.5 s glow, 1.2 s sweep, 2 s breath) and the `~` / `≈` glyphs stay. Not checked one by one: the pane's hover link through the `Client`, and Claude Desktop's SVG pill.
 - **Not yet seen live:** `/ctx compact` compacting in a real session, and autokeep's instructions reaching a real auto-compaction. Running `/ctx compact` between turns should show exactly one "Compacted" toast.
 - **Mid-turn compaction:** `/ctx` runs immediately, so a compact during a turn may be skipped by the engine. The toast says so.
 - **Desktop:** the call that launches programs is CLI-only, so opening a memory file there shows "Couldn't open".

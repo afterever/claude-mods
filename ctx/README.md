@@ -129,7 +129,7 @@ text there, so pointing at a category still lights its row.
 
 - A Claude Code build that loads mods (plugins that register `hooks`).
 - Version 0.8.0's tests run on Claude Code 2.1.303. 0.7.0 ran live on 2.1.302, on the terminal and
-  Claude Desktop (the pace in the band); 0.8.0's look is still to be seen live. The engine API ctx uses was checked against build 2.1.288 (see
+  Claude Desktop (the pace in the band); 0.8.0's look was seen live on Windows. The engine API ctx uses was checked against build 2.1.288 (see
   [DESIGN.md](./DESIGN.md)); no older minimum has been tried.
 
 ## Develop
