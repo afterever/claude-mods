@@ -1,11 +1,10 @@
 name: CI
 
-# Runs on pull requests only. Prose-only changes (docs, READMEs, SETUP.md)
-# go straight to master and skip this.
+# Runs on every pull request, markdown-only ones too: these jobs are required
+# checks on master, and a skipped workflow would leave them pending forever.
+# Prose-only changes that go straight to master never trigger it.
 on:
   pull_request:
-    paths-ignore:
-      - "**.md"
   workflow_dispatch:
 
 permissions:
@@ -36,16 +35,12 @@ jobs:
         os: [ubuntu-latest]
         mod:
           - agent-pulse
+          - arsenal
           - ctx
           - prompt-upgrade
           - subagent-progress
           - waypoints
           - work-report
-        include:
-          # arsenal's tests fake a Windows filesystem (C:/home, C:/bats) and
-          # fail on Linux, so they run where they were written
-          - os: windows-latest
-            mod: arsenal
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

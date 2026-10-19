@@ -59,6 +59,15 @@ type World = {
   rows: (number | undefined)[]
 }
 
+// The fake disk is keyed by Windows paths (`C:/home/...`). Off Windows the
+// engine reads those as relative and puts the working folder in front, so cut
+// back to the drive letter to get the key the test wrote.
+const fake = (path: string) => {
+  const slashed = path.replace(/\\/g, '/')
+  const drive = slashed.search(/(^|\/)[A-Za-z]:\//)
+  return drive < 0 ? slashed : slashed.slice(slashed[drive] === '/' ? drive + 1 : drive)
+}
+
 // The world beneath the plugin: the command list, the model, prompt-upgrade's
 // switch, the panes, and the line and footer other mods draw
 function world(on: On, o: Opts = {}): World {
@@ -81,7 +90,7 @@ function world(on: On, o: Opts = {}): World {
   on('env.get', async (_$, e) => ({ value: e.name === 'USERPROFILE' ? (o.home ?? 'C:/home') : undefined }) as any)
   on('session.root', async () => ({ value: o.root ?? 'C:/bats' }) as any)
   on('fs.list', async (_$, e) => {
-    const below = `${e.path.replace(/\\/g, '/').replace(/\/+$/, '')}/`
+    const below = `${fake(e.path).replace(/\/+$/, '')}/`
     const entries = new Map<string, 'file' | 'dir'>()
     for (const path of Object.keys(disk)) {
       if (!path.startsWith(below)) continue
@@ -92,7 +101,7 @@ function world(on: On, o: Opts = {}): World {
     return { value: [...entries].map(([name, kind]) => ({ name, kind, size: 0, mtimeMs: 0, isLink: false })) } as any
   })
   on('fs.read', async (_$, e) => {
-    const text = disk[e.path.replace(/\\/g, '/')]
+    const text = disk[fake(e.path)]
     if (text === undefined) throw new Error('ENOENT')
     return { value: text } as any
   })
