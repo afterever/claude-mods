@@ -1,0 +1,50 @@
+name: CI
+
+# Runs on pull requests only. Prose-only changes (docs, READMEs, SETUP.md)
+# go straight to master and skip this.
+on:
+  pull_request:
+    paths-ignore:
+      - "**.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # The version the mods are developed against. Bump it with the mods.
+  CLAUDE_CODE_VERSION: 2.1.303
+
+jobs:
+  validate:
+    name: validate manifests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install -g @anthropic-ai/claude-code@${{ env.CLAUDE_CODE_VERSION }}
+      - run: claude plugin validate . --strict
+
+  test:
+    name: test ${{ matrix.mod }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        mod:
+          - agent-pulse
+          - arsenal
+          - ctx
+          - prompt-upgrade
+          - subagent-progress
+          - waypoints
+          - work-report
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install -g @anthropic-ai/claude-code@${{ env.CLAUDE_CODE_VERSION }}
+      - run: claude plugin test ${{ matrix.mod }}
