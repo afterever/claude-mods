@@ -149,27 +149,40 @@ const USAGE =
 
 // ── The module ───────────────────────────────────────────────────────────
 
+/** Everything a session needs at its start: the command, and the days and settings read back from the store. */
+async function begin($: EngineInterface): Promise<void> {
+  armed = []
+  active = null
+  try {
+    await $.command.register({
+      name: 'report',
+      description: 'Show what Claude has done for you: tasks finished, hours saved and what that is worth',
+      argumentHint: '[today | week | month | year | settings]',
+      immediate: true,
+    })
+  } catch {
+    // the recording still works without the command
+  }
+  try {
+    await loadAll($)
+  } catch {
+    // start empty: the next finished task is still recorded
+  }
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    armed = []
-    active = null
-    try {
-      await $.command.register({
-        name: 'report',
-        description: 'Show what Claude has done for you: tasks finished, hours saved and what that is worth',
-        argumentHint: '[today | week | month | year | settings]',
-        immediate: true,
-      })
-    } catch {
-      // the recording still works without the command
-    }
-    try {
-      await loadAll($)
-    } catch {
-      // start empty: the next finished task is still recorded
-    }
+    await begin($)
     return next(e)
   })
+
+  // /clear goes on under a new session id and raises no session.start, so the
+  // command, which is declared per session, would be gone. The settings hook's
+  // own SessionStart does carry the clear.
+  on('classic.SessionStart', async ($, e, next) => {
+    if (e.source === 'clear') await begin($)
+    return next(e)
+  }).catch(($, e, next) => next(e))
 
   // A typed prompt is armed here and claimed when its turn starts. Anything
   // that fails in this hook lets the prompt through untouched.

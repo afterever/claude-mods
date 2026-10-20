@@ -26,6 +26,7 @@ function world(on: On, o: Opts = {}) {
   const writes: string[] = []
   const toasts: string[] = []
   const opened: string[] = []
+  const declared: string[] = []
   let order = 0
 
   on('store.get', async (_$, e) => ({ value: stored[e.key] }) as any)
@@ -36,7 +37,11 @@ function world(on: On, o: Opts = {}) {
   })
   on('store.keys', async () => ({ value: Object.keys(stored) }) as any)
   on('session.start', async () => ({ cwd: 'C:/bats' }))
-  on('command.register', async () => ({ value: { command: 'report' } }) as any)
+  on('classic.SessionStart', async () => ({}) as any)
+  on('command.register', async (_$, e) => {
+    declared.push(e.name)
+    return { value: { command: 'report' } } as any
+  })
   on('prompt.submit', async (_$, e) => ({ text: e.text }) as any)
   on('turn.start', async (_$, e) => ({ turnId: e.turnId }) as any)
   on('turn.complete', async (_$, e) => ({ text: e.answer }) as any)
@@ -52,7 +57,7 @@ function world(on: On, o: Opts = {}) {
     return { value: undefined } as any
   })
   on('ui.render', { component: 'AbovePrompt' }, async ($, e) => h($.ui.resolve(e).Box, {}) as any)
-  return { clock, stored, writes, toasts, opened }
+  return { clock, stored, writes, toasts, opened, declared }
 }
 
 let turns = 0
@@ -669,4 +674,19 @@ test('the saved days are read back when a session starts', async ($, on) => {
   // a task finished now is added to what was read, not instead of it
   await finish($, { text: 'one more' })
   expect(dayOf(w.stored)!.kinds).toEqual({ emails: 1, research: 1, other: 2 })
+})
+
+test('a /clear starts no session, so the command is declared again and the days are read back', async ($, on) => {
+  const w = world(on, { stored: SAMPLE })
+  await start($)
+  expect(w.declared).toEqual(['report'])
+  // the state a clear leaves behind: nothing read
+  w.stored['day:2026-10-14'] = { kinds: { code: 3 }, models: { 'Sonnet 5.5': 3 } }
+  await $.classic.SessionStart({ source: 'clear' })
+  expect(w.declared).toEqual(['report', 'report'])
+  const ui = await mountPane($, 100)
+  expect((await ui.findAll({ type: 'Text' })).some(t => t.text === 'tasks done')).toBe(true)
+  // the other starts of a session are left alone
+  await $.classic.SessionStart({ source: 'compact' })
+  expect(w.declared).toHaveLength(2)
 })
