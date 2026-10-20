@@ -65,6 +65,8 @@ const PANE = 'ctx'
 const TICK_MS = 15000
 const SKILL_LIMIT = 12
 const GAUGE = 6
+// Claude's own orange (the palettes' `tool`), for the band's calm `ctx` word
+const CLAUDE_ORANGE = '#d97757'
 // Bar runs and category rows share a hover group per category
 const SCOPE = 'ctx:'
 
@@ -1006,10 +1008,9 @@ export const register: Register = (on, options) => {
         <Box flexDirection="row" justifyContent="space-between" width="100%" columnGap={2}>
           {s ? (
             <Box flexDirection="row" columnGap={1} flexShrink={1}>
-              {/* an emoji ignores the text colour, so the battery goes flat where the word breathes */}
-              <Text>{w.level === 'none' ? '🔋' : '🪫'}</Text>
+              <Text>🧠</Text>
               {w.level === 'none' ? (
-                <Text dimColor>ctx</Text>
+                <Text color={CLAUDE_ORANGE}>ctx</Text>
               ) : live && Client ? (
                 <Client
                   key="ctx-word"
