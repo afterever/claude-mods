@@ -854,22 +854,26 @@ test('near auto-compact the ctx word and the foam breathe', async ($, on) => {
   expect(bar?.props.breathe.at).toEqual([bar?.props.edge])
 })
 
-test('the band starts with a battery: full, and flat near auto-compact', async ($, on) => {
+test('the band starts with a brain, and the calm ctx word is Claude orange', async ($, on) => {
   const clock = world(on, [])
-  const battery = async (band: any, glyph: string) => ((await band.findAll({ type: 'Text', text: glyph })) as any[]).length
-  // before the first reading the band says Context, with no battery
+  const count = async (band: any, text: string) => ((await band.findAll({ type: 'Text', text })) as any[]).length
+  const word = async (band: any) => ((await band.findAll({ type: 'Text', text: 'ctx' })) as any[]).map(t => t.props.color)
+  // before the first reading the band says Context, with no brain
   const empty = await mountBand($)
-  expect([await battery(empty, '🔋'), await battery(empty, '🪫')]).toEqual([0, 0])
+  expect(await count(empty, '🧠')).toBe(0)
   await empty.unmount()
   await $.session.measure(measure(36_500))
   await clock.settle()
   const calm = await mountBand($)
-  expect([await battery(calm, '🔋'), await battery(calm, '🪫')]).toEqual([1, 0])
+  expect(await count(calm, '🧠')).toBe(1)
+  expect(await word(calm)).toEqual(['#d97757'])
   await calm.unmount()
+  // near auto-compact the brain stays and the word leaves orange to breathe
   for (const t of [300_000, 400_000, 500_000, 800_000]) await $.session.measure(measure(t))
   await clock.settle()
   const hot = await mountBand($)
-  expect([await battery(hot, '🔋'), await battery(hot, '🪫')]).toEqual([0, 1])
+  expect(await count(hot, '🧠')).toBe(1)
+  expect(await word(hot)).not.toContain('#d97757')
 })
 
 // the trend in the band, shaded like the pane's: Messages' core to glow, not one theme key

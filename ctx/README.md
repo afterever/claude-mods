@@ -6,7 +6,7 @@ is filling, what filled it, how to compact on your terms, and what each of those
 It mirrors the Desktop app's context panel, so the same information is one keypress away in the
 terminal. It only observes. It never compacts, rewrites or turns anything off unless you ask.
 
-- **The band** is one line above the prompt: a 🔋 (a 🪫 near auto-compact) and the word `ctx`, a small bar, the fill, a trend sparkline, the last
+- **The band** is one line above the prompt: a 🧠 and the word `ctx` in Claude's orange (it breathes near auto-compact), a small bar, the fill, a trend sparkline, the last
   turn's cost, the plan's pace (or an API account's session total) at the right, and a 📊 button
   that opens the pane. Each category in use gets at least one whole cell of the bar, so the split
   reads even on a nearly empty 1M window, and the free space is water (`████≈~~~~~~~~~~░`). The
@@ -133,7 +133,7 @@ only. The band's trend takes the pane's colours.
 ## Requirements
 
 - A Claude Code build that loads mods (plugins that register `hooks`).
-- Version 0.8.4's tests run on Claude Code 2.1.304. 0.7.0 ran live on 2.1.302, on the terminal and
+- Version 0.8.5's tests run on Claude Code 2.1.304. 0.7.0 ran live on 2.1.302, on the terminal and
   Claude Desktop (the pace in the band); 0.8.0's look was seen live on Windows. The engine API ctx uses was checked against build 2.1.288 (see
   [DESIGN.md](./DESIGN.md)); no older minimum has been tried.
 
