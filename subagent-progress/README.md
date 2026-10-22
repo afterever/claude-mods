@@ -52,9 +52,9 @@ It needs a font with block elements and braille, as Cascadia and Nerd Fonts have
 
 ## Changes
 
-### 3.0.0: the command is `/subagent-progress`
+### 2.2.0: the command is `/subagent-progress`
 
-A breaking release for anyone who types the command: `/agents-info` is gone. It was `savvy-progress`'s command, kept through the 2.0.0 rename; named after the plugin it says where it comes from, like the other mods' commands (`/work-report`, `/prompt-upgrade`).
+Anyone who types the command needs the new name: `/agents-info` is gone. It was `savvy-progress`'s command, kept through the 2.0.0 rename; named after the plugin it says where it comes from, like the other mods' commands (`/work-report`, `/prompt-upgrade`).
 
 - **Renamed** `/agents-info` to `/subagent-progress`. It does the same thing: it shows or hides the agents panel. The crew button and the panel's auto-open are unchanged.
 - **No longer shares a name with `savvy-progress`.** The two still draw the same bar and panel, so install only one of them.
@@ -140,6 +140,6 @@ claude plugin install subagent-progress@afterever-mods
 
 Then restart Claude Code.
 
-- **Install only one of this and `savvy-progress`**: both draw a progress bar above the prompt and an agents panel, so you would get two of each. This applies to upstream's `savvy-progress@claude-kit` too. Upstream's command is still `/agents-info`; here it is `/subagent-progress` since 3.0.0.
+- **Install only one of this and `savvy-progress`**: both draw a progress bar above the prompt and an agents panel, so you would get two of each. This applies to upstream's `savvy-progress@claude-kit` too. Upstream's command is still `/agents-info`; here it is `/subagent-progress` since 2.2.0.
 - **A `language` setting** under `pluginConfigs.savvy-progress` has to move to `pluginConfigs.subagent-progress`.
 - **Using upstream's savvy-flow?** Its skill and agents call `mcp__savvy-progress__progress` and `__step`, which no longer exist; they skip those calls silently, so the flow still runs and the bar follows the spawns. To keep its step reporting, change those two tool names in its `skills/` and `agents/` files.

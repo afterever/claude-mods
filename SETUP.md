@@ -18,7 +18,7 @@ Paste this into Claude Code on the new computer:
 | Mod | Source | Tested | What it is |
 | --- | --- | --- | --- |
 | `ctx` | `afterever/claude-mods` (this repo) | 0.8.5 | Context window pane and band, compacting on your terms, the plan's pace, its look |
-| `subagent-progress` | `afterever/claude-mods` (this repo) | 3.0.0 | Progress bar and live panel for subagent work |
+| `subagent-progress` | `afterever/claude-mods` (this repo) | 2.2.0 | Progress bar and live panel for subagent work |
 | `prompt-upgrade` | `afterever/claude-mods` (this repo) | 0.2.0 | `/prompt-upgrade` turns a rough prompt into a great one before it is sent |
 | `work-report` | `afterever/claude-mods` (this repo) | 0.4.0 | `/work-report` shows what Claude has done for you: tasks, hours saved, what that is worth |
 | `waypoints` | `afterever/claude-mods` (this repo) | 2.1.0 | Task plan shown as a route above the prompt for a `/goal` or any multi-step work, with a pane that opens by itself; replaces `goal-meter` |
@@ -71,7 +71,7 @@ have to configure: its terminal look follows `agent-pulse`'s palette and animati
 
 **Do not install `savvy-progress` next to it.** Both draw a progress bar above the prompt and an
 agents panel, so you would get two of each. The command here is `/subagent-progress` (it was
-`/agents-info` until 3.0.0, which is still upstream's).
+`/agents-info` until 2.2.0, which is still upstream's).
 
 ## prompt-upgrade
 
