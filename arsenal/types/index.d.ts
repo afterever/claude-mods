@@ -7,7 +7,7 @@ export type ArsenalRunning = {
 }
 
 /** Which tools this session has, from $.command.list() at session start. */
-export type ArsenalTools = { better: boolean; report: boolean }
+export type ArsenalTools = { 'prompt-upgrade': boolean; 'work-report': boolean }
 
 /** One of the person's own commands, as a row shows it. */
 export type OwnCommand = { name: string; description: string; takesArgs: boolean }

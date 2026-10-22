@@ -193,7 +193,7 @@ async function giveBack($: EngineInterface, f: UpgradeFlow) {
   if (f.isFromHistory || f.original.trim() === '') return
   if (await restore($, f.original)) return
   await remember($, f, f.original)
-  $.ui.toast('Could not put your prompt back in the box. It is saved in /better history.')
+  $.ui.toast('Could not put your prompt back in the box. It is saved in /prompt-upgrade history.')
 }
 
 /** Cancel: closes the pane and puts the original back. Esc and the pane's close mark do the same. */
@@ -414,14 +414,14 @@ async function resume($: EngineInterface) {
   else await writeRewrite($, f.id, attempt)
 }
 
-const USAGE = 'Prompt Upgrade: /better <prompt> upgrades that prompt, /better opens a box to type one, /better on|off flips automatic mode, /better history shows your last 20.'
+const USAGE = 'Prompt Upgrade: /prompt-upgrade <prompt> upgrades that prompt, /prompt-upgrade opens a box to type one, /prompt-upgrade on|off flips automatic mode, /prompt-upgrade history shows your last 20.'
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     try {
       await $.command.register({
-        name: 'better',
-        description: 'Upgrade a rough prompt before it is sent (/better <prompt>, on, off, history)',
+        name: 'prompt-upgrade',
+        description: 'Upgrade a rough prompt before it is sent (/prompt-upgrade <prompt>, on, off, history)',
         argumentHint: '[prompt | on | off | history]',
         immediate: true,
       })
@@ -469,7 +469,7 @@ export const register: Register = on => {
     return { drop: id ? 'Held for upgrade in the Prompt Upgrade pane. Nothing was sent.' : NEEDS_ROOM }
   }).catch(($, e, next) => next(e))
 
-  on('command.run', { command: 'better' }, async ($, e) => {
+  on('command.run', { command: 'prompt-upgrade' }, async ($, e) => {
     try {
       const raw = String(e.args ?? '').trim()
       const word = raw.toLowerCase()
@@ -479,7 +479,7 @@ export const register: Register = on => {
           text:
             word === 'on'
               ? 'Automatic upgrades are on: prompts you type open in the pane first. Start one with ">" to send it as it is.'
-              : 'Automatic upgrades are off. /better still upgrades a prompt when you ask.',
+              : 'Automatic upgrades are off. /prompt-upgrade still upgrades a prompt when you ask.',
         }
       }
       if (word === 'help' || word === '?') return { text: USAGE }

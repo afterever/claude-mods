@@ -17,7 +17,7 @@ test('only a prompt the person typed counts', () => {
 
 test('slash commands and empty prompts are not tasks', () => {
   expect(isSlashCommand('/compact')).toBe(true)
-  expect(isSlashCommand('  /report week')).toBe(true)
+  expect(isSlashCommand('  /work-report week')).toBe(true)
   expect(isSlashCommand('/mcp__server__prompt arg')).toBe(true)
   expect(isTypedPrompt('/compact', { kind: 'composer' })).toBe(false)
   expect(isTypedPrompt('   ', { kind: 'composer' })).toBe(false)

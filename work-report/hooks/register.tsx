@@ -57,7 +57,7 @@ async function recordTask($: EngineInterface, kind: Kind, model: string) {
 async function openPane($: EngineInterface): Promise<void> {
   try {
     const r = await $.ui.open(PANE_ARGS)
-    if (!r.isPlaced) $.ui.toast('Work Report needs a wider window to open. Widen the terminal and try /report again.')
+    if (!r.isPlaced) $.ui.toast('Work Report needs a wider window to open. Widen the terminal and try /work-report again.')
   } catch {
     // no surface to ask: nothing to show
   }
@@ -68,7 +68,7 @@ async function openOn($: EngineInterface, tab: Tab | null): Promise<void> {
   await openPane($)
 }
 
-// ── /report settings ─────────────────────────────────────────────────────
+// ── /work-report settings ────────────────────────────────────────────────
 
 const SETTING_ORDER: readonly Kind[] = ['emails', 'code', 'documents', 'images', 'research', 'other']
 
@@ -100,7 +100,7 @@ function settingsText(s: Settings): string {
   const minutes = SETTING_ORDER.map(k => `${KIND_LABEL[k]} ${num(s.minutes[k])}`).join(', ')
   return (
     `Minutes saved per task: ${minutes}. Hourly rate: $${num(s.rate)}. Chip above the prompt: ${s.band ? 'on' : 'off'}. ` +
-    'Hours and dollars are estimates. Change one with /report settings rate 75, /report settings emails 15 or /report settings band off.'
+    'Hours and dollars are estimates. Change one with /work-report settings rate 75, /work-report settings emails 15 or /work-report settings band off.'
   )
 }
 
@@ -120,18 +120,18 @@ async function settingsCommand($: EngineInterface, args: string[]): Promise<stri
 
   const name = SETTING_NAMES[(args[0] ?? '').toLowerCase()]
   if (!name) {
-    return `I do not know the setting "${args[0]}". The ones you can change are rate, emails, code, documents, images, research, other and band. For example: /report settings rate 75.`
+    return `I do not know the setting "${args[0]}". The ones you can change are rate, emails, code, documents, images, research, other and band. For example: /work-report settings rate 75.`
   }
   if (name === 'band') {
     const on = BAND_WORDS[(args[1] ?? '').toLowerCase()]
-    if (on === undefined) return 'The chip takes on or off, for example /report settings band off.'
+    if (on === undefined) return 'The chip takes on or off, for example /work-report settings band off.'
     await keepSettings($, { ...current, band: on })
-    return on ? 'The Work report chip is back above the prompt.' : 'The Work report chip is hidden. /report still opens the pane, and /report settings band on brings the chip back.'
+    return on ? 'The Work report chip is back above the prompt.' : 'The Work report chip is hidden. /work-report still opens the pane, and /work-report settings band on brings the chip back.'
   }
   const raw = args[1]
   const value = raw === undefined ? NaN : Number(raw.replace(/^\$/, ''))
   if (!Number.isFinite(value) || value < 0) {
-    return name === 'rate' ? 'The rate must be a number, for example /report settings rate 75.' : `The minutes must be a number, for example /report settings ${name} 15.`
+    return name === 'rate' ? 'The rate must be a number, for example /work-report settings rate 75.' : `The minutes must be a number, for example /work-report settings ${name} 15.`
   }
   const limit = name === 'rate' ? 100_000 : 1440
   if (value > limit) {
@@ -145,7 +145,7 @@ async function settingsCommand($: EngineInterface, args: string[]): Promise<stri
 }
 
 const USAGE =
-  'Work Report: /report opens the pane, /report today, week, month or year opens it on that tab, /report settings lists the estimate settings, and /report settings rate 75 or /report settings emails 15 changes one.'
+  'Work Report: /work-report opens the pane, /work-report today, week, month or year opens it on that tab, /work-report settings lists the estimate settings, and /work-report settings rate 75 or /work-report settings emails 15 changes one.'
 
 // ── The module ───────────────────────────────────────────────────────────
 
@@ -155,7 +155,7 @@ async function begin($: EngineInterface): Promise<void> {
   active = null
   try {
     await $.command.register({
-      name: 'report',
+      name: 'work-report',
       description: 'Show what Claude has done for you: tasks finished, hours saved and what that is worth',
       argumentHint: '[today | week | month | year | settings]',
       immediate: true,
@@ -238,7 +238,7 @@ export const register: Register = on => {
   }).catch(($, e, next) => next(e))
 
   // Answers at once; the pane opens in the background
-  on('command.run', { command: 'report' }, async ($, e) => {
+  on('command.run', { command: 'work-report' }, async ($, e) => {
     try {
       const raw = String(e.args ?? '').trim()
       const parts = raw === '' ? [] : raw.split(/\s+/)
@@ -278,7 +278,7 @@ export const register: Register = on => {
   })
 
   // The one button: a chip above the prompt that opens the pane. The band is
-  // shared, so what the others draw is kept beneath it. `/report settings band
+  // shared, so what the others draw is kept beneath it. `/work-report settings band
   // off` hides it, for one who opens the pane from another mod's menu.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const below = await next(e)

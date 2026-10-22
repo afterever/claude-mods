@@ -39,7 +39,7 @@ test('nothing is held while automatic mode is off', () => {
 test('slash commands, files, images, mid-turn messages and short replies go straight through', () => {
   const passes: Partial<SubmitFacts>[] = [
     { text: '/compact' },
-    { text: '  /better write something' },
+    { text: '  /prompt-upgrade write something' },
     { text: '@src/app.ts explain what this does' },
     { text: 'what is in this picture', attachments: 1 },
     { text: 'also add tests', turnId: 'turn-7' },

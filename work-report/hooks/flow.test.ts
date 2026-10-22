@@ -40,7 +40,7 @@ function world(on: On, o: Opts = {}) {
   on('classic.SessionStart', async () => ({}) as any)
   on('command.register', async (_$, e) => {
     declared.push(e.name)
-    return { value: { command: 'report' } } as any
+    return { value: { command: 'work-report' } } as any
   })
   on('prompt.submit', async (_$, e) => ({ text: e.text }) as any)
   on('turn.start', async (_$, e) => ({ turnId: e.turnId }) as any)
@@ -101,7 +101,7 @@ async function finish($: any, o: Finish) {
 }
 
 const start = ($: any) => $.session.start({ cwd: 'C:/bats', surface: 'terminal', isInteractive: true })
-const cmd = (args: string) => ({ command: 'report', args }) as any
+const cmd = (args: string) => ({ command: 'work-report', args }) as any
 const dayOf = (stored: Record<string, unknown>) => stored[TODAY] as { kinds: Record<string, number>; models: Record<string, number> } | undefined
 
 const paneProps = (bodyColumns: number) => ({
@@ -159,7 +159,7 @@ test('helper agents, cancelled turns, slash commands and notifications are not t
   await finish($, { text: 'something refused', reason: 'refusal' })
   // slash commands
   await finish($, { text: '/compact' })
-  await finish($, { text: '/report week' })
+  await finish($, { text: '/work-report week' })
   // nobody typed these: a background notification, a schedule, a mod's own words
   await finish($, { text: 'a background task finished', origin: { kind: 'task-notification' } })
   await finish($, { text: 'the nightly check', origin: { kind: 'scheduled-trigger' } })
@@ -252,7 +252,7 @@ test('recording says nothing: no toast, no pane, for a routine task', async ($, 
 
 // ── The commands ─────────────────────────────────────────────────────────
 
-test('/report answers at once and opens the pane in the background', async ($, on) => {
+test('/work-report answers at once and opens the pane in the background', async ($, on) => {
   let release!: () => void
   const hold = new Promise<void>(r => (release = r))
   const w = world(on, { hold })
@@ -266,7 +266,7 @@ test('/report answers at once and opens the pane in the background', async ($, o
   expect(w.opened).toHaveLength(1)
 })
 
-test('/report week opens the pane on that tab', async ($, on) => {
+test('/work-report week opens the pane on that tab', async ($, on) => {
   const w = world(on, { stored: SAMPLE })
   await start($)
   const r: any = await $.command.run(cmd('week'))
@@ -276,7 +276,7 @@ test('/report week opens the pane on that tab', async ($, on) => {
   expect(await ui.find({ text: 'LAST 7 DAYS' })).toBeDefined()
 })
 
-test('/report settings lists the settings, and the rate and the minutes can be changed', async ($, on) => {
+test('/work-report settings lists the settings, and the rate and the minutes can be changed', async ($, on) => {
   const w = world(on)
   await start($)
   const list: any = await $.command.run(cmd('settings'))
@@ -622,7 +622,7 @@ test('the band leaves the others alone while a survey holds it', async ($, on) =
   expect(await band.find({ key: 'work-report-open' })).toBeUndefined()
 })
 
-test('/report settings band off hides the chip and on brings it back, and the choice is kept', async ($, on) => {
+test('/work-report settings band off hides the chip and on brings it back, and the choice is kept', async ($, on) => {
   const w = world(on, { stored: SAMPLE })
   await start($)
   const band = () =>
@@ -638,7 +638,7 @@ test('/report settings band off hides the chip and on brings it back, and the ch
   expect(off.text).toContain('hidden')
   expect((w.stored.settings as any).band).toBe(false)
   expect(await (await band()).find({ key: 'work-report-open' })).toBeUndefined()
-  // the pane is still there for /report
+  // the pane is still there for /work-report
   const opened: any = await $.command.run(cmd(''))
   expect(opened.text).toContain('Opening')
   expect((await $.command.run(cmd('settings')) as any).text).toContain('Chip above the prompt: off')
@@ -679,11 +679,11 @@ test('the saved days are read back when a session starts', async ($, on) => {
 test('a /clear starts no session, so the command is declared again and the days are read back', async ($, on) => {
   const w = world(on, { stored: SAMPLE })
   await start($)
-  expect(w.declared).toEqual(['report'])
+  expect(w.declared).toEqual(['work-report'])
   // the state a clear leaves behind: nothing read
   w.stored['day:2026-10-14'] = { kinds: { code: 3 }, models: { 'Sonnet 5.5': 3 } }
   await $.classic.SessionStart({ source: 'clear' })
-  expect(w.declared).toEqual(['report', 'report'])
+  expect(w.declared).toEqual(['work-report', 'work-report'])
   const ui = await mountPane($, 100)
   expect((await ui.findAll({ type: 'Text' })).some(t => t.text === 'tasks done')).toBe(true)
   // the other starts of a session are left alone

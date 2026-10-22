@@ -6,11 +6,11 @@ reading of the API types and should be checked as it is built.
 
 ## The problem
 
-Two of the mods in this repo are *tools* the person reaches for: prompt-upgrade (`/better`) and
-work-report (`/report`). The other three (ctx, subagent-progress, agent-pulse) mostly *show
+Two of the mods in this repo are *tools* the person reaches for: prompt-upgrade (`/prompt-upgrade`) and
+work-report (`/work-report`). The other three (ctx, subagent-progress, agent-pulse) mostly *show
 progress* and already live in the band above the prompt. To use a tool, you have to remember its
-slash command and its arguments (`/better on`, `/better history`, `/report week`,
-`/report settings`).
+slash command and its arguments (`/prompt-upgrade on`, `/prompt-upgrade history`, `/work-report week`,
+`/work-report settings`).
 
 The idea comes from a YouTube video by Tristen O'Brien (https://tristenobrien.ai/), who also gave
 us the idea for prompt-upgrade. In it, a button labelled "Tristen's Tools ▼" in the footer under
@@ -80,7 +80,7 @@ not a person's name.
 │ t: ▤ Today's report                      │
 │ w: ▥ This week's report                  │
 │ s: ⚙ Report settings                     │
-│ ran: /better off                         │
+│ ran: /prompt-upgrade off                         │
 └──────────────────────────────────────────┘
 ```
 
@@ -111,12 +111,12 @@ One row for now:
 
 | Row | Description | Reads | Press does |
 |---|---|---|---|
-| Prompt Upgrade | upgrade every prompt first | `prompt-upgrade.auto` via `$.state.get` | `$.command.run({ command: 'better', args: on ? 'off' : 'on' })` |
+| Prompt Upgrade | upgrade every prompt first | `prompt-upgrade.auto` via `$.state.get` | `$.command.run({ command: 'prompt-upgrade', args: on ? 'off' : 'on' })` |
 
 - The row has a `●`/`○` dot, then the name (bold), then a dim description, then a pill at the
   right end: `● On` (teal background) or `○ Off` (dim background), like the reference screenshot.
 - **Verified:** another mod can read `prompt-upgrade.auto` (`{ value: false, version: 1 }`), and
-  `$.command.run({ command: 'better', args: 'on' | 'off' })` flips it (the transcript said
+  `$.command.run({ command: 'prompt-upgrade', args: 'on' | 'off' })` flips it (the transcript said
   "Automatic upgrades are on/off"). Reading it while drawing subscribes the band, so the pill
   redraws by itself once prompt-upgrade writes the new value. Do not set the pill optimistically.
 - `$.command.run` writes the command's output into the transcript
@@ -126,13 +126,13 @@ One row for now:
 
 | Glyph | Label | Runs | Closes the menu |
 |---|---|---|---|
-| ✦ | Upgrade a prompt | `/better` (opens its compose box) | yes |
-| ◷ | Prompt history | `/better history` | yes |
-| ▤ | Today's report | `/report today` | yes |
-| ▥ | This week's report | `/report week` | yes |
-| ⚙ | Report settings | `/report settings` | yes |
+| ✦ | Upgrade a prompt | `/prompt-upgrade` (opens its compose box) | yes |
+| ◷ | Prompt history | `/prompt-upgrade history` | yes |
+| ▤ | Today's report | `/work-report today` | yes |
+| ▥ | This week's report | `/work-report week` | yes |
+| ⚙ | Report settings | `/work-report settings` | yes |
 
-- `/report` takes `[today | week | month | year | settings]` (**verified** in work-report's
+- `/work-report` takes `[today | week | month | year | settings]` (**verified** in work-report's
   `register.tsx`).
 - Two columns, prompt-upgrade items on the left and work-report items on the right, when
   `e.props.bodyColumns >= 64`. Below that, one column.
@@ -143,8 +143,8 @@ One row for now:
 
 ### Which rows show
 
-At `session.start`, read `$.command.list()` (**verified**: it returns all 212 names, `better` and
-`report` among them) and keep only the rows whose command exists. A section left with no rows is
+At `session.start`, read `$.command.list()` (**verified**: it returns all 212 names, `prompt-upgrade` and
+`work-report` among them) and keep only the rows whose command exists. A section left with no rows is
 not drawn. If no rows are left at all, the launcher is not drawn either, and `/arsenal` opens
 nothing.
 
@@ -156,7 +156,7 @@ nothing.
   `command.run` hook with `{ command: 'arsenal' }`, `immediate: true` so it works mid-turn).
 - A Launch row closes the pane **first** and then runs its command, so the tool's own pane takes
   the dock rather than opening as a second tab. A failure is then a toast. The Prompt Upgrade
-  switch keeps the pane open and writes `sent: /better on`, then `ran: /better on` (or why it
+  switch keeps the pane open and writes `sent: /prompt-upgrade on`, then `ran: /prompt-upgrade on` (or why it
   failed) in the note line.
 - The pane's own close mark, Esc (`closeOnEscape`) and ctrl+x x close it. A `ui.close` hook turns
   the launcher's arrow back down for any close but an `unload`. If the surface cannot place the
@@ -211,7 +211,7 @@ arsenal/
 export type ArsenalRunning = { model: string; effort: string | null }
 
 /** Which tools this session has, from $.command.list() at session start. */
-export type ArsenalTools = { better: boolean; report: boolean }
+export type ArsenalTools = { 'prompt-upgrade': boolean; 'work-report': boolean }
 
 declare module 'claude-code' {
   interface PluginState {
@@ -247,7 +247,7 @@ A contract may export types and nothing else. `export {}` fails `claude plugin v
 |---|---|
 | `session.start` | register `/arsenal`, read `$.command.list()` into `tools`, read `$.session.model()` into `running`, set `isOpen` from `$.ui.panes()` |
 | `turn.step` | main loop only (no `e.agentId`): update `running` from `e.model` / `e.effort`, then `return yield* next(e)` unchanged (it is a streaming event: an `async function*`) |
-| `command.register` | `await next(e)`, then mark `better` / `report` present in `tools` if that is the command registered |
+| `command.register` | `await next(e)`, then mark `prompt-upgrade` / `work-report` present in `tools` if that is the command registered |
 | `command.run` `{ command: 'arsenal' }` | toggle the pane, answer `{}` |
 | `ui.close` | for `arsenal`, any origin but `unload`: `isOpen` false |
 | `ui.render` `AbovePrompt` | `hasSurvey` or no rows → `next(e)`; else `await next(e)`, then the launcher row |
@@ -258,7 +258,7 @@ Both draw the same on `desktop`. There is no `Svg` version for 0.1.0.
 ## The probe that proved it (reference code)
 
 This ran as a dev mod (`toolbox-probe`) in the design session. The footer button showed and could
-be clicked, the band opened, and `/better on|off` worked from the buttons. Its PromptHint and
+be clicked, the band opened, and `/prompt-upgrade on|off` worked from the buttons. Its PromptHint and
 AbovePrompt hooks are the starting point:
 
 ```tsx
@@ -307,7 +307,7 @@ is one, value `opus`; there is no effort row), and 212 commands including `bette
 
 - **Unit tests** (`menu.test.ts`) cover `modelLabel` (ids, `[1m]` suffix, aliases, unknown
   input), `effortLabel` (each level, a number, absent), the row list for each combination of
-  `better` and `report` being present, and the switch from two columns to one at 64.
+  `prompt-upgrade` and `work-report` being present, and the switch from two columns to one at 64.
 - **Render tests** (`render.test.ts`) run the hooks in the engine's test kit, the way ctx's and
   work-report's do, and check that:
   - the band is the plugins-beneath tree, then the launcher, in that order, and the hint line is
@@ -379,12 +379,12 @@ by reading the API types.
   `yield*` and passes `e` down unchanged.
 - **The tools are read twice.** `$.command.list()` at `session.start` can run before a tool's own
   `session.start` has registered its command, so a `command.register` hook (`await next(e)`, then
-  mark `better` or `report` present) keeps `tools` current. In the headless probe `tools` was written
+  mark `prompt-upgrade` or `work-report` present) keeps `tools` current. In the headless probe `tools` was written
   three times and ended `{ better: true, report: true }`.
 - **Launch rows during a turn keep the menu open.** The design closed the menu on every Launch press
   and also wanted a `queued:` note in the menu, which cannot both be seen. Now: with the session
   idle the menu closes first (a failure then is a toast, because the note is out of view); during a
-  turn it stays open with `queued: /report today` and closes once the command has run. The Prompt
+  turn it stays open with `queued: /work-report today` and closes once the command has run. The Prompt
   Upgrade switch never closes it.
 - **A model change since the last request drops the effort.** Each time the menu opens, `reconcile`
   compares `$.session.model()` with the last `turn.step`. Same model: keep model and effort.
@@ -410,7 +410,7 @@ description they return, not any surface's paint". So the person ran it in a rea
 (fullscreen, claude-hud as statusLine, the other mods of this repo plus skins, cache-keeper and
 goal-meter installed).
 
-- **Seen working:** the Prompt Upgrade pill follows `/better on|off` both ways; every Launch row
+- **Seen working:** the Prompt Upgrade pill follows `/prompt-upgrade on|off` both ways; every Launch row
   opens the right pane; the header says `Opus 5.5`; the status mods' bands stay in view.
 - **The button moved from the hint line to the band.** On the hint line the button drew on a row
   of its own at the very bottom of the terminal, under the 10 rows of claude-hud and under
@@ -482,7 +482,7 @@ editing arsenal for each machine, but not necessarily all of them.
 │ /standup   Yesterday's work              │
 │ ── P R O J E C T                ✎ edit   │
 │ /seed-db   Reset the local data…         │
-│ ran: /better off                         │
+│ ran: /prompt-upgrade off                         │
 └──────────────────────────────────────────┘
 ```
 
@@ -780,6 +780,20 @@ is `SessionMode`, a render site this design's survey had counted as a text-only 
 - Other mods that add a `SessionMode` hook above arsenal: waypoints appends to `modes` and
   does not draw a tree, so it works either way; a mod that draws its own tree there would replace
   the row below it. None here does.
+
+## 0.3.1: the tools' commands are named after their mods
+
+work-report 0.4.0 renamed `/report` to `/work-report`, and prompt-upgrade 0.2.0 renamed `/better`
+to `/prompt-upgrade`: both were too general as words, and a command named after its mod says where
+it comes from. The LAUNCH rows run what the person would type, so arsenal's rows had to follow.
+
+- Every `LAUNCH` row names `prompt-upgrade` or `work-report`, and `toolsFrom` looks for those names
+  in `$.command.list()`. The keys in `ArsenalTools` are `'prompt-upgrade'` and `'work-report'` too,
+  because the tool's name in `command` is also its key into `tools`.
+- The mods change together. Against the old names (prompt-upgrade 0.1.x, work-report 0.3.x) arsenal
+  0.3.1 shows no rows for that tool, and an old arsenal against the new names shows rows that run
+  a command that no longer exists. Update all three.
+- The sections above keep the names as they were when they were written (`better`, `report`).
 
 ## Alternatives turned down
 

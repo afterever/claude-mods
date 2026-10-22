@@ -22,11 +22,11 @@ export type LaunchItem = {
 // Every row ends in a command the tool already has. The tool's name in
 // `command` is also the key into `tools`, so a missing tool drops its rows
 export const LAUNCH: readonly LaunchItem[] = [
-  { key: 'upgrade', glyph: '✦', label: 'Upgrade a prompt', command: 'better', args: '', hotkey: 'u' },
-  { key: 'history', glyph: '◷', label: 'Prompt history', command: 'better', args: 'history', hotkey: 'h' },
-  { key: 'today', glyph: '▤', label: "Today's report", command: 'report', args: 'today', hotkey: 't' },
-  { key: 'week', glyph: '▥', label: "This week's report", command: 'report', args: 'week', hotkey: 'w' },
-  { key: 'settings', glyph: '⚙', label: 'Report settings', command: 'report', args: 'settings', hotkey: 's' },
+  { key: 'upgrade', glyph: '✦', label: 'Upgrade a prompt', command: 'prompt-upgrade', args: '', hotkey: 'u' },
+  { key: 'history', glyph: '◷', label: 'Prompt history', command: 'prompt-upgrade', args: 'history', hotkey: 'h' },
+  { key: 'today', glyph: '▤', label: "Today's report", command: 'work-report', args: 'today', hotkey: 't' },
+  { key: 'week', glyph: '▥', label: "This week's report", command: 'work-report', args: 'week', hotkey: 'w' },
+  { key: 'settings', glyph: '⚙', label: 'Report settings', command: 'work-report', args: 'settings', hotkey: 's' },
 ]
 
 // ── Header ───────────────────────────────────────────────────────────────
@@ -115,7 +115,7 @@ export function reconcile(running: ArsenalRunning | null, sessionModel: string):
 
 /** Which tools the session has, from the names `$.command.list()` gives. */
 export function toolsFrom(names: readonly string[]): ArsenalTools {
-  return { better: names.includes('better'), report: names.includes('report') }
+  return { 'prompt-upgrade': names.includes('prompt-upgrade'), 'work-report': names.includes('work-report') }
 }
 
 /** Nothing found in either section. */
@@ -131,10 +131,10 @@ export const hasOwn = (own: ArsenalOwn) => own.user.length > 0 || own.project.le
  * Nothing to show, so no button either. Commands of the person's own count
  * when found, even if every one is off: edit mode must stay reachable.
  */
-export const hasRows = (tools: ArsenalTools, own: ArsenalOwn = NO_OWN) => tools.better || tools.report || hasOwn(own)
+export const hasRows = (tools: ArsenalTools, own: ArsenalOwn = NO_OWN) => tools['prompt-upgrade'] || tools['work-report'] || hasOwn(own)
 
 /** The Prompt Upgrade switch is the only setting, and it needs prompt-upgrade. */
-export const hasSettings = (tools: ArsenalTools) => tools.better
+export const hasSettings = (tools: ArsenalTools) => tools['prompt-upgrade']
 
 /** The Launch rows whose tool is there, in the order they are listed. */
 export const launchItems = (tools: ArsenalTools): LaunchItem[] => LAUNCH.filter(item => tools[item.command])
@@ -145,8 +145,8 @@ export const launchItems = (tools: ArsenalTools): LaunchItem[] => LAUNCH.filter(
  */
 export function launchColumns(tools: ArsenalTools, bodyColumns: number): LaunchItem[][] {
   const items = launchItems(tools)
-  if (bodyColumns >= TWO_COLUMNS && tools.better && tools.report) {
-    return [items.filter(i => i.command === 'better'), items.filter(i => i.command === 'report')]
+  if (bodyColumns >= TWO_COLUMNS && tools['prompt-upgrade'] && tools['work-report']) {
+    return [items.filter(i => i.command === 'prompt-upgrade'), items.filter(i => i.command === 'work-report')]
   }
   return items.length ? [items] : []
 }
@@ -239,7 +239,7 @@ export const unfilledNote = 'Could not fill the prompt box.'
 /** `SETTINGS` → `── S E T T I N G S`. */
 export const sectionTitle = (name: string) => `── ${[...name].join(' ')}`
 
-/** `/better`, `/report today`: what a press runs, as the person would type it. */
+/** `/prompt-upgrade`, `/work-report today`: what a press runs, as the person would type it. */
 export const commandLine = (command: string, args: string) => `/${command}${args ? ` ${args}` : ''}`
 
 const NOTE_LIMIT = 80

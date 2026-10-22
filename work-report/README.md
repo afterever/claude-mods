@@ -1,6 +1,6 @@
 # work-report
 
-A Claude Code mod that shows **what Claude has done for you**: how many tasks it finished, an **estimate** of the hours that saved you, and what that time is worth. `/report` opens a pane with four tabs: Today, Week, Month and Year.
+A Claude Code mod that shows **what Claude has done for you**: how many tasks it finished, an **estimate** of the hours that saved you, and what that time is worth. `/work-report` opens a pane with four tabs: Today, Week, Month and Year.
 
 Hours and dollars are always **estimates**: the minutes you say a task saves, times your hourly rate. The mod never claims more than that.
 
@@ -8,17 +8,17 @@ Hours and dollars are always **estimates**: the minutes you say a task saves, ti
 
 | Command | What it does |
 | --- | --- |
-| `/report` | Opens the pane. |
-| `/report today`, `week`, `month`, `year` | Opens the pane on that tab. |
-| `/report settings` | Lists the minutes saved per kind of task and the hourly rate. |
-| `/report settings rate 75` | Sets the hourly rate to 75. |
-| `/report settings emails 15` | Sets the minutes one email task saves to 15. Also `code`, `documents`, `images`, `research` and `other`. |
-| `/report settings band off` | Hides the chip above the prompt. `on` brings it back. |
-| `/report help` | One line of usage. |
+| `/work-report` | Opens the pane. |
+| `/work-report today`, `week`, `month`, `year` | Opens the pane on that tab. |
+| `/work-report settings` | Lists the minutes saved per kind of task and the hourly rate. |
+| `/work-report settings rate 75` | Sets the hourly rate to 75. |
+| `/work-report settings emails 15` | Sets the minutes one email task saves to 15. Also `code`, `documents`, `images`, `research` and `other`. |
+| `/work-report settings band off` | Hides the chip above the prompt. `on` brings it back. |
+| `/work-report help` | One line of usage. |
 
 A **Work report** chip above the prompt, with today's count beside it, opens the pane too. Claude Code has no pressable entry in the status line itself, so the button sits in the band above the prompt and keeps whatever the other mods draw there beneath it.
 
-If another mod already opens the pane for you, such as the [`arsenal`](../arsenal) menu's report rows, the chip is a second button for the same thing. `/report settings band off` hides it; `/report` and the other mod's buttons still open the pane. The choice is kept between sessions, and the chip is on until you turn it off.
+If another mod already opens the pane for you, such as the [`arsenal`](../arsenal) menu's report rows, the chip is a second button for the same thing. `/work-report settings band off` hides it; `/work-report` and the other mod's buttons still open the pane. The choice is kept between sessions, and the chip is on until you turn it off.
 
 ### The pane
 
@@ -102,7 +102,7 @@ Only counts are stored, not the tools, so tasks finished before these rules exis
 | Research | 20 |
 | Other | 10 |
 
-Hourly rate: 50. Hours are minutes divided by 60; dollars are hours times the rate. Change any of them with `/report settings`; they are kept between sessions. A kind has one figure whichever rule put a task there, so Code and Research are averages: Code covers a small edit and a long session, Research a web investigation and a quick look through your files. Set them to what a typical task of that kind is worth to you (`/report settings code 40`).
+Hourly rate: 50. Hours are minutes divided by 60; dollars are hours times the rate. Change any of them with `/work-report settings`; they are kept between sessions. A kind has one figure whichever rule put a task there, so Code and Research are averages: Code covers a small edit and a long session, Research a web investigation and a quick look through your files. Set them to what a typical task of that kind is worth to you (`/work-report settings code 40`).
 
 ### The streak
 
@@ -141,7 +141,7 @@ claude --plugin-dir <path to claude-mods>\work-report
 - **Rows are built to the width.** In a terminal the bars and the chart need whole cells, so each row is made to the width the pane reports less one cell, in a one-line box that clips rather than wraps, and the width tests below hold every row to it.
 - **On the desktop the figures are drawings.** The tiles, the bars and the chart are each one SVG, because block and box-drawing characters come from whatever font the page falls back to and then do not line up. A drawing places every mark by its own coordinates: the bars start and end in the same place on every row, and the figures are right-aligned at fixed edges. The headings, rules, note and summary stay text. The terminal, which is always monospace, keeps its text rows.
 - **Only the heavy box-drawing set** is used for the big numerals in a terminal; the half-line glyphs (`╺ ╸ ╻ ╹`) are missing from many fonts. The decimal point is a plain `.` on the bottom row.
-- **The command answers first.** `/report` returns its sentence at once and opens the pane in the background; every form of it is wrapped so a failure comes back as a plain sentence.
+- **The command answers first.** `/work-report` returns its sentence at once and opens the pane in the background; every form of it is wrapped so a failure comes back as a plain sentence.
 
 ## Layout
 
