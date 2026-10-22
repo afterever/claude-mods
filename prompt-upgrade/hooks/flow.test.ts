@@ -47,7 +47,7 @@ function world(on: On, o: Opts = {}) {
     return { value: undefined } as any
   })
   on('session.start', async () => ({ cwd: 'C:/bats' }))
-  on('command.register', async () => ({ value: { command: 'better' } }) as any)
+  on('command.register', async () => ({ value: { command: 'prompt-upgrade' } }) as any)
   on('prompt.submit', async (_$, e) => {
     submitted.push({ text: e.text, kind: e.origin.kind })
     return { text: e.text } as any
@@ -85,7 +85,7 @@ function world(on: On, o: Opts = {}) {
   return { clock, stored, calls, submitted, filled, toasts, closed, opened }
 }
 
-const cmd = (args: string) => ({ command: 'better', args }) as any
+const cmd = (args: string) => ({ command: 'prompt-upgrade', args }) as any
 const typed = (text: string, extra: Record<string, unknown> = {}) =>
   ({ text, wait: false, origin: { kind: 'composer' }, ...extra }) as any
 
@@ -204,7 +204,7 @@ test('automatic mode is read back from the store when a session starts', async (
   expect(w.calls).toHaveLength(1)
 })
 
-test('the full flow from /better to Run', async ($, on) => {
+test('the full flow from /prompt-upgrade to Run', async ($, on) => {
   const w = world(on)
   const r: any = await $.command.run(cmd('write a launch email'))
   // the command answers at once, in a sentence
@@ -498,7 +498,7 @@ test('the history keeps twenty and a click reopens an upgrade for review', async
   expect(w.filled).toEqual([])
 })
 
-test('/better alone opens a box to type a prompt', async ($, on) => {
+test('/prompt-upgrade alone opens a box to type a prompt', async ($, on) => {
   const w = world(on, { questions: '<none/>' })
   const r: any = await $.command.run(cmd(''))
   expect(r.text).toBeDefined()

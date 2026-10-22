@@ -30,10 +30,10 @@ import {
   withOff,
 } from './menu'
 
-const BOTH = { better: true, 'work-report': true }
-const BETTER = { better: true, 'work-report': false }
-const REPORT = { better: false, 'work-report': true }
-const NONE = { better: false, 'work-report': false }
+const BOTH = { 'prompt-upgrade': true, 'work-report': true }
+const UPGRADE = { 'prompt-upgrade': true, 'work-report': false }
+const REPORT = { 'prompt-upgrade': false, 'work-report': true }
+const NONE = { 'prompt-upgrade': false, 'work-report': false }
 
 test('a resolved model id reads as its name and version', () => {
   expect(modelLabel('claude-opus-5-5')).toBe('Opus 5.5')
@@ -102,8 +102,8 @@ test('opening the menu takes /model when it names another model, with no effort'
 })
 
 test('tools come from the command names', () => {
-  expect(toolsFrom(['model', 'better', 'work-report'])).toEqual(BOTH)
-  expect(toolsFrom(['model', 'better'])).toEqual(BETTER)
+  expect(toolsFrom(['model', 'prompt-upgrade', 'work-report'])).toEqual(BOTH)
+  expect(toolsFrom(['model', 'prompt-upgrade'])).toEqual(UPGRADE)
   expect(toolsFrom(['model', 'work-report'])).toEqual(REPORT)
   expect(toolsFrom([])).toEqual(NONE)
 })
@@ -111,11 +111,11 @@ test('tools come from the command names', () => {
 test('the Launch rows follow the tools that are there', () => {
   const keys = (t: typeof BOTH) => launchItems(t).map(i => i.key)
   expect(keys(BOTH)).toEqual(['upgrade', 'history', 'today', 'week', 'settings'])
-  expect(keys(BETTER)).toEqual(['upgrade', 'history'])
+  expect(keys(UPGRADE)).toEqual(['upgrade', 'history'])
   expect(keys(REPORT)).toEqual(['today', 'week', 'settings'])
   expect(keys(NONE)).toEqual([])
   expect(hasRows(BOTH)).toBe(true)
-  expect(hasRows(BETTER)).toBe(true)
+  expect(hasRows(UPGRADE)).toBe(true)
   expect(hasRows(REPORT)).toBe(true)
   expect(hasRows(NONE)).toBe(false)
 })
@@ -125,8 +125,8 @@ test('each Launch row runs the command its tool already has', () => {
     const i = launchItems(BOTH).find(x => x.key === key)!
     return commandLine(i.command, i.args)
   }
-  expect(line('upgrade')).toBe('/better')
-  expect(line('history')).toBe('/better history')
+  expect(line('upgrade')).toBe('/prompt-upgrade')
+  expect(line('history')).toBe('/prompt-upgrade history')
   expect(line('today')).toBe('/work-report today')
   expect(line('week')).toBe('/work-report week')
   expect(line('settings')).toBe('/work-report settings')
@@ -143,7 +143,7 @@ test('two columns at 64 cells with both tools, one column below that or with one
   const two = launchColumns(BOTH, TWO_COLUMNS)
   expect(two.map(c => c.map(i => i.key))).toEqual([['upgrade', 'history'], ['today', 'week', 'settings']])
   expect(launchColumns(BOTH, TWO_COLUMNS - 1).map(c => c.map(i => i.key))).toEqual([['upgrade', 'history', 'today', 'week', 'settings']])
-  expect(launchColumns(BETTER, 120).map(c => c.length)).toEqual([2])
+  expect(launchColumns(UPGRADE, 120).map(c => c.length)).toEqual([2])
   expect(launchColumns(REPORT, 120).map(c => c.length)).toEqual([3])
   expect(launchColumns(NONE, 120)).toEqual([])
 })
@@ -151,9 +151,9 @@ test('two columns at 64 cells with both tools, one column below that or with one
 test('titles and notes read as the design draws them', () => {
   expect(sectionTitle('SETTINGS')).toBe('── S E T T I N G S')
   expect(sectionTitle('LAUNCH')).toBe('── L A U N C H')
-  expect(sentNote('/better on')).toBe('sent: /better on')
-  expect(failedNote('/better on', 'no such command')).toBe('/better on failed: no such command')
-  expect(failedNote('/better on', 'x'.repeat(200)).length).toBeLessThanOrEqual(80)
+  expect(sentNote('/prompt-upgrade on')).toBe('sent: /prompt-upgrade on')
+  expect(failedNote('/prompt-upgrade on', 'no such command')).toBe('/prompt-upgrade on failed: no such command')
+  expect(failedNote('/prompt-upgrade on', 'x'.repeat(200)).length).toBeLessThanOrEqual(80)
 })
 
 // ── USER and PROJECT ─────────────────────────────────────────────────────
@@ -169,7 +169,7 @@ test('the launcher shows for commands of the person’s own, even with no tools 
   expect(hasRows(NONE, { user: [], project: [cmd('seed-db')] })).toBe(true)
   expect(hasRows(NONE, NO_OWN)).toBe(false)
   expect(hasRows(NONE)).toBe(false)
-  expect(hasRows(BETTER, NO_OWN)).toBe(true)
+  expect(hasRows(UPGRADE, NO_OWN)).toBe(true)
 })
 
 test('the rows left are the commands not turned off, and edit mode shows them all', () => {

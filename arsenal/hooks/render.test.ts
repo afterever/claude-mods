@@ -2,7 +2,7 @@ import { test, expect, mock } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-const BOTH = ['better', 'work-report', 'model', 'ctx']
+const BOTH = ['prompt-upgrade', 'work-report', 'model', 'ctx']
 
 type Opts = {
   /** The command names the session lists. */
@@ -312,8 +312,8 @@ test('every Launch row closes the pane, then runs its tool’s own command', asy
   const w = world(on)
   await start($)
   const rows: [string, string, string][] = [
-    ['arsenal-upgrade', 'better', ''],
-    ['arsenal-history', 'better', 'history'],
+    ['arsenal-upgrade', 'prompt-upgrade', ''],
+    ['arsenal-history', 'prompt-upgrade', 'history'],
     ['arsenal-today', 'work-report', 'today'],
     ['arsenal-week', 'work-report', 'week'],
     ['arsenal-settings', 'work-report', 'settings'],
@@ -350,21 +350,21 @@ test('the Prompt Upgrade pill follows prompt-upgrade’s auto value', async ($, 
   expect(await inPane($, texts)).not.toContain(' ○ Off ')
 })
 
-test('pressing the pill asks /better for the other state and keeps the pane open, the pill unchanged until prompt-upgrade writes', async ($, on) => {
+test('pressing the pill asks /prompt-upgrade for the other state and keeps the pane open, the pill unchanged until prompt-upgrade writes', async ($, on) => {
   const w = world(on, { auto: false })
   await start($)
   await open($)
   await inPane($, ui => ui.press({ key: 'arsenal-auto' }))
-  expect(w.runs).toEqual([{ command: 'better', args: 'on' }])
+  expect(w.runs).toEqual([{ command: 'prompt-upgrade', args: 'on' }])
   expect(w.calls).toEqual(['open arsenal'])
   const after = await inPane($, texts)
-  expect(after).toContain('ran: /better on')
+  expect(after).toContain('ran: /prompt-upgrade on')
   // the value is prompt-upgrade’s: nothing was set optimistically
   expect(after).toContain(' ○ Off ')
 
   w.auto.on = true
   await inPane($, ui => ui.press({ key: 'arsenal-auto' }))
-  expect(w.runs[1]).toEqual({ command: 'better', args: 'off' })
+  expect(w.runs[1]).toEqual({ command: 'prompt-upgrade', args: 'off' })
 })
 
 test('a command that fails leaves a note in the open pane, or a toast once it has closed', async ($, on) => {
@@ -372,10 +372,10 @@ test('a command that fails leaves a note in the open pane, or a toast once it ha
   await start($)
   await open($)
   await inPane($, ui => ui.press({ key: 'arsenal-auto' }))
-  expect((await inPane($, texts)).some(t => t.startsWith('/better on failed: '))).toBe(true)
+  expect((await inPane($, texts)).some(t => t.startsWith('/prompt-upgrade on failed: '))).toBe(true)
   await inPane($, ui => ui.press({ key: 'arsenal-history' }))
   expect(w.toasts).toHaveLength(1)
-  expect(w.toasts[0]?.startsWith('/better history failed: ')).toBe(true)
+  expect(w.toasts[0]?.startsWith('/prompt-upgrade history failed: ')).toBe(true)
 })
 
 test('a missing tool takes its rows with it, and the section if none are left', async ($, on) => {

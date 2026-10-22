@@ -1,6 +1,6 @@
 # prompt-upgrade
 
-A Claude Code mod that turns a rough prompt into a great one **before it is sent**. `/better` opens a pane, asks up to three quick multiple-choice questions, rewrites your prompt and shows your original and the upgrade side by side. **Nothing runs until you press Run.**
+A Claude Code mod that turns a rough prompt into a great one **before it is sent**. `/prompt-upgrade` opens a pane, asks up to three quick multiple-choice questions, rewrites your prompt and shows your original and the upgrade side by side. **Nothing runs until you press Run.**
 
 > **Credit.** The idea, and the Prompt Upgrade spec this mod was built from, come from the original author at **https://tristenobrien.ai/** ([AI Made Easy](https://tristenobrien.ai/)). This is an implementation of that idea as a Claude Code mod; any faults in it are this repo's.
 
@@ -8,11 +8,11 @@ A Claude Code mod that turns a rough prompt into a great one **before it is sent
 
 | Command | What it does |
 | --- | --- |
-| `/better <rough prompt>` | Upgrades that prompt. |
-| `/better` | Opens a box in the pane to type one. |
-| `/better on` / `/better off` | Turns automatic mode on or off. It starts off, and is remembered between sessions. |
-| `/better history` | Shows your last 20 upgrades. Click one to reopen its review. |
-| `/better help` | One line of usage. |
+| `/prompt-upgrade <rough prompt>` | Upgrades that prompt. |
+| `/prompt-upgrade` | Opens a box in the pane to type one. |
+| `/prompt-upgrade on` / `/prompt-upgrade off` | Turns automatic mode on or off. It starts off, and is remembered between sessions. |
+| `/prompt-upgrade history` | Shows your last 20 upgrades. Click one to reopen its review. |
+| `/prompt-upgrade help` | One line of usage. |
 
 ### The four steps
 
@@ -33,7 +33,7 @@ A tracker across the top shows where you are: finished steps get a green check, 
 
 ### Automatic mode
 
-With `/better on`, a prompt you type goes to the pane first instead of being sent. These go straight through untouched:
+With `/prompt-upgrade on`, a prompt you type goes to the pane first instead of being sent. These go straight through untouched:
 
 - slash commands
 - prompts with an image or other file attached, and prompts that mention a file with `@`
@@ -100,7 +100,7 @@ claude plugin validate <path to claude-mods>
 claude plugin test <path to claude-mods>\prompt-upgrade
 ```
 
-The tests stub the model, so running them costs nothing. They cover which prompts are held and which pass through, reading the questions and the rewrite, the whole flow from `/better` to Run, Cancel putting the prompt back, the on and off switch, a failed call, a reload mid-step, the history, and that no row of the pane is wider than the pane at narrow and wide widths on both the terminal and the desktop.
+The tests stub the model, so running them costs nothing. They cover which prompts are held and which pass through, reading the questions and the rewrite, the whole flow from `/prompt-upgrade` to Run, Cancel putting the prompt back, the on and off switch, a failed call, a reload mid-step, the history, and that no row of the pane is wider than the pane at narrow and wide widths on both the terminal and the desktop.
 
 Bump `version` in `plugin.json` when you change the mod, or installed copies will not pick the change up.
 

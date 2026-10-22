@@ -19,13 +19,13 @@ Paste this into Claude Code on the new computer:
 | --- | --- | --- | --- |
 | `ctx` | `afterever/claude-mods` (this repo) | 0.8.5 | Context window pane and band, compacting on your terms, the plan's pace, its look |
 | `subagent-progress` | `afterever/claude-mods` (this repo) | 2.1.0 | Progress bar and live panel for subagent work |
-| `prompt-upgrade` | `afterever/claude-mods` (this repo) | 0.1.0 | `/better` turns a rough prompt into a great one before it is sent |
+| `prompt-upgrade` | `afterever/claude-mods` (this repo) | 0.2.0 | `/prompt-upgrade` turns a rough prompt into a great one before it is sent |
 | `work-report` | `afterever/claude-mods` (this repo) | 0.4.0 | `/work-report` shows what Claude has done for you: tasks, hours saved, what that is worth |
 | `waypoints` | `afterever/claude-mods` (this repo) | 2.1.0 | Task plan shown as a route above the prompt for a `/goal` or any multi-step work, with a pane that opens by itself; replaces `goal-meter` |
 | `skins` | `hellosverre/claude-skins` | 0.5.13 | Colour scheme and words for the transcript |
 | `superpowers` | `obra/superpowers` | 7.0.0 | Skills library: brainstorming, planning, test-driven development, debugging and review workflows |
 | `agent-pulse` | `afterever/claude-mods` (this repo) | 1.1.0 | Box above the prompt naming the step Claude is on, in color and motion, with a step history |
-| `arsenal` | `afterever/claude-mods` (this repo) | 0.3.1 | Button in the footer under the prompt that opens a docked menu: Prompt Upgrade switch, shortcuts to `/better` and `/work-report`, and your own skills and commands (USER and PROJECT), each of which you can turn off |
+| `arsenal` | `afterever/claude-mods` (this repo) | 0.3.1 | Button in the footer under the prompt that opens a docked menu: Prompt Upgrade switch, shortcuts to `/prompt-upgrade` and `/work-report`, and your own skills and commands (USER and PROJECT), each of which you can turn off |
 
 ## Install
 
@@ -74,12 +74,12 @@ have to configure: its terminal look follows `agent-pulse`'s palette and animati
 ## prompt-upgrade
 
 My own mod, built from the Prompt Upgrade idea and spec of the author of AI Made Easy
-([tristenobrien.ai](https://tristenobrien.ai/)): `/better` asks up to three quick questions,
+([tristenobrien.ai](https://tristenobrien.ai/)): `/prompt-upgrade` asks up to three quick questions,
 rewrites a rough prompt and shows the original and the upgrade side by side. Nothing is sent until
 you press Run. Written against 0.1.0. Nothing to configure.
 
 - **It costs tokens only when used:** each upgrade makes two model calls (`haiku` picks the
-  questions, `sonnet` writes the rewrite). `/better on` makes every typed prompt go through the pane
+  questions, `sonnet` writes the rewrite). `/prompt-upgrade on` makes every typed prompt go through the pane
   first; it starts off and is remembered between sessions.
 - What it does and the commands: [prompt-upgrade/README.md](./prompt-upgrade/README.md).
 
@@ -253,7 +253,7 @@ jellyfish on the desktop. Written against 1.1.0. What changed:
 
 My own mod, from an idea in a video by the author of AI Made Easy ([tristenobrien.ai](https://tristenobrien.ai/)):
 a `[ ◆ Arsenal ▾ ]` button in Claude's orange, in the footer on the first row under the prompt box, opens a menu pane docked on the
-right, with a Prompt Upgrade on/off switch, one-press shortcuts to `/better` and `/work-report`, and two
+right, with a Prompt Upgrade on/off switch, one-press shortcuts to `/prompt-upgrade` and `/work-report`, and two
 sections for your own commands: **USER** (`~/.claude/skills` and `~/.claude/commands`) and
 **PROJECT** (the same two folders in the current repo). `/arsenal` toggles it from the keyboard.
 Written against 0.3.0. Nothing to configure.
@@ -288,7 +288,7 @@ Written against 0.3.0. Nothing to configure.
   footer an original done word (Baked, Brewed, Sautéed...).
 - A multi-step request makes Claude call `mcp__waypoints__tasks` with `plan` first, and the bar
   above the prompt fills as tasks finish; `/waypoints` opens the pane.
-- `/better` opens a pane that asks for a rough prompt; `/work-report` opens the Work Report pane, and a
+- `/prompt-upgrade` opens a pane that asks for a rough prompt; `/work-report` opens the Work Report pane, and a
   `Work report` chip shows above the prompt.
 - A `[ ◆ Arsenal ▾ ]` button shows in the footer on the first row under the prompt box, before the
   `◎ plan` label of `waypoints`; pressing it (or `/arsenal`) opens a pane docked on the right with

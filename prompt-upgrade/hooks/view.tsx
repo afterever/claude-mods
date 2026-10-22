@@ -470,7 +470,7 @@ function historyScreen(el: El, m: Model, a: Actions) {
       {heading(el, 'Recent upgrades', `${m.history.length} of 20`)}
       {m.history.length === 0 && (
         <Text color={COLORS.muted} wrap="wrap">
-          Nothing yet. /better your prompt starts one.
+          Nothing yet. /prompt-upgrade your prompt starts one.
         </Text>
       )}
       {m.history.map((item, i) => {
