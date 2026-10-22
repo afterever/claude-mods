@@ -740,7 +740,7 @@ export const register: Register = (on, options) => {
       },
     })
     await $.command.register({
-      name: 'agents-info',
+      name: 'subagent-progress',
       description: 'Show or hide the panel of subagents: running, finished and planned, with model, context, cost and time',
     })
 
@@ -764,7 +764,7 @@ export const register: Register = (on, options) => {
     return result
   })
 
-  on('command.run', { command: 'agents-info' }, async $ => {
+  on('command.run', { command: 'subagent-progress' }, async $ => {
     const isOpen = await togglePane($)
     return { text: isOpen ? tr().opened : tr().closed }
   })

@@ -1,7 +1,7 @@
 {
   "name": "subagent-progress",
-  "version": "2.1.0",
-  "description": "Progress bar above the prompt plus an agents panel (/agents-info) for any subagent work: running, finished and planned subagents with model, task progress, context, cost and time, each drawn as a crab whose costume follows its model and effort. Fork of johnnyvizz/claude-kit savvy-progress 1.2.0.",
+  "version": "3.0.0",
+  "description": "Progress bar above the prompt plus an agents panel (/subagent-progress) for any subagent work: running, finished and planned subagents with model, task progress, context, cost and time, each drawn as a crab whose costume follows its model and effort. Fork of johnnyvizz/claude-kit savvy-progress 1.2.0.",
   "author": {
     "name": "afterever"
   },

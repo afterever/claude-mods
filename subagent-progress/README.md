@@ -3,7 +3,7 @@
 A Claude Code mod: a progress bar above the prompt and a live panel of subagents, each drawn as a crab whose costume follows the model and effort it runs on. Forked from johnnyvizz's [savvy-progress](https://github.com/johnnyvizz/claude-kit/tree/main/plugins/savvy-progress) 1.2.0 (MIT, see [LICENSE](./LICENSE)) and renamed from `savvy-progress` in 2.0.0, since it shows any subagent work, with or without the savvy-flow skill.
 
 - **Progress bar**: the flow's title, phase, finished agents out of started, and a button with the crew size that opens the panel (`a` presses it while the band holds the focus). It appears when a subagent of any type starts, or when something reports progress. When the work ends it turns into a green **Done** row that stays until you dismiss it with ✕.
-- **Agents panel** (`/agents-info` toggles it): running, finished and planned subagents with model, effort, task progress, context, estimated cost and time. It opens by itself whenever a new batch of subagent work starts. **Collapse** shrinks it to one line per agent.
+- **Agents panel** (`/subagent-progress` toggles it): running, finished and planned subagents with model, effort, task progress, context, estimated cost and time. It opens by itself whenever a new batch of subagent work starts. **Collapse** shrinks it to one line per agent.
 - **Costumes**: working crabs walk, and each costume animates its own prop. On the desktop the crabs are SVG and `prefers-reduced-motion` stops them. In the terminal each card has a small half-block crab beside it (6×2 cells) in the same costumes and colors, and the `animation` setting controls its motion (see [Terminal look](#terminal-look)).
 
 ## Costumes
@@ -33,7 +33,7 @@ The mapping lives in `hooks/crew.ts`, a pure module with its own tests.
 Upstream shows the bar only for `savvy-*` workers or an explicit `progress` report. Here:
 
 - Any subagent (`Explore`, `general-purpose`, a custom one, ...) opens an **auto flow** titled "Subagents". Its counters come from spawns and completions, in `hooks/auto.ts`: every start adds to the total, every finish adds to done, and once every agent of the batch has finished the row closes. Only the batch's own agents count, so an agent left "running" by an interrupted earlier batch cannot hold it open.
-- The panel auto-opens when each batch starts (and for `savvy-*` workers as before). Close it mid-batch and it stays closed until the next batch; `/agents-info` or the crew button reopens it any time.
+- The panel auto-opens when each batch starts (and for `savvy-*` workers as before). Close it mid-batch and it stays closed until the next batch; `/subagent-progress` or the crew button reopens it any time.
 - A new batch of work starts with a clean list; agents still running stay.
 - An orchestrated flow (the `progress` tool, or a `savvy-*` worker) is never touched by this: its counters stay the orchestrator's. Once an explicit report arrives it takes the flow over.
 - The costumes follow model and effort, not agent names (2.0.0).
@@ -51,6 +51,13 @@ The desktop gets SVG crabs; the terminal draws its own:
 It needs a font with block elements and braille, as Cascadia and Nerd Fonts have. Why it is built this way, and what the spike on a live terminal showed: [DESIGN.md](./DESIGN.md).
 
 ## Changes
+
+### 3.0.0: the command is `/subagent-progress`
+
+A breaking release for anyone who types the command: `/agents-info` is gone. It was `savvy-progress`'s command, kept through the 2.0.0 rename; named after the plugin it says where it comes from, like the other mods' commands (`/work-report`, `/prompt-upgrade`).
+
+- **Renamed** `/agents-info` to `/subagent-progress`. It does the same thing: it shows or hides the agents panel. The crew button and the panel's auto-open are unchanged.
+- **No longer shares a name with `savvy-progress`.** The two still draw the same bar and panel, so install only one of them.
 
 ### 2.1.0: the terminal gets crabs and motion
 
@@ -133,6 +140,6 @@ claude plugin install subagent-progress@afterever-mods
 
 Then restart Claude Code.
 
-- **Install only one of this and `savvy-progress`**: both register `/agents-info`. This applies to upstream's `savvy-progress@claude-kit` too.
+- **Install only one of this and `savvy-progress`**: both draw a progress bar above the prompt and an agents panel, so you would get two of each. This applies to upstream's `savvy-progress@claude-kit` too. Upstream's command is still `/agents-info`; here it is `/subagent-progress` since 3.0.0.
 - **A `language` setting** under `pluginConfigs.savvy-progress` has to move to `pluginConfigs.subagent-progress`.
 - **Using upstream's savvy-flow?** Its skill and agents call `mcp__savvy-progress__progress` and `__step`, which no longer exist; they skip those calls silently, so the flow still runs and the bar follows the spawns. To keep its step reporting, change those two tool names in its `skills/` and `agents/` files.
