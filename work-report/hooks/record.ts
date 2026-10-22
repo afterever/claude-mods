@@ -4,7 +4,7 @@
 
 export type Origin = { kind: string; asUser?: boolean | undefined }
 
-/** `/compact`, `/report week`: a slash command, as against a path that happens to start with one. */
+/** `/compact`, `/work-report week`: a slash command, as against a path that happens to start with one. */
 export function isSlashCommand(text: string): boolean {
   const first = text.trimStart().split(/\s+/)[0] ?? ''
   return /^\/[A-Za-z][\w:.-]*$/.test(first)

@@ -39,7 +39,7 @@ import type { Candidate, Found, GitAnswers } from './own'
 // reads isOpen from the panes
 const isOpenAtom = atom({ plugin: 'arsenal', key: 'isOpen' } as const, false)
 const runningAtom = atom({ plugin: 'arsenal', key: 'running' } as const, null)
-const NO_TOOLS: ArsenalTools = { better: false, report: false }
+const NO_TOOLS: ArsenalTools = { better: false, 'work-report': false }
 const toolsAtom = atom({ plugin: 'arsenal', key: 'tools' } as const, NO_TOOLS)
 const noteAtom = atom({ plugin: 'arsenal', key: 'note' } as const, '')
 const ownAtom = atom({ plugin: 'arsenal', key: 'own' } as const, NO_OWN)
@@ -447,7 +447,7 @@ export const register: Register = on => {
   on('command.register', async ($, e, next) => {
     const r = await next(e)
     try {
-      if (e.name === 'better' || e.name === 'report') await update($, toolsAtom, t => ({ ...(t ?? NO_TOOLS), [e.name]: true }))
+      if (e.name === 'better' || e.name === 'work-report') await update($, toolsAtom, t => ({ ...(t ?? NO_TOOLS), [e.name]: true }))
     } catch {
       // the list read at session start stands
     }

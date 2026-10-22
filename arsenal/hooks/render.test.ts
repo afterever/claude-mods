@@ -2,7 +2,7 @@ import { test, expect, mock } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-const BOTH = ['better', 'report', 'model', 'ctx']
+const BOTH = ['better', 'work-report', 'model', 'ctx']
 
 type Opts = {
   /** The command names the session lists. */
@@ -314,9 +314,9 @@ test('every Launch row closes the pane, then runs its tool’s own command', asy
   const rows: [string, string, string][] = [
     ['arsenal-upgrade', 'better', ''],
     ['arsenal-history', 'better', 'history'],
-    ['arsenal-today', 'report', 'today'],
-    ['arsenal-week', 'report', 'week'],
-    ['arsenal-settings', 'report', 'settings'],
+    ['arsenal-today', 'work-report', 'today'],
+    ['arsenal-week', 'work-report', 'week'],
+    ['arsenal-settings', 'work-report', 'settings'],
   ]
   for (const [key, command, args] of rows) {
     w.calls.length = 0
@@ -379,7 +379,7 @@ test('a command that fails leaves a note in the open pane, or a toast once it ha
 })
 
 test('a missing tool takes its rows with it, and the section if none are left', async ($, on) => {
-  world(on, { commands: ['report', 'model'] })
+  world(on, { commands: ['work-report', 'model'] })
   await start($)
   await open($)
   const ui = await pane($)

@@ -333,9 +333,9 @@ export function drawPane(el: El, m: Model, a: Actions) {
         return [...plan.rows.map(line => lineRow(el, line)), lineRow(el, [{ t: plan.axis, tone: 'muted' as const }])]
       })()
   const note = fit(width, [
-    `Hours and dollars are estimates: minutes per task at $${m.settings.rate} an hour. /report settings changes them.`,
-    `Estimates: minutes per task at $${m.settings.rate} an hour. /report settings changes them.`,
-    `Estimates only. /report settings changes them.`,
+    `Hours and dollars are estimates: minutes per task at $${m.settings.rate} an hour. /work-report settings changes them.`,
+    `Estimates: minutes per task at $${m.settings.rate} an hour. /work-report settings changes them.`,
+    `Estimates only. /work-report settings changes them.`,
     'Estimates only.',
   ])
 

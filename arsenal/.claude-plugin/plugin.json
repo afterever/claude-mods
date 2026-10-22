@@ -1,7 +1,7 @@
 {
   "name": "arsenal",
-  "version": "0.3.0",
-  "description": "A menu for the tool mods in this repo and for your own commands: a button in the footer under the prompt box opens a menu pane, docked on the right, with a Prompt Upgrade switch, one-press shortcuts to /better and /report, and USER and PROJECT sections listing your own skills and commands, each of which you can turn off. A remote control, so every row runs a command that already exists.",
+  "version": "0.3.1",
+  "description": "A menu for the tool mods in this repo and for your own commands: a button in the footer under the prompt box opens a menu pane, docked on the right, with a Prompt Upgrade switch, one-press shortcuts to /better and /work-report, and USER and PROJECT sections listing your own skills and commands, each of which you can turn off. A remote control, so every row runs a command that already exists.",
   "author": {
     "name": "afterever"
   },

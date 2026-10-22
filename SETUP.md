@@ -20,12 +20,12 @@ Paste this into Claude Code on the new computer:
 | `ctx` | `afterever/claude-mods` (this repo) | 0.8.5 | Context window pane and band, compacting on your terms, the plan's pace, its look |
 | `subagent-progress` | `afterever/claude-mods` (this repo) | 2.1.0 | Progress bar and live panel for subagent work |
 | `prompt-upgrade` | `afterever/claude-mods` (this repo) | 0.1.0 | `/better` turns a rough prompt into a great one before it is sent |
-| `work-report` | `afterever/claude-mods` (this repo) | 0.3.0 | `/report` shows what Claude has done for you: tasks, hours saved, what that is worth |
+| `work-report` | `afterever/claude-mods` (this repo) | 0.4.0 | `/work-report` shows what Claude has done for you: tasks, hours saved, what that is worth |
 | `waypoints` | `afterever/claude-mods` (this repo) | 2.1.0 | Task plan shown as a route above the prompt for a `/goal` or any multi-step work, with a pane that opens by itself; replaces `goal-meter` |
 | `skins` | `hellosverre/claude-skins` | 0.5.13 | Colour scheme and words for the transcript |
 | `superpowers` | `obra/superpowers` | 7.0.0 | Skills library: brainstorming, planning, test-driven development, debugging and review workflows |
 | `agent-pulse` | `afterever/claude-mods` (this repo) | 1.1.0 | Box above the prompt naming the step Claude is on, in color and motion, with a step history |
-| `arsenal` | `afterever/claude-mods` (this repo) | 0.3.0 | Button in the footer under the prompt that opens a docked menu: Prompt Upgrade switch, shortcuts to `/better` and `/report`, and your own skills and commands (USER and PROJECT), each of which you can turn off |
+| `arsenal` | `afterever/claude-mods` (this repo) | 0.3.1 | Button in the footer under the prompt that opens a docked menu: Prompt Upgrade switch, shortcuts to `/better` and `/work-report`, and your own skills and commands (USER and PROJECT), each of which you can turn off |
 
 ## Install
 
@@ -85,17 +85,17 @@ you press Run. Written against 0.1.0. Nothing to configure.
 
 ## work-report
 
-My own mod: `/report` opens a pane with Today, Week, Month and Year tabs showing the tasks Claude
+My own mod: `/work-report` opens a pane with Today, Week, Month and Year tabs showing the tasks Claude
 finished, an estimate of the hours that saved and what they are worth. Written against 0.3.0.
 Nothing to configure, but the figures are estimates from settings you can change.
 
-- **Set the estimate once:** `/report settings` lists the minutes each kind of task saves and the
-  hourly rate; `/report settings rate 75` changes one.
+- **Set the estimate once:** `/work-report settings` lists the minutes each kind of task saves and the
+  hourly rate; `/work-report settings rate 75` changes one.
 - **It makes no model calls and sends nothing anywhere.** Counts are kept in the mod's own store on
   this computer. The store belongs to the installed copy, so a `--plugin-dir` run keeps a separate
   count.
 - **A chip above the prompt** shows today's count and opens the pane. Other bands above the prompt
-  stack under it. With `arsenal` installed the chip is redundant: `/report settings band off` hides
+  stack under it. With `arsenal` installed the chip is redundant: `/work-report settings band off` hides
   it (kept between sessions), and the Arsenal menu's report rows still open the pane.
 - What it counts, how a task is sorted and how the pane narrows:
   [work-report/README.md](./work-report/README.md).
@@ -253,7 +253,7 @@ jellyfish on the desktop. Written against 1.1.0. What changed:
 
 My own mod, from an idea in a video by the author of AI Made Easy ([tristenobrien.ai](https://tristenobrien.ai/)):
 a `[ ◆ Arsenal ▾ ]` button in Claude's orange, in the footer on the first row under the prompt box, opens a menu pane docked on the
-right, with a Prompt Upgrade on/off switch, one-press shortcuts to `/better` and `/report`, and two
+right, with a Prompt Upgrade on/off switch, one-press shortcuts to `/better` and `/work-report`, and two
 sections for your own commands: **USER** (`~/.claude/skills` and `~/.claude/commands`) and
 **PROJECT** (the same two folders in the current repo). `/arsenal` toggles it from the keyboard.
 Written against 0.3.0. Nothing to configure.
@@ -288,7 +288,7 @@ Written against 0.3.0. Nothing to configure.
   footer an original done word (Baked, Brewed, Sautéed...).
 - A multi-step request makes Claude call `mcp__waypoints__tasks` with `plan` first, and the bar
   above the prompt fills as tasks finish; `/waypoints` opens the pane.
-- `/better` opens a pane that asks for a rough prompt; `/report` opens the Work Report pane, and a
+- `/better` opens a pane that asks for a rough prompt; `/work-report` opens the Work Report pane, and a
   `Work report` chip shows above the prompt.
 - A `[ ◆ Arsenal ▾ ]` button shows in the footer on the first row under the prompt box, before the
   `◎ plan` label of `waypoints`; pressing it (or `/arsenal`) opens a pane docked on the right with

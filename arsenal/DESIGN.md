@@ -7,10 +7,10 @@ reading of the API types and should be checked as it is built.
 ## The problem
 
 Two of the mods in this repo are *tools* the person reaches for: prompt-upgrade (`/better`) and
-work-report (`/report`). The other three (ctx, subagent-progress, agent-pulse) mostly *show
+work-report (`/work-report`). The other three (ctx, subagent-progress, agent-pulse) mostly *show
 progress* and already live in the band above the prompt. To use a tool, you have to remember its
-slash command and its arguments (`/better on`, `/better history`, `/report week`,
-`/report settings`).
+slash command and its arguments (`/better on`, `/better history`, `/work-report week`,
+`/work-report settings`).
 
 The idea comes from a YouTube video by Tristen O'Brien (https://tristenobrien.ai/), who also gave
 us the idea for prompt-upgrade. In it, a button labelled "Tristen's Tools ▼" in the footer under
@@ -128,11 +128,11 @@ One row for now:
 |---|---|---|---|
 | ✦ | Upgrade a prompt | `/better` (opens its compose box) | yes |
 | ◷ | Prompt history | `/better history` | yes |
-| ▤ | Today's report | `/report today` | yes |
-| ▥ | This week's report | `/report week` | yes |
-| ⚙ | Report settings | `/report settings` | yes |
+| ▤ | Today's report | `/work-report today` | yes |
+| ▥ | This week's report | `/work-report week` | yes |
+| ⚙ | Report settings | `/work-report settings` | yes |
 
-- `/report` takes `[today | week | month | year | settings]` (**verified** in work-report's
+- `/work-report` takes `[today | week | month | year | settings]` (**verified** in work-report's
   `register.tsx`).
 - Two columns, prompt-upgrade items on the left and work-report items on the right, when
   `e.props.bodyColumns >= 64`. Below that, one column.
@@ -144,7 +144,7 @@ One row for now:
 ### Which rows show
 
 At `session.start`, read `$.command.list()` (**verified**: it returns all 212 names, `better` and
-`report` among them) and keep only the rows whose command exists. A section left with no rows is
+`work-report` among them) and keep only the rows whose command exists. A section left with no rows is
 not drawn. If no rows are left at all, the launcher is not drawn either, and `/arsenal` opens
 nothing.
 
@@ -247,7 +247,7 @@ A contract may export types and nothing else. `export {}` fails `claude plugin v
 |---|---|
 | `session.start` | register `/arsenal`, read `$.command.list()` into `tools`, read `$.session.model()` into `running`, set `isOpen` from `$.ui.panes()` |
 | `turn.step` | main loop only (no `e.agentId`): update `running` from `e.model` / `e.effort`, then `return yield* next(e)` unchanged (it is a streaming event: an `async function*`) |
-| `command.register` | `await next(e)`, then mark `better` / `report` present in `tools` if that is the command registered |
+| `command.register` | `await next(e)`, then mark `better` / `work-report` present in `tools` if that is the command registered |
 | `command.run` `{ command: 'arsenal' }` | toggle the pane, answer `{}` |
 | `ui.close` | for `arsenal`, any origin but `unload`: `isOpen` false |
 | `ui.render` `AbovePrompt` | `hasSurvey` or no rows → `next(e)`; else `await next(e)`, then the launcher row |
@@ -307,7 +307,7 @@ is one, value `opus`; there is no effort row), and 212 commands including `bette
 
 - **Unit tests** (`menu.test.ts`) cover `modelLabel` (ids, `[1m]` suffix, aliases, unknown
   input), `effortLabel` (each level, a number, absent), the row list for each combination of
-  `better` and `report` being present, and the switch from two columns to one at 64.
+  `better` and `work-report` being present, and the switch from two columns to one at 64.
 - **Render tests** (`render.test.ts`) run the hooks in the engine's test kit, the way ctx's and
   work-report's do, and check that:
   - the band is the plugins-beneath tree, then the launcher, in that order, and the hint line is
@@ -379,12 +379,12 @@ by reading the API types.
   `yield*` and passes `e` down unchanged.
 - **The tools are read twice.** `$.command.list()` at `session.start` can run before a tool's own
   `session.start` has registered its command, so a `command.register` hook (`await next(e)`, then
-  mark `better` or `report` present) keeps `tools` current. In the headless probe `tools` was written
+  mark `better` or `work-report` present) keeps `tools` current. In the headless probe `tools` was written
   three times and ended `{ better: true, report: true }`.
 - **Launch rows during a turn keep the menu open.** The design closed the menu on every Launch press
   and also wanted a `queued:` note in the menu, which cannot both be seen. Now: with the session
   idle the menu closes first (a failure then is a toast, because the note is out of view); during a
-  turn it stays open with `queued: /report today` and closes once the command has run. The Prompt
+  turn it stays open with `queued: /work-report today` and closes once the command has run. The Prompt
   Upgrade switch never closes it.
 - **A model change since the last request drops the effort.** Each time the menu opens, `reconcile`
   compares `$.session.model()` with the last `turn.step`. Same model: keep model and effort.
@@ -780,6 +780,19 @@ is `SessionMode`, a render site this design's survey had counted as a text-only 
 - Other mods that add a `SessionMode` hook above arsenal: waypoints appends to `modes` and
   does not draw a tree, so it works either way; a mod that draws its own tree there would replace
   the row below it. None here does.
+
+## 0.3.1: work-report's command is `/work-report`
+
+work-report 0.4.0 renamed `/report` to `/work-report`: `/report` was too general a word for a
+command that no API reserves. The LAUNCH rows run what the person would type, so arsenal's rows
+had to follow.
+
+- The three report rows in `LAUNCH` now name `work-report`, and `toolsFrom` looks for that name in
+  `$.command.list()`. The key in `ArsenalTools` is `'work-report'` too, because the tool's name in
+  `command` is also its key into `tools`.
+- The two mods change together. With work-report 0.3.x and arsenal 0.3.1 the report rows are
+  gone, and with work-report 0.4.0 and arsenal 0.3.0 they are there but run a command that no
+  longer exists. Update both.
 
 ## Alternatives turned down
 

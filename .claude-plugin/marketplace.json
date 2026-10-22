@@ -23,7 +23,7 @@
     {
       "name": "work-report",
       "source": "./work-report",
-      "description": "Shows what Claude has done for you: /report opens a pane with Today, Week, Month and Year tabs of tasks finished, an estimate of the hours that saved you and what that time is worth."
+      "description": "Shows what Claude has done for you: /work-report opens a pane with Today, Week, Month and Year tabs of tasks finished, an estimate of the hours that saved you and what that time is worth."
     },
     {
       "name": "agent-pulse",
@@ -33,7 +33,7 @@
     {
       "name": "arsenal",
       "source": "./arsenal",
-      "description": "A menu for the tool mods in this repo and for your own commands: a button in the footer under the prompt box opens a menu pane, docked on the right, with a Prompt Upgrade switch, one-press shortcuts to /better and /report, and USER and PROJECT sections listing your own skills and commands, each of which you can turn off. A remote control, so every row runs a command that already exists. Idea from https://tristenobrien.ai/."
+      "description": "A menu for the tool mods in this repo and for your own commands: a button in the footer under the prompt box opens a menu pane, docked on the right, with a Prompt Upgrade switch, one-press shortcuts to /better and /work-report, and USER and PROJECT sections listing your own skills and commands, each of which you can turn off. A remote control, so every row runs a command that already exists. Idea from https://tristenobrien.ai/."
     },
     {
       "name": "waypoints",

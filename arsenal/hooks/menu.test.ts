@@ -30,10 +30,10 @@ import {
   withOff,
 } from './menu'
 
-const BOTH = { better: true, report: true }
-const BETTER = { better: true, report: false }
-const REPORT = { better: false, report: true }
-const NONE = { better: false, report: false }
+const BOTH = { better: true, 'work-report': true }
+const BETTER = { better: true, 'work-report': false }
+const REPORT = { better: false, 'work-report': true }
+const NONE = { better: false, 'work-report': false }
 
 test('a resolved model id reads as its name and version', () => {
   expect(modelLabel('claude-opus-5-5')).toBe('Opus 5.5')
@@ -102,9 +102,9 @@ test('opening the menu takes /model when it names another model, with no effort'
 })
 
 test('tools come from the command names', () => {
-  expect(toolsFrom(['model', 'better', 'report'])).toEqual(BOTH)
+  expect(toolsFrom(['model', 'better', 'work-report'])).toEqual(BOTH)
   expect(toolsFrom(['model', 'better'])).toEqual(BETTER)
-  expect(toolsFrom(['model', 'report'])).toEqual(REPORT)
+  expect(toolsFrom(['model', 'work-report'])).toEqual(REPORT)
   expect(toolsFrom([])).toEqual(NONE)
 })
 
@@ -127,9 +127,9 @@ test('each Launch row runs the command its tool already has', () => {
   }
   expect(line('upgrade')).toBe('/better')
   expect(line('history')).toBe('/better history')
-  expect(line('today')).toBe('/report today')
-  expect(line('week')).toBe('/report week')
-  expect(line('settings')).toBe('/report settings')
+  expect(line('today')).toBe('/work-report today')
+  expect(line('week')).toBe('/work-report week')
+  expect(line('settings')).toBe('/work-report settings')
 })
 
 test('the hotkeys are single letters, all different, and clear of the Prompt Upgrade switch on p', () => {

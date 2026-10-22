@@ -1,6 +1,6 @@
 # arsenal
 
-A Claude Code mod that puts the tool mods in this repo, and your own skills and commands, one press away. A `[ ◆ Arsenal ▾ ]` button in Claude's orange, in the footer on the first row under the prompt box, opens a menu pane docked on the right with a **Prompt Upgrade** switch, shortcuts to `/better` and `/report`, and a **USER** and a **PROJECT** section listing the skills and commands you wrote. You no longer have to remember `/better history` or `/report week`, or what you named your own commands.
+A Claude Code mod that puts the tool mods in this repo, and your own skills and commands, one press away. A `[ ◆ Arsenal ▾ ]` button in Claude's orange, in the footer on the first row under the prompt box, opens a menu pane docked on the right with a **Prompt Upgrade** switch, shortcuts to `/better` and `/work-report`, and a **USER** and a **PROJECT** section listing the skills and commands you wrote. You no longer have to remember `/better history` or `/work-report week`, or what you named your own commands.
 
 > **Credit.** The idea comes from a YouTube video by Tristen O'Brien ([tristenobrien.ai](https://tristenobrien.ai/)), who also gave us the idea for prompt-upgrade. In it, a "Tristen's Tools ▼" button in the footer opens a menu of settings and shortcuts. arsenal is that menu for the tools in this repo, under a name that is not a person's. Why it is built the way it is: [DESIGN.md](./DESIGN.md).
 
@@ -40,9 +40,9 @@ A Claude Code mod that puts the tool mods in this repo, and your own skills and 
 | Prompt Upgrade switch (`p`) | `/better on` or `/better off`. The pill shows the real setting: `● On` or `○ Off`. |
 | ✦ Upgrade a prompt (`u`) | `/better` |
 | ◷ Prompt history (`h`) | `/better history` |
-| ▤ Today's report (`t`) | `/report today` |
-| ▥ This week's report (`w`) | `/report week` |
-| ⚙ Report settings (`s`) | `/report settings` |
+| ▤ Today's report (`t`) | `/work-report today` |
+| ▥ This week's report (`w`) | `/work-report week` |
+| ⚙ Report settings (`s`) | `/work-report settings` |
 
 Click a row, or focus the pane and press its letter.
 
