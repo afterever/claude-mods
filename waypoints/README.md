@@ -8,14 +8,14 @@ Waypoints is a fork of Nate Herk's [goal-meter](https://github.com/nateherkai/cl
 
 Claude plans the work as tasks sized S, M or L with the mod's own tool, `mcp__waypoints__tasks`, then marks each one started and done. Everything on screen comes from that list.
 
-- **The band above the prompt:** the plan drawn as a **route**, a line of nodes and legs, each leg as long as its task is big (S, M or L). Finished legs are solid and shaded, the node a task starts from pulses while it runs, the last node is the destination `◎` (a `✦` once the plan is done). A long plan in a narrow window drops the legs and draws one glyph per task. Under it: what is running and who runs it, the next task, and the goal check's latest "not met yet" reason. In the header: tasks done, the percentage and the ETA at this goal's own pace.
+- **The band above the prompt:** the plan drawn as a **route**, a line of nodes and legs, each leg as long as its task is big (S, M or L). Finished legs are solid and shaded, the task running now is a twinkling `✦` at the start of its leg, a parked task's leg stays dashed with a `⏸`, and the last node is a flag: `⚐` on the way, `⚑` once the plan is done. A long plan in a narrow window drops the legs and draws one glyph per task. Under it: what is running and who runs it, the next task, and one notable row: the goal check's latest "not met yet" reason, `paused, waiting on you`, or `⏸ parked: <blocker>`. In the header: tasks done, the percentage, the ETA at this goal's own pace and how many tasks are parked.
 - **The footer:** `◎ goal 69% · ~15m`, whether or not the band shows. On Claude Desktop, where the band already draws the plan, it appears in the footer only while the band is hidden with `/waypoints hide`.
-- **The pane:** `/waypoints` opens this chat's whole task trail (every task, how long each took, who is running which) and your other chats' goals from the last hour (the newest 15; the heading counts them all), each with its own small route. It also **opens by itself** when a goal's first plan starts, without taking the keys from your prompt, unless you closed the pane during that goal.
+- **The pane:** `/waypoints` opens this chat's whole task trail (every task, how long each took, who is running which, what a finished task turned out to be, and why the plan was revised) and your other chats' goals from the last hour (the newest 15; the heading counts them all), each with its own small route. It also **opens by itself** when a goal's first plan starts, without taking the keys from your prompt, unless you closed the pane during that goal.
 - **Claude Desktop:** the route is a drawn line instead of characters, with the same states and its own motion. Any surface that is not the terminal gets the drawn line.
 
 ```
 ◎ Goal: Add band to Settings type…               3 of 6 · 50% · ~2m   all tasks g
-●━━━━━━━━●━━━━●━━━━━━━━◉┄┄┄┄┄┄┄┄○┄┄┄┄○┄┄┄┄┄┄┄┄◎ +2
+●━━━━━━━━●━━━━●━━━━━━━━✦┄┄┄┄┄┄┄┄○┄┄┄┄○┄┄┄┄┄┄┄┄⚐ +2
 ⠋ M  Tests: normalize, command, band on/off           ◆ reviewer · 1m
   next ○ S  README, version bump, marketplace.json
 ```
@@ -33,6 +33,12 @@ In `/config`, under Waypoints:
 | Pane | `auto`, `off` | `auto` |
 
 `follow` takes [Agent-Pulse](../agent-pulse)'s own palette or animation, so the two bands never disagree, and falls back to `ember` / `subtle` when Agent-Pulse is not installed. Pick a value to stop following. Colour and shape show at every animation level; `off` keeps everything still, `subtle` pulses the running task, `full` also breathes the node and sweeps the route when the plan finishes. `Pane: off` opens the pane only when you ask (`/waypoints` or `g`). A window narrower than 144 columns leaves an unasked pane waiting until it widens; `g` and `/waypoints` open it at any width.
+
+## When the last step is not Claude's to finish
+
+Sometimes everything this chat can do is done and the last task waits on someone else: another team's reply, a release window, a person who is away. Claude **parks** that task with a note naming the blocker. A parked task stays on the route as a dashed leg with a `⏸`, but leaves the header's numbers, so the plan reads `6 of 6 · 100% · 1 parked` and finishes green; the summary row keeps `1 parked: <blocker>`, so green is not read as "all of it is done". `paused, waiting on you` now shows only when an open task really waits on you.
+
+Claude is also asked two things in the same words that ask it to plan: when a task turns out differently than the plan assumed, fix the later tasks and say what changed (the pane shows `revised after #3: <why>`); and never end a turn on an open task without saying why. It finishes the task, parks it, or, when it is unsure what the task takes, asks you with options and a recommendation.
 
 ## When Claude plans
 
@@ -61,6 +67,13 @@ The standing line is the one thing the global `CLAUDE.md` bullet used to do. If 
 For `auto`, anything but `off` turns it on. `/goal clear` (or `stop`, `off`, `cancel`, `end`, `none`, `reset`) stops the goal in the same way. If Claude Code will not give the mod the name `/waypoints`, it registers `/waypoints-mod` instead.
 
 In the band, the **all tasks** button (or `g`) opens the pane. `g` is a button in the band, so it only works while the band shows; `/waypoints` always does.
+
+## What changed in 2.2.0
+
+- **Parked tasks.** The tool's new `park` action, with a required note naming the blocker, takes a task that waits on someone outside the chat out of the numbers, so the plan can finish green. The band, the summary row and the pane name it. See "When the last step is not Claude's to finish".
+- **Plan revisions.** A new `plan` or `add` takes a note saying what changed. The pane shows `revised after #n`, a finished task's note and the new tasks marked `revised`.
+- **Two rules for Claude:** revise the later steps when a step surprises, and never end a turn on an unexplained open task.
+- **New look:** the destination is a flag (`⚐`, then `⚑` when done) instead of a `◎` among the circles, and the running task is a twinkling `✦`, in the pane too.
 
 ## What changed in 2.1.0
 

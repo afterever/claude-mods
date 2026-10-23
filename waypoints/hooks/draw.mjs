@@ -18,7 +18,7 @@
 
 import { minutes, clock, clip, basename } from './fmt.mjs'
 import { progress, eta, live, weight } from './plan.mjs'
-import { routeCells, miniRoute, runs } from './route.mjs'
+import { routeCells, miniRoute, runs, FLAG, FLAG_DONE, PARKED, RUNNING } from './route.mjs'
 import { routeSvg, routeAlt, svgWidth } from './svg.mjs'
 import { NOTE_AT } from './prune.mjs'
 
@@ -50,6 +50,15 @@ function lastDone(tasks) {
   return tasks.filter((t) => t.status === 'done').sort((a, b) => b.doneAt - a.doneAt || b.id - a.id)[0]
 }
 
+// The parked tasks in a few words: one names its blocker (when `withNote`), more are counted
+function parkedWords(p, mask, withNote) {
+  const parked = p.parked || []
+  const n = parked.length
+  if (!n) return ''
+  const note = parked[0].note
+  return n === 1 && withNote && note ? `1 parked: ${mask(note)}` : `${n} parked`
+}
+
 // ---------- the route ----------
 
 function colorOf(roles, cell) {
@@ -71,7 +80,7 @@ function routeRow(el, v, cells, tail, tasks) {
     const running = tasks.map((t, i) => (t.status === 'active' ? i + 1 : 0)).filter(Boolean)
     const width = svgWidth(v.width)
     const source = routeSvg(cells, { hex: v.roles.hex, level: v.level, width, finishId: finishing ? `${v.g.startedAt}-${v.g.endedAt}` : '' })
-    kids.push(el.Svg({ key: 'route', source, alt: routeAlt(p.doneN, p.n, running), width, height: 14 }))
+    kids.push(el.Svg({ key: 'route', source, alt: routeAlt(p.doneN, p.n, running, p.parked.length), width, height: 14 }))
   } else if (finishing && v.level === 'full' && animate) {
     // one-shot, keyed by the finish: it sweeps the sparkle colours along the route once,
     // then rests on the solid route
@@ -123,7 +132,7 @@ function headerRow(el, v, mark, right) {
 }
 
 function spinner(el, v, key) {
-  if (v.level === 'off' || v.svg || !v.pulse) return el.Text({ color: v.roles.activeStill, children: ['◉'] })
+  if (v.level === 'off' || v.svg || !v.pulse) return el.Text({ color: v.roles.activeStill, children: [RUNNING] })
   return v.pulse(key, { kind: 'spin', frames: SPIN.frames, ms: SPIN.ms, colors: [...v.roles.active] }, 1)
 }
 
@@ -163,7 +172,14 @@ function notableRow(el, v) {
     return el.Text({ color: roles.attention, wrap: 'truncate-end', children: [`Goal check: not met yet: ${mask(g.check.reason)}`] })
   }
   if (g.interrupted) return el.Text({ color: roles.attention, children: ['interrupted'] })
-  if (isPaused(g) && progress(g).doneN < progress(g).n) return el.Text({ color: roles.attention, children: ['⏸ paused, waiting on you'] })
+  // parked tasks are left out of n, so only an open task of this chat's own waits on the person
+  const p = progress(g)
+  if (isPaused(g) && p.doneN < p.n) return el.Text({ color: roles.attention, children: ['⏸ paused, waiting on you'] })
+  // someone outside the chat has the ball: worth a glance, not the person's attention
+  if (p.parked.length) {
+    const more = p.parked.length > 1 ? `  +${p.parked.length - 1}` : ''
+    return el.Text({ dimColor: true, wrap: 'truncate-end', children: [`${PARKED} parked: ${mask(p.parked[0].note || '')}${more}`] })
+  }
   return null
 }
 
@@ -189,22 +205,35 @@ export function drawBand(el, v) {
     if (now - g.endedAt >= FULL_MS) {
       const ok = Text({ color: roles.ok, children: ['✓ '] })
       const took = minutes((g.endedAt || now) - g.startedAt)
-      return Box({ flexDirection: 'column', children: [headerRow(el, v, ok, [Text({ dimColor: true, children: [`${p.n} tasks · done in ${took}`] })])] })
+      // a parked task outlives the finish here, so green is not read as "all of it is done"
+      const parked = parkedWords(p, v.mask, true)
+      return Box({ flexDirection: 'column', children: [headerRow(el, v, ok, [Text({ dimColor: true, children: [`${p.n} tasks · done in ${took}${parked ? ' · ' + parked : ''}`] })])] })
     }
   }
 
   const tasks = live(g).sort((a, b) => a.id - b.id)
+  const parked = parkedWords(p, v.mask, false)
   const right = []
   if (g.status === 'met') {
     right.push(Text({ color: roles.ok, bold: true, children: [`done ✓ in ${minutes((g.endedAt || now) - g.startedAt)}`] }))
+    if (parked) right.push(Text({ dimColor: true, children: [parked] }))
   } else {
     const t = eta(g, now)
-    right.push(Text({ children: [Text({ color: roles.activeStill, bold: true, children: [`${p.doneN} of ${p.n} · ${p.pct}%`] }), t ? Text({ dimColor: true, children: [` · ~${minutes(t.ms)}`] }) : null].filter(Boolean) }))
+    right.push(
+      Text({
+        children: [
+          Text({ color: roles.activeStill, bold: true, children: [`${p.doneN} of ${p.n} · ${p.pct}%`] }),
+          t ? Text({ dimColor: true, children: [` · ~${minutes(t.ms)}`] }) : null,
+          parked ? Text({ dimColor: true, children: [` · ${parked}`] }) : null,
+        ].filter(Boolean),
+      }),
+    )
   }
   const head = headerRow(el, v, mark, right)
 
-  // the route fills the width, less the dim +k when the plan grew
-  const grew = g.firstPlan && p.n > g.firstPlan ? ` +${p.n - g.firstPlan}` : ''
+  // the route fills the width, less the dim +k when the plan grew (parked tasks count:
+  // they are on the route, and they were in the first plan)
+  const grew = g.firstPlan && tasks.length > g.firstPlan ? ` +${tasks.length - g.firstPlan}` : ''
   const room = Math.max(8, v.width - grew.length)
   const { cells } = routeCells(tasks, room, { finished: g.status === 'met' })
   const parts = { head: [head, routeRow(el, v, cells, grew, tasks)], now: [], next: [], note: [] }
@@ -244,16 +273,27 @@ export function short(ms) {
   return s < 60 ? s + 's' : minutes(s * 1000)
 }
 
-// The line under the pane's title: the numbers, elapsed, the ETA, growth, goal checks
-export function statsLine(g, p, now) {
-  if (g.status === 'met') return `done ✓ in ${minutes((g.endedAt || now) - g.startedAt)}`
+// Where the plan last changed course: "revised after #3" ("revised" before any task was done)
+function revisedWords(r) {
+  return r.after ? `revised after #${r.after}` : 'revised'
+}
+
+// The line under the pane's title: the numbers, elapsed, the ETA, growth, parked tasks,
+// the latest revision, goal checks
+export function statsLine(g, p, now, mask = (s) => s) {
+  const parked = parkedWords(p, mask, false)
+  if (g.status === 'met') return `done ✓ in ${minutes((g.endedAt || now) - g.startedAt)}` + (parked ? ` · ${parked}` : '')
   if (g.status !== 'running') return 'stopped'
   if (!g.planAt) return 'planning…'
   const parts = [`${p.doneN} of ${p.n} · ${p.pct}%`, `${minutes(now - g.startedAt)} elapsed`]
   const t = eta(g, now)
   if (t) parts.push(`~${minutes(t.ms)} left (≈${clock(t.at)})`)
   else if (p.doneN < 2) parts.push('ETA after 2 tasks finish')
-  if (g.firstPlan && p.n > g.firstPlan) parts.push(`plan grew ${g.firstPlan} → ${p.n}`)
+  const n = live(g).length
+  if (g.firstPlan && n > g.firstPlan) parts.push(`plan grew ${g.firstPlan} → ${n}`)
+  if (parked) parts.push(parked)
+  const revs = g.revisions || []
+  if (revs.length) parts.push(revisedWords(revs[revs.length - 1]))
   if (g.checks) parts.push(`${g.checks} goal check${g.checks === 1 ? '' : 's'}`)
   return parts.join(' · ')
 }
@@ -262,7 +302,9 @@ function trailRow(el, v, t, i, count, barOf, titleW) {
   const { Box, Text } = el
   const { now, mask, roles } = v
   const last = i === count - 1
-  const glyph = t.status === 'dropped' ? '×' : t.status === 'active' ? '◉' : last ? '◎' : t.status === 'done' ? '●' : '○'
+  // the last task's node is the destination flag, raised once that task is done
+  const glyph =
+    t.status === 'dropped' ? '×' : t.status === 'parked' ? PARKED : t.status === 'active' ? RUNNING : last ? (t.status === 'done' ? FLAG_DONE : FLAG) : t.status === 'done' ? '●' : '○'
   const color = t.status === 'done' ? roles.done(count > 1 ? i / (count - 1) : 0) : t.status === 'active' ? roles.activeStill : roles.pending
   const title = clip(mask(t.title), titleW - 3)
   const body =
@@ -279,9 +321,16 @@ function trailRow(el, v, t, i, count, barOf, titleW) {
     tail.push(Text({ color: runsLong(v.g, t, now) ? roles.heat : undefined, dimColor: !runsLong(v.g, t, now), children: [`running ${short(now - t.startedAt)}`] }))
   } else if (t.status === 'dropped') {
     tail.push(Text({ dimColor: true, children: [t.note ? `dropped: ${mask(t.note)}` : 'dropped'] }))
+  } else if (t.status === 'parked') {
+    tail.push(Text({ dimColor: true, children: [`parked: ${mask(t.note || '')}`] }))
+  } else if (t.rev) {
+    tail.push(Text({ dimColor: true, children: ['revised'] }))
   }
   // the tail is one Text, so its pieces sit side by side with no column gap between them
-  return Box({ flexDirection: 'row', columnGap: 1, children: [Text({ color, children: [glyph] }), Box({ width: titleW, flexShrink: 0, children: [body] }), ...(tail.length ? [Text({ children: tail })] : [])] })
+  // the running task's star twinkles here as on the route: a Client on the terminal, still elsewhere
+  const twinkle = t.status === 'active' && v.pulse && !v.svg && v.level !== 'off'
+  const node = twinkle ? v.pulse(`pane-node-${t.id}`, { kind: 'node', colors: [...roles.active], breathe: v.level === 'full' }, 1) : Text({ color, children: [glyph] })
+  return Box({ flexDirection: 'row', columnGap: 1, children: [node, Box({ width: titleW, flexShrink: 0, children: [body] }), ...(tail.length ? [Text({ children: tail })] : [])] })
 }
 
 function connectorRow(el, v, above) {
@@ -318,7 +367,7 @@ export function drawPane(el, v) {
   if (g) {
     const p = progress(g)
     rows.push(Text({ bold: true, wrap: 'truncate-end', children: [`◎ ${label(g)}: ${mask(g.title)}`] }))
-    rows.push(Text({ dimColor: true, wrap: 'truncate-end', children: ['  ' + statsLine(g, p, v.now)] }))
+    rows.push(Text({ dimColor: true, wrap: 'truncate-end', children: ['  ' + statsLine(g, p, v.now, mask)] }))
     rows.push(Text({ children: [' '] }))
     const tasks = g.tasks.filter((t) => !t.replaced)
     if (!tasks.length) rows.push(Text({ dimColor: true, children: ['No task plan yet.'] }))
@@ -327,8 +376,15 @@ export function drawPane(el, v) {
     const titleW = Math.max(16, Math.min(48, v.width - 34))
     tasks.forEach((t, i) => {
       rows.push(trailRow(el, v, t, i, tasks.length, barOf, titleW))
+      // what a finished task turned out to be, under it: the reason a later step changed
+      if (t.status === 'done' && t.note) rows.push(Text({ dimColor: true, wrap: 'truncate-end', children: [`      ${mask(t.note)}`] }))
       if (i < tasks.length - 1 && tasks.length <= NO_CONNECTORS_OVER) rows.push(connectorRow(el, v, t))
     })
+    const revs = (g.revisions || []).slice(-3)
+    if (revs.length) {
+      rows.push(Text({ children: [' '] }))
+      for (const r of revs) rows.push(Text({ dimColor: true, wrap: 'truncate-end', children: [`${revisedWords(r)}: ${mask(r.note)}`] }))
+    }
     if (g.check && g.check.reason) {
       rows.push(Text({ children: [' '] }))
       rows.push(Text(g.check.met === false ? { color: roles.attention, children: [`Last goal check: not met yet: ${mask(g.check.reason)}`] } : { dimColor: true, children: [`Last goal check: ${mask(g.check.reason)}`] }))

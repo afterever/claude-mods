@@ -360,3 +360,77 @@ All of it, in this order: `palette.mjs` + tests → `route.mjs` + tests → `dra
 auto-open + settings → `pulse.mjs` → `svg.mjs` (Desktop) → docs. The two facts to confirm live rather than assume
 are marked above: the `agent-pulse.<field>` row key and `config.set` reaching Waypoints for another plugin's
 change. If either fails, fall back as described and note it in the PR.
+
+## 2.2.0: parked tasks, plan revisions, the finish flag
+
+The case: a 7-task plan, 6 done, the last one ("propose the PR") waiting on another team with no
+ETA. The bar sat at `6 of 7` under `⏸ paused, waiting on you` for days, and the person was not the one being waited
+on. Three changes, all chosen by the person; the details below marked **(builder's call)** were not asked.
+
+### `park`: a task only an outside party can move
+
+- **The action.** `park` with `id`/`ids` and a **required** `note` naming the blocker (`waiting on the other team`).
+  Without a note it fails like any other bad call. The task's status becomes `parked`.
+- **Counting.** A parked task leaves the header's total, as a dropped one does: `progress()` counts `live()` tasks
+  that are not parked. `live()` keeps it, so it is still drawn. The header adds `· 1 parked`:
+  `6 of 6 · 100% · 1 parked`, never `7 of 7`.
+- **Finishing.** No new code path: the turn that ends with every counted task done finishes the plan green through
+  `finishGoal('tasks')`, as today. The collapsed summary row keeps it: `6 tasks · done in 41m · 1 parked: waiting
+  on the other team` (with two or more, `2 parked`, no note). A plan whose tasks are *all* parked does not finish.
+- **Un-parking (builder's call).** `start`, `done` and `drop` work on a parked task as on any other; `start` clears
+  the note.
+- **External only.** `park` always means someone outside this session has the ball. Waiting on the person stays
+  an open task, and `⏸ paused, waiting on you` is then true.
+- **Drawing.** Route: a parked task's leg stays dashed (even on a finished route) with `⏸` in its middle cell; the
+  node at its end is `○` while running, `●` once finished. Dense mode draws `⏸`. Pane: node `⏸`, tail
+  `parked: <note>`. Notable row, after `paused, waiting on you`: `⏸ parked: <note>` (`+n` when more). Parked
+  cells take the `pending` colour, not `attention`: nothing needs the person **(builder's call)**. Desktop SVG: two
+  short bars on the dashed leg. The `alt` adds `, n parked`.
+- **Not carried over.** A parked task lives in this chat's plan only; the handoff carries it to a later session.
+
+### Plan revisions: when a step turns out differently
+
+Re-planning already works (`plan` again replaces the pending tasks; `add`, `drop`), but nothing asked Claude to
+look at the later steps, and nothing recorded why the route changed.
+
+- **The rule** (tool description, `instruction()`, `standing()`): when a task turns out differently than the plan
+  assumed, check the tasks still to do and fix them with `plan`, `add` or `drop`, with a `note` saying what changed.
+- **The record.** `plan` (once a plan exists) and `add` take an optional `note`. With one, the goal gains
+  `revisions: [{ at, after, note }]`, `after` being the id of the last task finished (0 if none), and the new tasks
+  carry `rev: true`.
+- **Shown in the pane:** the stats line adds `revised after #3` (the latest); a done task's own note shows dim
+  under its row; a pending `rev` task's tail says `revised`; the last three revisions are listed under the trail as
+  `revised after #3: <note>`. The band does not change: the route already shows the new shape.
+
+### Never end a turn with an unexplained open task
+
+The mod draws `paused, waiting on you`; Claude never sees it. So the rule goes into the words Claude reads
+(`instruction()`, `standing()`), not into a hook: before ending a turn with a task still open, finish it, `park`
+it when it waits on someone outside the session, or, when unsure what it takes, ask the person with concrete
+options and a recommendation. No reminder hook: the person chose the rule alone.
+
+### The finish flag
+
+The destination was `◎`, one circle among `●`, `◉` and `○`. It is now a flag: `⚐` while the plan runs (in the
+`done` colour once the last task is done, else `pending`), `⚑` in `sparkle` when the plan finishes (it replaces
+`✦` there). The pane's last task uses the same flag (`⚑` when done). `⚐`/`⚑` (U+2690/2691) are one-cell text
+symbols, not emoji, so the route's fit is unchanged. Desktop SVG: a pole and a pennant, outline while pending,
+filled at the end; the three finish stars still twinkle. The header's `◎ Plan:` mark and the footer's `◎` stay:
+they are the mod's mark, not the destination.
+
+### The running task twinkles
+
+Asked for during the build: the running task is a `✦` that twinkles, on the route and now in the pane too
+(2.0's pane drew a still `◉`). The node `Client` (`pulse.mjs`) cycles the `active` shimmer and dips to a hollow `✧`
+one frame in eight (≈1 s at 120 ms); at `full` it also flares `✷` once a cycle (it no longer breathes `◉ → ◎`). It
+never goes blank, so the route keeps its shape. The pane's running row takes the same `Client`
+(`pane-node-<id>`) on the terminal; at `off`, on Desktop and wherever there is no `Client` it is a still `✦`.
+Desktop's route draws the node as a four-point star in its glow, with a CSS twinkle (`.run`) at `subtle` and above.
+The now row keeps its braille spinner (the person's call): the star says *where* the task is, the spinner that
+something is happening. Its still form at `off` and on Desktop is `✦` too.
+
+### The tool contract changes
+
+Unlike 2.0, this release changes what Claude reads: the `park` action, `note` on `plan`/`add`/`park`, and the two
+rules. The data file gains `parked`, `rev` and `revisions`; a chat on 2.1 reading a 2.2 file counts a parked task
+as pending, which is harmless. Version **2.2.0**.
