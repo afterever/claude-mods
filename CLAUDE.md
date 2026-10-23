@@ -11,6 +11,10 @@
 - **A pull request must pass CI to merge:** `.github/workflows/ci.yml` validates the manifests
   and runs every mod's tests. Nobody can force-push to or delete `master`; only the repo admin
   can skip the CI requirement, which is what lets a prose commit go straight to `master`.
+- **Once a pull request is ready, merge and release it without asking:** squash-merge it after CI
+  passes, tag and publish the release, then update the mod locally. The person always tests the
+  new code afterwards in a fresh Claude session, so there is no need to hold the merge for a live
+  check; a problem found there becomes the next version.
 
 ## Mods that draw in the band
 

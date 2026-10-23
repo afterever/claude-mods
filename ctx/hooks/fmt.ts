@@ -19,6 +19,21 @@ export function fmtShare(row: CtxRow, max: number): string {
   return ((row.tokens / max) * 100).toFixed(1) + '%'
 }
 
+// The pane's rows in three groups: what the window holds, largest first; the
+// buffer and the free space, which are headroom rather than something to trim;
+// then the deferred schemas, largest first, since they sit outside the window.
+// Sorting them in with the rest would put them at the top of a list of what the
+// window holds. Sizes that tie keep the order /context gave them
+export function paneRows(rows: readonly CtxRow[]): CtxRow[] {
+  const group = (r: CtxRow) => (r.kind === 'used' ? 0 : r.kind === 'deferred' ? 2 : 1)
+  const rank = (r: CtxRow) => (r.kind === 'free' ? 1 : 0)
+  return rows
+    .filter(r => r.tokens > 0 || r.kind === 'free')
+    .map((r, i) => ({ r, i }))
+    .sort((a, b) => group(a.r) - group(b.r) || (group(a.r) === 1 ? rank(a.r) - rank(b.r) : b.r.tokens - a.r.tokens) || a.i - b.i)
+    .map(x => x.r)
+}
+
 // "12/40" when the listing left some out, "40" when it holds them all
 export function fmtCount(included: number, total: number): string {
   return included < total ? `${included}/${total}` : String(total)

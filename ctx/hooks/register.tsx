@@ -52,6 +52,7 @@ import {
   fmtTokens,
   growthSpan,
   openerFor,
+  paneRows,
   shareBar,
   shortPath,
   sparkline,
@@ -1335,20 +1336,18 @@ export const register: Register = (on, options) => {
           </Box>
         )}
         <Text> </Text>
-        {s.rows
-          .filter(r => r.tokens > 0 || r.kind === 'free')
-          .map(r => (
-            <Box flexDirection="row" width="100%" columnGap={1}>
-              {Swatch({ el, kind: r.kind, color: tints[r.name]?.core ?? r.color, scope: r.name, ...(water ? { water: water.water } : {}) })}
-              <Box flexGrow={1} flexShrink={1}>
-                <Text wrap="truncate-end" dimColor={r.kind === 'deferred'} hover={{ scope: SCOPE + r.name, bold: true }}>
-                  {r.name}
-                </Text>
-              </Box>
-              <Text dimColor>{fmtTokens(r.tokens).padStart(6)}</Text>
-              <Text bold>{fmtShare(r, s.max).padStart(6)}</Text>
+        {paneRows(s.rows).map(r => (
+          <Box flexDirection="row" width="100%" columnGap={1}>
+            {Swatch({ el, kind: r.kind, color: tints[r.name]?.core ?? r.color, scope: r.name, ...(water ? { water: water.water } : {}) })}
+            <Box flexGrow={1} flexShrink={1}>
+              <Text wrap="truncate-end" dimColor={r.kind === 'deferred'} hover={{ scope: SCOPE + r.name, bold: true }}>
+                {r.name}
+              </Text>
             </Box>
-          ))}
+            <Text dimColor>{fmtTokens(r.tokens).padStart(6)}</Text>
+            <Text bold>{fmtShare(r, s.max).padStart(6)}</Text>
+          </Box>
+        ))}
         <Text> </Text>
         {section('mcp', 'm', 'MCP tools', s.mcpTokens, String(s.mcpCount))}
         {s.mcpDeferredCount > 0 && (
