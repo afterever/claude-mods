@@ -434,3 +434,9 @@ something is happening. Its still form at `off` and on Desktop is `✦` too.
 Unlike 2.0, this release changes what Claude reads: the `park` action, `note` on `plan`/`add`/`park`, and the two
 rules. The data file gains `parked`, `rev` and `revisions`; a chat on 2.1 reading a 2.2 file counts a parked task
 as pending, which is harmless. Version **2.2.0**.
+
+**Seen live** (Windows Terminal, 2026-10-23, 2.2.0 installed from the release): a 5-task demo plan. The running `✦`
+twinkled in the band and the pane, the spinner stayed in the now row, and `⚐` became `⚑` at the finish. A revision
+after #3 showed in the pane's stats, under the task and in the list. The parked last task read
+`4 of 4 · 100% · 1 parked` with `⏸ parked: <blocker>` and no "waiting on you", and the summary row kept it. With a
+last step Claude was unsure of, it asked with options and a recommendation instead of stopping at "paused".
