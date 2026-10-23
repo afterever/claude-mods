@@ -1,6 +1,6 @@
 import { test, expect } from 'claude-code/testing'
 
-import type { CtxSnapshot } from '../types'
+import type { CtxRow, CtxSnapshot } from '../types'
 import { categoryTints } from './palette'
 import {
   ago,
@@ -20,6 +20,7 @@ import {
   fmtTokens,
   headline,
   openerFor,
+  paneRows,
   shareBar,
   sparkline,
   trend,
@@ -59,6 +60,36 @@ const snap: CtxSnapshot = {
 }
 
 const cells = (runs: { text: string }[]) => runs.reduce((a, r) => a + [...r.text].length, 0)
+
+test('paneRows: used rows by size, then the buffer and the free space, then the deferred rows by size', () => {
+  const row = (name: string, tokens: number, kind: CtxRow['kind']): CtxRow => ({ name, tokens, color: 'inactive', kind })
+  const rows = [
+    row('System prompt', 4800, 'used'),
+    row('System tools', 32000, 'used'),
+    row('MCP tools (deferred)', 25800, 'deferred'),
+    row('System tools (deferred)', 41100, 'deferred'),
+    row('Memory files', 1400, 'used'),
+    row('Skills', 9900, 'used'),
+    row('Compact buffer', 3000, 'buffer'),
+    row('Free space', 948900, 'free'),
+  ]
+  expect(paneRows(rows).map(r => r.name)).toEqual([
+    'System tools',
+    'Skills',
+    'System prompt',
+    'Memory files',
+    'Compact buffer',
+    'Free space',
+    'System tools (deferred)',
+    'MCP tools (deferred)',
+  ])
+})
+
+test('paneRows: equal sizes keep the order they came in, and empty rows drop out but free space stays', () => {
+  const row = (name: string, tokens: number, kind: CtxRow['kind']): CtxRow => ({ name, tokens, color: 'inactive', kind })
+  const rows = [row('B', 5, 'used'), row('A', 5, 'used'), row('Empty', 0, 'used'), row('Free space', 0, 'free'), row('No buffer', 0, 'buffer')]
+  expect(paneRows(rows).map(r => r.name)).toEqual(['B', 'A', 'Free space'])
+})
 
 test('fmtTokens matches the Desktop panel', () => {
   expect(fmtTokens(584)).toBe('584')

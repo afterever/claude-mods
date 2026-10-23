@@ -13,7 +13,8 @@ terminal. It only observes. It never compacts, rewrites or turns anything off un
   bar is 16 cells, 24 from 130 columns, 48 from 160, 64 from 200 and 96 from 240 (8 under 70), so
   the minimum cells overstate a near-empty window less; while an auto-compact warning stands it
   stays at 16 until 240 columns.
-- **The pane** is the full breakdown: categories, trend, cost, MCP servers, memory files, skills,
+- **The pane** is the full breakdown: categories (largest first, the free space after them, the
+  deferred ones last), trend, cost, MCP servers, memory files, skills,
   agents, the heaviest results and what has gone unused.
 - **The Desktop app** draws the same band.
 
@@ -133,7 +134,7 @@ only. The band's trend takes the pane's colours.
 ## Requirements
 
 - A Claude Code build that loads mods (plugins that register `hooks`).
-- Version 0.8.5's tests run on Claude Code 2.1.304. 0.7.0 ran live on 2.1.302, on the terminal and
+- Version 0.8.6's tests run on Claude Code 2.1.310. 0.7.0 ran live on 2.1.302, on the terminal and
   Claude Desktop (the pace in the band); 0.8.0's look was seen live on Windows. The engine API ctx uses was checked against build 2.1.288 (see
   [DESIGN.md](./DESIGN.md)); no older minimum has been tried.
 
