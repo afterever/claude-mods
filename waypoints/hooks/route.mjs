@@ -1,11 +1,21 @@
 // The route: the plan drawn as a line of nodes and legs. Pure: it returns cells
 // { ch, role, t } and knows nothing of colour or the engine; draw.mjs colours them
 // and svg.mjs draws the same cells as a picture. Roles: 'done', 'active' (the pulsing
-// node), 'pending' (dim, the running leg included) and 'sparkle' (the finish mark).
+// node), 'pending' (dim, the running leg and a parked task included) and 'sparkle' (the
+// finish mark).
 
 import { weight } from './plan.mjs'
 
 const MAX_UNIT = 6 // cells per unit of work when there is room to spare
+
+// The destination is a flag, so it reads apart from the task nodes (all circles): open
+// while the plan runs, raised when it is done. Both are one-cell text symbols, not emoji.
+export const FLAG = '⚐'
+export const FLAG_DONE = '⚑'
+// A task waiting on someone outside the chat
+export const PARKED = '⏸'
+// The task running now: a star that twinkles (pulse.mjs), still at animation off
+export const RUNNING = '✦'
 
 function route(tasks) {
   return tasks.filter((t) => t.status !== 'dropped' && !t.replaced).sort((a, b) => a.id - b.id)
@@ -22,14 +32,17 @@ function layout(tasks, legs, finished) {
   const lit = (k) => tasks[k] && tasks[k].status === 'active'
   for (let k = 0; k <= tasks.length; k++) {
     const last = k === tasks.length
-    if (finished) cells.push(last ? cell('✦', 'sparkle') : cell('●', 'done'))
-    else if (lit(k)) cells.push({ ...cell('◉', 'active'), id: tasks[k].id })
-    else if (last) cells.push(cell('◎', tasks[k - 1].status === 'done' ? 'done' : 'pending'))
+    if (finished) cells.push(last ? cell(FLAG_DONE, 'sparkle') : cell('●', 'done'))
+    else if (lit(k)) cells.push({ ...cell(RUNNING, 'active'), id: tasks[k].id })
+    else if (last) cells.push(cell(FLAG, tasks[k - 1].status === 'done' ? 'done' : 'pending'))
     else if (k === 0 || tasks[k - 1].status === 'done') cells.push(cell('●', 'done'))
     else cells.push(cell('○', 'pending'))
     if (last) break
-    const done = finished || tasks[k].status === 'done'
-    for (let i = 0; i < legs[k]; i++) cells.push(done ? cell('━', 'done') : cell('┄', 'pending'))
+    // a parked leg stays dashed, finished or not, with the pause mark in its middle
+    const parked = tasks[k].status === 'parked'
+    const done = !parked && (finished || tasks[k].status === 'done')
+    const mid = Math.floor((legs[k] - 1) / 2)
+    for (let i = 0; i < legs[k]; i++) cells.push(parked && i === mid ? cell(PARKED, 'pending') : done ? cell('━', 'done') : cell('┄', 'pending'))
   }
   const span = Math.max(1, cells.length - 1)
   cells.forEach((c, i) => (c.t = i / span))
@@ -38,7 +51,14 @@ function layout(tasks, legs, finished) {
 
 // One glyph per task, no legs, cut with … when the plan is longer than the room
 function dense(tasks, width, finished) {
-  const glyph = (t) => (finished || t.status === 'done' ? cell('●', 'done') : t.status === 'active' ? { ...cell('◉', 'active'), id: t.id } : cell('○', 'pending'))
+  const glyph = (t) =>
+    t.status === 'parked'
+      ? cell(PARKED, 'pending')
+      : finished || t.status === 'done'
+        ? cell('●', 'done')
+        : t.status === 'active'
+          ? { ...cell(RUNNING, 'active'), id: t.id }
+          : cell('○', 'pending')
   let cells = tasks.map(glyph)
   if (cells.length > width) cells = [...cells.slice(0, Math.max(0, width - 1)), cell('…', 'pending')]
   const span = Math.max(1, cells.length - 1)
@@ -47,7 +67,7 @@ function dense(tasks, width, finished) {
 }
 
 // The band's route, fitted to `width` cells: legs proportional to S/M/L (at least 2 cells),
-// then 1 cell each, then dense. `finished` draws it all solid with a ✦ at the end.
+// then 1 cell each, then dense. `finished` draws it all solid (a parked leg aside) with a ⚑ at the end.
 export function routeCells(allTasks, width, { finished = false } = {}) {
   const tasks = route(allTasks || [])
   const room = Math.max(1, Math.floor(width))

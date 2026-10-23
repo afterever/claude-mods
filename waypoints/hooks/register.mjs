@@ -620,7 +620,9 @@ export function register(on, opts) {
     const el = $.ui.resolve(e)
     const width = Math.max(50, (e.props && e.props.bodyColumns) || 100)
     const files = { count: fileCount, dir: shownPath(home + DIR) }
-    return drawPane(el, { g: G, now, mask, roles, level: look.level, width, others, sessionId, commandName, settings, files })
+    // the running task twinkles in the pane too: the same Client as the band's route
+    const pulse = el.Client ? (key, props, w) => el.Client({ key, module: './pulse.mjs', props, width: w, height: 1 }) : undefined
+    return drawPane(el, { g: G, now, mask, roles, level: look.level, width, others, sessionId, commandName, settings, files, pulse, svg: e.surface !== 'terminal' })
   })
 }
 
@@ -652,12 +654,13 @@ function footerLabel() {
   return ''
 }
 
-const ICON = { done: '✓', active: '▶', pending: '○', dropped: '×' }
+const ICON = { done: '✓', active: '▶', pending: '○', dropped: '×', parked: '⏸' }
 
 function taskTail(t) {
   if (t.status === 'done') return t.doneAt > t.startedAt ? minutes(t.doneAt - t.startedAt) : ''
   if (t.status === 'active') return (t.by ? t.by + ' · ' : '') + 'running ' + minutes(now - t.startedAt)
   if (t.status === 'dropped') return 'dropped' + (t.note ? ': ' + t.note : '')
+  if (t.status === 'parked') return 'parked: ' + (t.note || '')
   return ''
 }
 
@@ -665,7 +668,7 @@ function taskTail(t) {
 function plainText() {
   if (!G) return 'No goal in this chat.'
   const p = progress(G)
-  const lines = [`${label(G)}: ${mask(G.title)}`, `${statsLine(G, p, now)}  ${bar(p.fraction, 30)}`]
+  const lines = [`${label(G)}: ${mask(G.title)}`, `${statsLine(G, p, now, mask)}  ${bar(p.fraction, 30)}`]
   for (const t of G.tasks.filter((x) => !x.replaced)) lines.push(`${ICON[t.status] || '○'} ${t.size}  ${mask(t.title)}  ${mask(taskTail(t))}`)
   return lines.filter(Boolean).join('\n')
 }

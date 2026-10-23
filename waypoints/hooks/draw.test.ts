@@ -184,8 +184,8 @@ test('the running node pulses on a Client keyed by its task, and not at animatio
   expect(nodes(drawBand(el, view(g, { level: 'full' })))[0].props.breathe).toBe(true)
   const off = drawBand(el, view(g, { level: 'off' }))
   expect(nodes(off)).toHaveLength(0)
-  expect(flat(off.children[1])).toContain('◉')
-  // and its spinner is a still ◉
+  expect(flat(off.children[1])).toContain('✦')
+  // and its spinner is a still ✦
   expect(all(off, (x) => x.t === 'Client')).toHaveLength(0)
 })
 
@@ -199,10 +199,10 @@ test('a finished plan sweeps the route at full, stays solid below, then collapse
   const sweep = all(full, (x) => x.t === 'Client')
   expect(sweep).toHaveLength(1)
   expect(sweep[0].key).toBe(`sweep-${g.startedAt}-${g.endedAt}`)
-  expect(sweep[0].props.chars.endsWith('✦')).toBe(true)
+  expect(sweep[0].props.chars.endsWith('⚑')).toBe(true)
   const subtle = fresh('subtle')
   expect(all(subtle, (x) => x.t === 'Client')).toHaveLength(0)
-  expect(flat(subtle.children[1]).endsWith('✦')).toBe(true)
+  expect(flat(subtle.children[1]).endsWith('⚑')).toBe(true)
   expect(rows(subtle)[0]).toContain('done ✓ in 3m')
   // eight seconds on: one row
   const later = rows(drawBand(el, view(g, { now: g.endedAt + FULL_MS + 1 })))
@@ -253,11 +253,12 @@ test('the trail lists every task with its node, a connector between them and its
   const g = midway()
   const l = lines(drawPane(el, paneView(g)))
   expect(l[0]).toBe('◎ Goal: ship the band')
-  const trail = l.filter((x: string) => /^[●◉○◎×] [SML]  /.test(x))
+  const trail = l.filter((x: string) => /^(?:[●✦○⚐⚑⏸×]|\[pane-node-\d+\]) [SML]  /.test(x))
   expect(trail).toHaveLength(4)
   expect(trail[0]).toMatch(/^● M  parse +▅+ 1m$/)
-  expect(trail[2]).toMatch(/^◉ M  tests +◆ reviewer · running 1m$/)
-  expect(trail[3]).toMatch(/^◎ S  readme/) // the last node is the destination
+  // the running task's star twinkles: a Client keyed by its task
+  expect(trail[2]).toMatch(/^\[pane-node-3\] M  tests +◆ reviewer · running 1m$/)
+  expect(trail[3]).toMatch(/^⚐ S  readme/) // the last node is the destination
   // ┃ under a finished task, ┆ otherwise
   expect(l.filter((x: string) => x === '┃')).toHaveLength(2)
   expect(l.filter((x: string) => x === '┆')).toHaveLength(1)
@@ -280,7 +281,7 @@ test('replaced tasks are hidden, dropped ones stay with their note', async () =>
   const g = midway()
   applyAction(g, { action: 'plan', tasks: [{ title: 'fresh start', size: 'S' }] }, { now: T0 + 3 * MIN })
   applyAction(g, { action: 'drop', id: 3, note: 'not needed' }, { now: T0 + 3 * MIN })
-  const trail = lines(drawPane(el, paneView(g))).filter((x: string) => /^[●◉○◎×] [SML]  /.test(x))
+  const trail = lines(drawPane(el, paneView(g))).filter((x: string) => /^(?:[●✦○⚐⚑⏸×]|\[pane-node-\d+\]) [SML]  /.test(x))
   expect(trail.some((x: string) => x.includes('readme'))).toBe(false) // replaced
   expect(trail.some((x: string) => x.includes('fresh start'))).toBe(true)
   const dropped = trail.find((x: string) => x.startsWith('×'))!
@@ -292,7 +293,7 @@ test('connectors are left out past ten tasks', async () => {
   applyAction(g, { action: 'plan', tasks: Array.from({ length: 12 }, (_, i) => ({ title: 't' + i, size: 'S' })) }, { now: T0 })
   const l = lines(drawPane(el, paneView(g)))
   expect(l.filter((x: string) => x === '┃' || x === '┆')).toHaveLength(0)
-  expect(l.filter((x: string) => /^[○◎] [SML]  /.test(x))).toHaveLength(12)
+  expect(l.filter((x: string) => /^[○⚐] [SML]  /.test(x))).toHaveLength(12)
 })
 
 test('other chats get a mini route and their own tail; this chat is not listed twice', async () => {
@@ -302,9 +303,9 @@ test('other chats get a mini route and their own tail; this chat is not listed t
   const l = lines(drawPane(el, paneView(midway(), { others: [other, done, mine] })))
   expect(l).toContain('Other chats (2)')
   const row = l.find((x: string) => x.includes('agent-pulse: palette work'))!
-  expect(row).toContain('●━●━◉┄○┄◎')
+  expect(row).toContain('●━●━✦┄○┄⚐')
   expect(row).toMatch(/50% · ~3m$/)
-  expect(l.find((x: string) => x.includes('band setting'))).toMatch(/●━✦ +done ✓$/)
+  expect(l.find((x: string) => x.includes('band setting'))).toMatch(/●━⚑ +done ✓$/)
 })
 
 test('the pane ends with auto\'s state, the commands and where the look is set', async () => {
@@ -366,7 +367,7 @@ test('the running node pulses at subtle and above, and a light travels the leg a
   expect(svg(g, { level: 'full' })).toContain('class="go"')
 })
 
-test('the finish plays once: a sweep and three stars at full, only the ✦ below', async () => {
+test('the finish plays once: a sweep and three stars at full, only the ⚑ below', async () => {
   const g = midway()
   applyAction(g, { action: 'done', ids: [3, 4] }, { now: T0 + 3 * MIN })
   const full = svg(g, { level: 'full', finishId: '100-200' })
@@ -377,7 +378,7 @@ test('the finish plays once: a sweep and three stars at full, only the ✦ below
   expect(svg(g, { level: 'full', finishId: '100-999' })).not.toBe(full)
   const subtle = svg(g, { level: 'subtle', finishId: '100-200' })
   expect(subtle).not.toContain('fin-100-200')
-  expect(subtle).toContain('<polygon') // the ✦ on the last node
+  expect(subtle).toContain('<polygon') // the ⚑ pennant on the last node
   // a running plan has no finish effects at all
   expect(svg(midway(), { level: 'full' })).not.toContain('class="sweep"')
 })
@@ -406,8 +407,129 @@ test('on Desktop the band draws the route as an Svg and a still spinner, with a 
   expect(svgs).toHaveLength(1)
   expect(svgs[0].alt).toBe('2 of 4 tasks done, task 3 running')
   expect(svgs[0].source).toContain('<svg')
-  // the motion is in the SVG: no Client anywhere, and the now row's spinner is a still ◉
+  // the motion is in the SVG: no Client anywhere, and the now row's spinner is a still ✦
   expect(all(tree, (x) => x.t === 'Client')).toHaveLength(0)
-  expect(rows(tree).find((x: string) => x.includes('M  •••'))).toContain('◉')
+  expect(rows(tree).find((x: string) => x.includes('M  •••'))).toContain('✦')
   expect(JSON.stringify(svgs[0].alt)).not.toContain('tests')
+})
+
+// ---------- parked tasks and revisions ----------
+
+// parse, settings and tests done; readme waits on someone outside the chat
+function parkedAtEnd() {
+  const g = midway()
+  applyAction(g, { action: 'done', id: 3 }, { now: T0 + 3 * MIN })
+  applyAction(g, { action: 'park', id: 4, note: 'waiting on the other team' }, { now: T0 + 3 * MIN })
+  g.active = false
+  g.lastTurnEnd = T0 + 3 * MIN
+  return g
+}
+
+test('a parked task reads 100% and named in the header, never as all done', async () => {
+  const head = rows(drawBand(el, view(parkedAtEnd())))[0]
+  expect(head).toContain('3 of 3 · 100%')
+  expect(head).toContain('· 1 parked')
+  expect(head).not.toContain('4 of 4')
+})
+
+test('with only parked work left the band says who has the ball, not "waiting on you"', async () => {
+  const text = rows(drawBand(el, view(parkedAtEnd()))).join('\n')
+  expect(text).not.toContain('waiting on you')
+  expect(text).toContain('⏸ parked: waiting on the other team')
+  // an open task of the chat's own still waits on the person
+  const g = midway()
+  applyAction(g, { action: 'park', id: 4, note: 'away' }, { now: T0 + 3 * MIN })
+  g.active = false
+  g.lastTurnEnd = T0 + 3 * MIN
+  expect(rows(drawBand(el, view(g))).join('\n')).toContain('⏸ paused, waiting on you')
+})
+
+test('a finished plan keeps its parked task in the one-row summary', async () => {
+  const g = parkedAtEnd()
+  g.status = 'met'
+  g.endedAt = T0 + 3 * MIN
+  const fresh = rows(drawBand(el, view(g, { now: g.endedAt + 1000 })))
+  expect(fresh[0]).toContain('done ✓ in 3m')
+  expect(fresh[0]).toContain('1 parked')
+  const later = rows(drawBand(el, view(g, { now: g.endedAt + FULL_MS + 1 })))
+  expect(later).toHaveLength(1)
+  expect(later[0]).toContain('3 tasks · done in 3m · 1 parked: waiting on the other team')
+  // two parked are counted, not named
+  applyAction(g, { action: 'park', id: 3, note: 'other' }, { now: T0 + 3 * MIN })
+  const two = rows(drawBand(el, view(g, { now: g.endedAt + FULL_MS + 1 })))[0]
+  expect(two).toContain('· 2 parked')
+  expect(two).not.toContain('2 parked:')
+})
+
+test('the pane draws a parked task as ⏸ with its blocker, and counts it in the stats', async () => {
+  const g = parkedAtEnd()
+  const l = lines(drawPane(el, paneView(g)))
+  expect(l[1]).toContain('3 of 3 · 100%')
+  expect(l[1]).toContain('1 parked')
+  const row = l.find((x: string) => x.startsWith('⏸ '))!
+  expect(row).toMatch(/^⏸ S  readme +parked: waiting on the other team$/)
+})
+
+test('the pane shows why the plan changed: the stats, the done note, the new task, the list', async () => {
+  const g = midway()
+  applyAction(g, { action: 'done', id: 3, note: 'the API pages its results' }, { now: T0 + 3 * MIN })
+  applyAction(g, { action: 'plan', tasks: [{ title: 'page the API', size: 'M' }], note: 'export must page the API' }, { now: T0 + 3 * MIN })
+  const l = lines(drawPane(el, paneView(g)))
+  expect(l[1]).toContain('revised after #3')
+  const at = l.findIndex((x: string) => /^● M  tests/.test(x))
+  expect(l[at + 1].trim()).toBe('the API pages its results')
+  expect(l.find((x: string) => x.includes('page the API') && /^[○⚐]/.test(x))).toMatch(/revised$/)
+  expect(l).toContain('revised after #3: export must page the API')
+})
+
+test('the flag is raised on the pane\'s last task once it is done', async () => {
+  const g = parkedAtEnd()
+  applyAction(g, { action: 'done', id: 4 }, { now: T0 + 4 * MIN })
+  const l = lines(drawPane(el, paneView(g)))
+  expect(l.some((x: string) => /^⚑ S  readme/.test(x))).toBe(true)
+})
+
+test('Recording Mode masks the parked note and the revisions', async () => {
+  const g = parkedAtEnd()
+  applyAction(g, { action: 'add', tasks: [{ title: 'more' }], note: 'secret change' }, { now: T0 + 3 * MIN })
+  const masked = { mask: (s: string) => (s ? '•••' : s) }
+  const band = rows(drawBand(el, view(g, masked))).join('\n')
+  const pane = lines(drawPane(el, paneView(g, masked))).join('\n')
+  for (const text of [band, pane]) {
+    expect(text).not.toContain('other team')
+    expect(text).not.toContain('secret')
+  }
+})
+
+test('the SVG draws the flag and the pause bars, and the alt counts parked tasks', async () => {
+  const g = parkedAtEnd()
+  const { cells } = routeCells(g.tasks, 40)
+  const svg = routeSvg(cells, { hex: rolesOf('ember').hex, level: 'subtle', width: 300 })
+  expect(svg).toContain('<rect') // the pause bars
+  expect(svg).toContain('<polygon') // the pennant
+  expect(routeAlt(3, 3, [], 1)).toBe('3 of 3 tasks done, 1 parked')
+})
+
+test("the pane's running task twinkles on the terminal, and holds a still ✦ at off and on Desktop", async () => {
+  const g = midway()
+  const clients = (o: any) => all(drawPane(el, paneView(g, o)), (x) => x.t === 'Client')
+  const [c] = clients({ level: 'subtle' })
+  expect(c.key).toBe('pane-node-3')
+  expect(c.props).toMatchObject({ kind: 'node', breathe: false })
+  expect(clients({ level: 'full' })[0].props.breathe).toBe(true)
+  for (const o of [{ level: 'off' }, { svg: true }, { pulse: undefined }]) {
+    expect(clients(o)).toHaveLength(0)
+    expect(lines(drawPane(el, paneView(g, o))).some((x: string) => /^✦ M  tests/.test(x))).toBe(true)
+  }
+})
+
+test('on Desktop the running node is a star that twinkles, still at off', async () => {
+  const { cells } = routeCells(midway().tasks, 40)
+  const hex = rolesOf('ember').hex
+  const live = routeSvg(cells, { hex, level: 'subtle', width: 300 })
+  expect(live).toContain('class="run"')
+  expect(live).toContain('@keyframes run')
+  const still = routeSvg(cells, { hex, level: 'off', width: 300 })
+  expect(still).not.toContain('class="run"')
+  expect(still).toContain('<polygon')
 })

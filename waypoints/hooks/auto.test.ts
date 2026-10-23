@@ -259,21 +259,25 @@ test('the spinner cycles its frames and colours', async () => {
   expect(s.started()).toBe(1) // started once, not on each call
 })
 
-test('the node holds ◉ unless it breathes, then swells to ◎ and back', async () => {
-  const still = surface()
-  const p = { kind: 'node', colors: ['#111'], breathe: false }
-  Pulse(p, still)
-  still.tick(3)
-  expect(textOf(Pulse(p, still))).toBe('◉')
-  const breath = surface()
-  const b = { kind: 'node', colors: ['#111'], breathe: true }
-  Pulse(b, breath)
-  const seen = new Set<string>()
-  for (let i = 0; i < 8; i++) {
-    breath.tick()
-    seen.add(textOf(Pulse(b, breath)))
+test('the node is a ✦ that twinkles to ✧ once a cycle, and flares ✷ only when it breathes', async () => {
+  const seenOf = (breathe: boolean) => {
+    const s = surface()
+    const p = { kind: 'node', colors: ['#111', '#222'], breathe }
+    Pulse(p, s)
+    const seen: string[] = []
+    for (let i = 0; i < 16; i++) {
+      s.tick()
+      seen.push(textOf(Pulse(p, s)))
+    }
+    return seen
   }
-  expect([...seen].sort()).toEqual(['◉', '◎'])
+  const subtle = seenOf(false)
+  expect([...new Set(subtle)].sort()).toEqual(['✦', '✧'])
+  // mostly the star: the dip is one frame in eight
+  expect(subtle.filter((g) => g === '✦')).toHaveLength(14)
+  expect([...new Set(seenOf(true))].sort()).toEqual(['✦', '✧', '✷'])
+  // it never goes blank, so the route keeps its shape
+  expect(subtle.every((g) => g.trim().length === 1)).toBe(true)
 })
 
 test('the sweep plays once along the route and rests on the solid colours', async () => {

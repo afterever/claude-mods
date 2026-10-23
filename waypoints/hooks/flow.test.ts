@@ -225,3 +225,16 @@ test('a Windows folder cmd cannot take is left for the person, named as Windows 
   expect(w.runs).toEqual([])
   expect(w.toasts.at(-1)).toBe('Prune did not run: delete old files by hand in C:\\Users\\R&D\\.claude\\mods-data\\waypoints\\')
 })
+
+test('a turn that ends with only parked work left finishes the plan', async ($, on) => {
+  const w = world(on)
+  // the engine's own end of the turn, beneath the mod
+  on('turn.complete', async () => ({ text: '' }) as any)
+  await start($)
+  await $.tool.call({ tool: TOOL, action: 'plan', tasks: [{ title: 'fix', size: 'M' }, { title: 'open the PR', size: 'S' }], tool_use_id: 'p1' })
+  await $.tool.call({ tool: TOOL, action: 'done', id: 1, tool_use_id: 'p2' })
+  const r: any = await $.tool.call({ tool: TOOL, action: 'park', id: 2, note: 'waiting on the other team', tool_use_id: 'p3' })
+  expect(r.result).toContain('Plan: 1 of 1 tasks done, 100% of the work. 1 parked (not counted).')
+  await $.turn.complete({ answer: 'x', durationMs: 1, isAborted: false, turnId: 'turn-1', reason: 'answer' } as any)
+  expect(w.toasts.some((t) => t.startsWith('Plan done in'))).toBe(true)
+})

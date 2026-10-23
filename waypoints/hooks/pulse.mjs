@@ -3,12 +3,14 @@
 // run per frame. A new key (a new task, a new finish) is a new instance with its own clock.
 //
 // - spin:  the running task's spinner, cycling `frames` every `ms`, with `colors` alongside
-// - node:  the pulsing node at the start of a running leg: it cycles `colors`, and with
-//          `breathe` also swells ◉ → ◎ → ◉
+// - node:  the running task's ✦ (on the route, in the pane): it cycles `colors` and dips to a
+//          hollow ✧ once a cycle, like a star twinkling; with `breathe` (full) it also flares ✷.
+//          It never goes blank, so the route keeps its shape
 // - sweep: the finish, played once: the sparkle `colors` run along the route (`chars`), then
 //          it rests on the solid route in the `done` colours (one per char)
 
 const NODE_MS = 120
+const TWINKLE = 8 // frames a twinkle takes: about once a second
 const SWEEP_MS = 60
 const SWEEP_FRAMES = 25 // 1.5 s
 const TAIL = 4 // cells the sparkle trails behind the head
@@ -34,7 +36,8 @@ export default function Pulse(props, surface) {
   }
 
   if (props.kind === 'node') {
-    const glyph = props.breathe && Math.floor(frame / 3) % 2 === 1 ? '◎' : '◉'
+    const at = frame % TWINKLE
+    const glyph = at === TWINKLE - 1 ? '✧' : props.breathe && at === TWINKLE / 2 - 1 ? '✷' : '✦'
     return Text({ color: props.colors[frame % props.colors.length], children: [glyph] })
   }
 

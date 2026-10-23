@@ -6,6 +6,8 @@
 // the time, the ETA or anything per tick. The finish effects carry their goal's id instead,
 // so they play once for a finish and again only for the next.
 
+import { FLAG, FLAG_DONE, PARKED } from './route.mjs'
+
 const REDUCED = '@media (prefers-reduced-motion: reduce){*{animation:none!important}}'
 const HEIGHT = 14
 const MID = HEIGHT / 2
@@ -62,14 +64,20 @@ export function routeSvg(cells, { hex, level, width, finishId = '' }) {
   for (const { c, i } of nodes) {
     const x = xs(i)
     if (c.role === 'active') {
+      // the running task: a star in its glow, twinkling at subtle and above
       body.push(`<circle${live ? ' class="halo"' : ''} cx="${f(x)}" cy="${MID}" r="${f(r + 2.5)}" fill="${hex.glow}" opacity=".3"/>`)
-      body.push(`<circle cx="${f(x)}" cy="${MID}" r="${f(r)}" fill="${hex.done}"/>`)
-    } else if (c.ch === '✦') {
-      body.push(star(x, MID, 6, `fill="${hex.sparkle[0]}"`))
-    } else if (c.ch === '◎') {
-      const done = c.role === 'done'
-      body.push(`<circle cx="${f(x)}" cy="${MID}" r="5" fill="none" stroke="${done ? 'url(#g)' : hex.pending}" stroke-width="1.5"${done ? '' : ' opacity=".7"'}/>`)
-      if (done) body.push(`<circle cx="${f(x)}" cy="${MID}" r="2" fill="url(#g)"/>`)
+      body.push(star(x, MID, r + 2, `${live ? 'class="run" ' : ''}fill="${hex.done}"`))
+    } else if (c.ch === FLAG || c.ch === FLAG_DONE) {
+      // the destination: a pole and a pennant, outlined until the plan finishes
+      const paint = c.role === 'sparkle' ? hex.sparkle[0] : c.role === 'done' ? 'url(#g)' : hex.pending
+      const dim = c.role === 'pending' ? ' opacity=".7"' : ''
+      const px = x - 3
+      body.push(`<line x1="${f(px)}" y1="1" x2="${f(px)}" y2="13" stroke="${paint}" stroke-width="1.5" stroke-linecap="round"${dim}/>`)
+      const pennant = `points="${f(px)},1.5 ${f(px + 8)},4.5 ${f(px)},7.5"`
+      body.push(c.ch === FLAG_DONE ? `<polygon ${pennant} fill="${paint}"/>` : `<polygon ${pennant} fill="none" stroke="${paint}" stroke-width="1.2" stroke-linejoin="round"${dim}/>`)
+    } else if (c.ch === PARKED) {
+      // a parked task: two short bars on its dashed leg
+      body.push(`<rect x="${f(x - 2.2)}" y="${MID - 3.5}" width="1.6" height="7" rx=".5" fill="${hex.pending}"/><rect x="${f(x + 0.6)}" y="${MID - 3.5}" width="1.6" height="7" rx=".5" fill="${hex.pending}"/>`)
     } else if (c.role === 'done') {
       body.push(`<circle cx="${f(x)}" cy="${MID}" r="${f(r)}" fill="url(#g)"/>`)
     } else {
@@ -88,7 +96,10 @@ export function routeSvg(cells, { hex, level, width, finishId = '' }) {
   }
 
   const css = []
-  if (live) css.push('.halo{animation:halo 1.4s ease-in-out infinite}@keyframes halo{0%,100%{opacity:.15}50%{opacity:.6}}')
+  if (live) {
+    css.push('.halo{animation:halo 1.4s ease-in-out infinite}@keyframes halo{0%,100%{opacity:.15}50%{opacity:.6}}')
+    css.push('.run{transform-box:fill-box;transform-origin:center;animation:run 1s ease-in-out infinite}@keyframes run{0%,70%,100%{transform:scale(1);opacity:1}85%{transform:scale(.6);opacity:.55}}')
+  }
   if (level === 'full') {
     css.push('.go{animation:go 1.8s linear infinite;opacity:0}@keyframes go{0%{transform:translateX(0);opacity:0}20%,80%{opacity:1}100%{transform:translateX(var(--d));opacity:0}}')
     css.push('.sweep{opacity:0;animation:sweep 1.5s ease-in forwards}@keyframes sweep{0%{transform:translateX(0);opacity:0}15%,85%{opacity:.9}100%{transform:translateX(var(--d));opacity:0}}')
@@ -107,6 +118,6 @@ export function routeSvg(cells, { hex, level, width, finishId = '' }) {
 }
 
 // What a screen reader hears of the route: numbers only, so there is no title to mask
-export function routeAlt(done, total, running) {
-  return `${done} of ${total} tasks done` + (running.length ? `, task${running.length > 1 ? 's' : ''} ${running.join(' and ')} running` : '')
+export function routeAlt(done, total, running, parked = 0) {
+  return `${done} of ${total} tasks done` + (running.length ? `, task${running.length > 1 ? 's' : ''} ${running.join(' and ')} running` : '') + (parked ? `, ${parked} parked` : '')
 }
