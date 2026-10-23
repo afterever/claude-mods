@@ -12,3 +12,6 @@ arsenal/tsconfig.json
 arsenal/.claude-plugin/types/
 waypoints/tsconfig.json
 waypoints/.claude-plugin/types/
+
+# Compiled output from running the TypeScript mod tests by hand
+arsenal/hooks/*.js
