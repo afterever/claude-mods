@@ -57,6 +57,8 @@ type World = {
   fills: string[]
   /** The rows each `ui.open` asked for. */
   rows: (number | undefined)[]
+  /** Every sound player the plugin ran, as its argv. */
+  played: string[][]
 }
 
 // The fake disk is keyed by Windows paths (`C:/home/...`). Off Windows the
@@ -71,7 +73,7 @@ const fake = (path: string) => {
 // The world beneath the plugin: the command list, the model, prompt-upgrade's
 // switch, the panes, and the line and footer other mods draw
 function world(on: On, o: Opts = {}): World {
-  const w: World = { runs: [], registered: [], toasts: [], calls: [], steps: [], auto: { on: o.auto ?? false }, model: { value: o.model ?? 'opus' }, store: { ...o.store }, fills: [], rows: [] }
+  const w: World = { runs: [], registered: [], toasts: [], calls: [], steps: [], auto: { on: o.auto ?? false }, model: { value: o.model ?? 'opus' }, store: { ...o.store }, fills: [], rows: [], played: [] }
   const panes = new Set(o.panes ?? [])
   const draft = { text: o.draft ?? '' }
   const disk = o.disk ?? {}
@@ -87,7 +89,9 @@ function world(on: On, o: Opts = {}): World {
     return { value: [...tools, ...own] } as any
   })
   // the folders and files of the person's own commands, and the git around them
-  on('env.get', async (_$, e) => ({ value: e.name === 'USERPROFILE' ? (o.home ?? 'C:/home') : undefined }) as any)
+  on('env.get', async (_$, e) => ({ value: e.name === 'USERPROFILE' ? (o.home ?? 'C:/home') : e.name === 'OS' ? 'Windows_NT' : undefined }) as any)
+  // the system's sounds are all there; the person's folder is whatever `disk` holds
+  on('fs.exists', async (_$, e) => ({ value: fake(e.path).startsWith('C:/Windows/Media/') || fake(e.path) in disk }) as any)
   on('session.root', async () => ({ value: o.root ?? 'C:/bats' }) as any)
   on('fs.list', async (_$, e) => {
     const below = `${fake(e.path).replace(/\/+$/, '')}/`
@@ -106,6 +110,11 @@ function world(on: On, o: Opts = {}): World {
     return { value: text } as any
   })
   on('process.run', async (_$, e) => {
+    // the sound player: logged, and answered as played
+    if (e.argv[0] === 'powershell' || e.argv[0] === 'afplay') {
+      w.played.push([...e.argv])
+      return { value: { exitCode: 0, stdout: '', stderr: '' } } as any
+    }
     const git = o.git
     const refused = { value: { exitCode: 128, stdout: '', stderr: 'fatal: not a git repository' } }
     if (!git) return refused as any
@@ -280,7 +289,7 @@ test('pressing the launcher again closes the pane', async ($, on) => {
 test('/arsenal toggles the pane and was registered to run mid-turn', async ($, on) => {
   const w = world(on)
   await start($)
-  expect(w.registered).toEqual(['arsenal'])
+  expect(w.registered).toEqual(['arsenal', 'chime'])
   await $.command.run({ command: 'arsenal', args: '' } as any)
   await $.command.run({ command: 'arsenal', args: '' } as any)
   expect(w.calls).toEqual(['open arsenal', 'close arsenal'])
@@ -813,4 +822,76 @@ test('nothing found and nothing broken: no folders, no git, no home', async ($, 
   await open($)
   const all = await inPane($, texts)
   expect(all.some(t => t.includes('U S E R') || t.includes('P R O J E C T'))).toBe(false)
+})
+
+// ── Sound notifications ──────────────────────────────────────────────────
+
+const SOUNDS_DIR = 'C:/home/.claude/arsenal/sounds'
+const ON = { chime: { version: 1, isOn: true, sound: '' } }
+
+/** `/chime <args>`, answered with the text the command gave back. */
+const chime = async ($: Engine, args: string) => ((await $.command.run({ command: 'chime', args } as any)) as { text?: string }).text ?? ''
+
+test('/chime is registered to run mid-turn, and on and off are saved', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await chime($, 'on')
+  expect(w.store.chime).toEqual({ version: 1, isOn: true, sound: '' })
+  await chime($, 'off')
+  expect(w.store.chime).toEqual({ version: 1, isOn: false, sound: '' })
+})
+
+test('a session loads the saved chime and its sound', async ($, on) => {
+  world(on, { store: { chime: { version: 1, isOn: true, sound: 'Windows Ding' } } })
+  await start($)
+  const said = await chime($, '')
+  expect(said).toContain('**on**')
+  expect(said).toContain('Windows Ding')
+})
+
+test('garbage in the store is the chime off', async ($, on) => {
+  world(on, { store: { chime: 'x' } })
+  await start($)
+  expect(await chime($, '')).toContain('**off**')
+})
+
+test('/chime sound saves a name and plays it', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await chime($, 'sound windows ding')
+  expect(w.store.chime).toEqual({ version: 1, isOn: false, sound: 'Windows Ding' })
+  expect(w.played).toHaveLength(1)
+  expect(w.played[0]?.[4]).toContain('Windows Ding.wav')
+})
+
+test('/chime sound with a name that is not there saves nothing, plays nothing and lists the names', async ($, on) => {
+  const w = world(on)
+  await start($)
+  const said = await chime($, 'sound nope')
+  expect(w.store.chime).toBeUndefined()
+  expect(w.played).toEqual([])
+  expect(said).toContain('Windows Ding')
+})
+
+test('/chime test plays the chosen sound even while the chime is off', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await chime($, 'test')
+  expect(w.played).toHaveLength(1)
+  expect(w.played[0]?.[4]).toContain('Windows Notify Messaging.wav')
+})
+
+test('the sounds folder lists wav files by name; question.wav and other files are not choices', async ($, on) => {
+  world(on, { disk: { [`${SOUNDS_DIR}/mine.wav`]: '', [`${SOUNDS_DIR}/question.wav`]: '', [`${SOUNDS_DIR}/notes.txt`]: '' } })
+  await start($)
+  const said = await chime($, '')
+  expect(said).toContain('Sounds: mine, Windows Notify Messaging')
+  expect(said).not.toContain('question')
+  expect(said).not.toContain('notes')
+})
+
+test('no sounds folder at all still lists the system’s sounds', async ($, on) => {
+  world(on, { disk: {} })
+  await start($)
+  expect(await chime($, '')).toContain('Sounds: Windows Notify Messaging')
 })

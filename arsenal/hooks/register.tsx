@@ -1,7 +1,24 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { ArsenalOff, ArsenalOwn, ArsenalTools } from '../types'
+import type { ArsenalChime, ArsenalOff, ArsenalOwn, ArsenalTools } from '../types'
+import {
+  CHIME_HELP,
+  CHIME_STORE_KEY,
+  NO_CHIME,
+  chimeFromStore,
+  chimeToStore,
+  chosen,
+  describeChime,
+  listOf,
+  osFrom,
+  parseChime,
+  personalSounds,
+  playerFor,
+  soundsFolder,
+  systemCandidates,
+} from './chime'
+import type { Os, Sound, Sounds } from './chime'
 import {
   NO_OFF,
   NO_OWN,
@@ -46,6 +63,8 @@ const ownAtom = atom({ plugin: 'arsenal', key: 'own' } as const, NO_OWN)
 const offAtom = atom({ plugin: 'arsenal', key: 'off' } as const, NO_OFF)
 const editingAtom = atom({ plugin: 'arsenal', key: 'editing' } as const, null)
 const projectKeyAtom = atom({ plugin: 'arsenal', key: 'projectKey' } as const, '')
+const chimeAtom = atom({ plugin: 'arsenal', key: 'chime' } as const, NO_CHIME)
+const soundsAtom = atom({ plugin: 'arsenal', key: 'sounds' } as const, [] as string[])
 
 // The menu is a pane, docked at the right in fullscreen like the tools' own
 const PANE = 'arsenal'
@@ -179,6 +198,77 @@ async function loadOff($: EngineInterface) {
   } catch {
     // nothing is off until the person turns something off
   }
+}
+
+// ── Sound notifications ──────────────────────────────────────────────────
+
+/**
+ * The sounds there are now: the `.wav` files of the person's folder and the
+ * system's own that exist on disk. Read each time it is needed, so a file
+ * dropped in mid-session is found.
+ */
+async function soundsOf($: EngineInterface): Promise<{ sounds: Sounds; os: Os }> {
+  const home = (await $.env.get('USERPROFILE')) || (await $.env.get('HOME')) || ''
+  const os = osFrom(await $.env.get('OS'), home)
+  const folder = soundsFolder(home)
+  const fileNames = home ? (await entriesOf($, folder)).filter(f => f.kind === 'file' || f.isLink).map(f => f.name) : []
+  const found = await Promise.all(
+    systemCandidates(os).map(async (s): Promise<Sound | null> => {
+      try {
+        return (await $.fs.exists(s.path)) ? s : null
+      } catch {
+        return null
+      }
+    }),
+  )
+  return { sounds: { personal: personalSounds(fileNames, folder), system: found.filter((s): s is Sound => s !== null) }, os }
+}
+
+/** The names the Sound row cycles through, kept in state for the drawing. */
+async function refreshSounds($: EngineInterface) {
+  try {
+    const { sounds } = await soundsOf($)
+    await update($, soundsAtom, () => listOf(sounds).map(s => s.name))
+  } catch {
+    // the list stays as it was
+  }
+}
+
+/** What was chosen, from the last session on this machine. */
+async function loadChime($: EngineInterface) {
+  try {
+    const held = chimeFromStore(await $.store.get(CHIME_STORE_KEY))
+    await update($, chimeAtom, () => held)
+  } catch {
+    // the chime is off until the person turns it on
+  }
+}
+
+/** Writes the setting to state (the drawing follows), then to the store. */
+async function setChime($: EngineInterface, next: ArsenalChime) {
+  await update($, chimeAtom, () => next)
+  try {
+    await $.store.set(CHIME_STORE_KEY, chimeToStore(next))
+  } catch {
+    // the state stands for this session
+    $.ui.toast('Could not save the chime setting.')
+  }
+}
+
+/** Plays one sound file. Silent when nothing can play it or the player fails. */
+async function playPath($: EngineInterface, path: string | undefined, os: Os) {
+  const argv = path ? playerFor(path, os) : null
+  if (!argv) return
+  try {
+    await $.process.run(argv, { timeoutMs: 15000 })
+  } catch {
+    // no player, or the sound is gone: stay quiet
+  }
+}
+
+/** Starts a sound without holding the caller: nothing here may slow or fail a turn. */
+const quiet = (run: () => Promise<void>) => {
+  void run().catch(() => {})
 }
 
 async function openMenu($: EngineInterface) {
@@ -430,8 +520,20 @@ export const register: Register = on => {
     } catch {
       // a menu that stays as it was is still a menu
     }
+    try {
+      await $.command.register({
+        name: 'chime',
+        description: 'Sound notifications: on, off, test, or pick a sound',
+        argumentHint: '[on|off|test|sound <name>]',
+        immediate: true,
+      })
+    } catch {
+      // the switch in the menu still works without the command
+    }
     await refreshTools($)
     await loadOff($)
+    await loadChime($)
+    await refreshSounds($)
     await scan($)
     try {
       const model = await $.session.model()
@@ -472,6 +574,31 @@ export const register: Register = on => {
     await toggleMenu($)
     return {}
   }).catch(() => ({ text: 'Arsenal could not do that right now.' }))
+
+  on('command.run', { command: 'chime' }, async ($, e) => {
+    const held = (await read($, chimeAtom)) ?? NO_CHIME
+    const { sounds, os } = await soundsOf($)
+    const names = listOf(sounds).map(s => s.name)
+    await update($, soundsAtom, () => names)
+    const now = chosen(sounds, held.sound)
+    const command = parseChime(e.args)
+    if (command.kind === 'on' || command.kind === 'off') {
+      await setChime($, { ...held, isOn: command.kind === 'on' })
+      return { text: command.kind === 'on' ? 'Sound notifications on.' : 'Sound notifications off. `/chime on` turns them back on.' }
+    }
+    if (command.kind === 'test') {
+      await playPath($, now?.path, os)
+      return { text: now ? `Played "${now.name}".` : 'No sounds found.' }
+    }
+    if (command.kind === 'sound') {
+      const picked = listOf(sounds).find(s => s.name.toLowerCase() === command.name.toLowerCase())
+      if (!picked) return { text: `No sound called "${command.name}". Pick one of: ${names.join(', ')}` }
+      await setChime($, { ...held, sound: picked.name })
+      await playPath($, picked.path, os)
+      return { text: `Sound set to "${picked.name}".` }
+    }
+    return { text: command.kind === 'show' ? describeChime(held, now?.name ?? '', names) : CHIME_HELP }
+  }).catch(() => ({ text: 'Chime could not do that right now.' }))
 
   // A close by the person (Esc, the pane's mark) turns the launcher's arrow
   // back; an unload (hot reload, exit) is not a close they asked for
