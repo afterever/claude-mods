@@ -901,6 +901,8 @@ A pure module `hooks/chime.ts` (tested in `hooks/chime.test.ts`) holds the list 
 - **Question sound:** a file named `question.wav` in the person's folder if there is one, else the
   system's `Windows Message Nudge` (`Ping` on macOS). It is not a setting; one fixed sound is
   enough to tell "done" from "asking". A file named `question` is left out of the picker.
+  **Superseded in 0.4.1:** there is no question sound any more; a question plays Claude's sound
+  ("0.4.1: a sound for your own Enter").
 - **Apple's originals:** copy them to the folder as `.wav`. They are `.caf` / `.aiff` on a Mac and
   Windows cannot play those, so convert once on the Mac:
   `afconvert -f WAVE -d LEI16 <file>.caf <name>.wav`. Where iMessage keeps them is
@@ -1010,8 +1012,107 @@ Default **off**; the question sound **fixed**; **wav only**; the macOS list; the
 - **Tested in the kit, not in a terminal:** that a player is started with the right command line for
   each event. That it makes a sound, on Windows and on Desktop, is the live check.
 
+## 0.4.1: a sound for your own Enter
+
+### Where it comes from
+
+0.4.0 made sounds for what Claude does. The person, using it, asked for the other half of an
+iMessage conversation: the "sent" swoosh when their own message goes, and the "new message" tone
+when Claude's reply comes. Apple's two sounds can only be the person's own files (see "The
+sounds"), so this is the sound for the first and a rule for the second.
+
+### What was seen live first (2026-10-24, the person, Windows terminal and Claude Desktop)
+
+The three 0.4.0 sounds were heard: the reply-done chime, the `AskUserQuestion` dialog's sound and a
+permission prompt's (in manual permission mode; auto mode raised none). That settles the open
+"Read from done-chime, to check live" above: `classic.Notification` is raised with
+`notification_type: 'permission_prompt'` on this engine. On Claude Desktop the person reports the
+sounds work; which of the three they tried there was not recorded.
+
+### The decision: two sounds, not three
+
+- **Sent:** the person's own Enter on a prompt.
+- **Claude's:** a reply done, an `AskUserQuestion` dialog, a permission prompt. All three are
+  Claude having something for the person, and one sound says so, as in iMessage.
+- **So the question sound is gone** (`questionPath`, `questionFallback`, the `question.wav` rule,
+  `Windows Message Nudge` as its fallback). The person chose this over keeping three sounds or
+  silencing questions. The price: a question no longer sounds different from a finished reply.
+  **A `question.wav` left in the folder from 0.4.0 is now an ordinary sound called `question`**,
+  listed in both pickers.
+
+### The menu
+
+```
+│ ● Sound notifications   ● On     │
+│   you send · Claude replies/asks │
+│ ♪ Claude      Windows Notify ▸   │
+│ ↗ Sent                    none ▸ │
+```
+
+- The old "♪ Sound" row is now **♪ Claude** (key `o`, as before). **↗ Sent** is new, key `m`
+  (`s` is taken by Report settings; `p u h t w c o` too). Both shown only while the switch is on.
+- Both go down the same list (the person's `.wav` files, then the system's). **Sent** has `none`
+  before the list and wraps back to it, and **starts at none**, so updating from 0.4.0 adds no
+  new noise. A saved Sent sound that is gone is `none` again; Claude's falls back to the first
+  system sound, as before.
+- The person's Apple files: the two iMessage sounds, converted to `.wav` and dropped in the
+  folder, appear in both lists; they pick the swoosh for Sent and the new-message tone for Claude.
+
+### The hook: `prompt.submit`
+
+```ts
+on('prompt.submit', async ($, e, next) => {
+  if (shouldPlaySent(e)) quiet(() => playFor($, 'sent'))
+  return next(e)
+})
+```
+
+- **`shouldPlaySent`** (pure, in `chime.ts`): `origin.kind === 'composer'` (the person's Enter at
+  the terminal; the engine stamps it and no hook can set it), no `isMeta`, no `command`. So a
+  slash command (`/chime test`, `/arsenal`), a prompt another mod sent, a Remote Control message
+  and a hidden prompt play nothing.
+- **It plays before `next(e)`, not after.** `next` resolves when the prompt has entered the
+  session, and a hook beneath may hold or drop it: Prompt Upgrade holds the person's prompt and
+  later sends its upgrade as a plugin's own, which has `origin.kind === 'plugin'` and would never
+  swoosh. The Enter is the gesture, so the sound goes with the Enter. A prompt that is then
+  dropped (a guard refusing it) still swooshed; that is accepted.
+- Fire and forget through `quiet`, like the other three; the prompt is never held for a player.
+
+### State and store
+
+`ArsenalChime` is `{ isOn, sound, sent }`. The store value stays `{ version: 1, isOn, sound }`, with
+`sent` added **only when there is one**, so a 0.4.0 store reads back as `sent: ''` and a chime
+with no Sent sound is saved byte for byte as in 0.4.0 (no version bump, no migration).
+
+`/chime` gains `sent <name|none>`; `/chime test` plays Claude's sound; `/chime` shows both.
+`settingsLines` counts two chime rows while the switch is on.
+
+### Calls made in this design (the person did not choose these)
+
+The Sent key `m`; the row labels **Claude** and **Sent**; the caption `you send · Claude
+replies/asks`; the Enter-time rule above (decided from reading Prompt Upgrade's resubmission, not
+tried); Remote Control messages (a phone) staying silent; `/chime test` playing only Claude's sound.
+
+### Not settled, to check live
+
+- **That the swoosh plays under Prompt Upgrade's `auto`**, where the person's Enter is held.
+- **That a prompt typed while Claude is busy** swooshes at once (its `origin` is still `composer`).
+- **Where the "sent" swoosh lives on a Mac.** Only the new-message tone's folder is known
+  (`ReceivedMessage.caf`); the README tells the person to search for the swoosh.
+
+### Shipping 0.4.1 (repo checklist)
+
+Branch `arsenal-0.4.1`, PR, release `arsenal-v0.4.1`: `plugin.json` and the SETUP.md row to 0.4.1;
+the README's rows, Sound notifications section and `/chime` table; this section.
+
 ## Alternatives turned down
 
+- **For 0.4.1: three sounds (sent, reply, a fixed question sound).** Closer to 0.4.0, but "only two
+  types" was the ask, and the `question.wav` rule was a special case to explain.
+- **For 0.4.1: no sound for questions and permission prompts.** The least code, but those are the
+  moments Claude is blocked on the person, which is when a sound is worth most.
+- **For 0.4.1: a fixed `sent.wav` instead of a picker.** Less code, but it can't be tried from the
+  menu or switched, and the person asked for the same picker.
 - **For 0.2.0: scanning only `~/.claude`.** Most of the person's work commands may be a repo's own,
   so PROJECT came in. Folding the two into one list would hide where a command comes from.
 - **For 0.2.0: every plugin skill.** Over 200 rows, most of them skills the model loads by itself

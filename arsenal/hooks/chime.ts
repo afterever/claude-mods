@@ -14,13 +14,10 @@ export type Sound = { name: string; path: string }
 /** The person's own sounds, and the system's that were found on disk. */
 export type Sounds = { personal: Sound[]; system: Sound[] }
 
-/** Off, with the default sound: what anything unexpected in the store means. */
-export const NO_CHIME: ArsenalChime = { isOn: false, sound: '' }
+/** Off, with the default sound and no sent sound: what anything unexpected in the store means. */
+export const NO_CHIME: ArsenalChime = { isOn: false, sound: '', sent: '' }
 
 export const CHIME_STORE_KEY = 'chime'
-
-/** The file in the person's folder that is the question sound, and no choice in the picker. */
-const QUESTION = 'question'
 
 /** `Windows_NT` is Windows; a home under `/Users/` is a Mac; anything else is Linux. */
 export function osFrom(windowsEnv: string | undefined, home: string): Os {
@@ -40,23 +37,12 @@ export function systemCandidates(os: Os): Sound[] {
   return []
 }
 
-/** The system sound the question uses when the person has no `question.wav`. */
-export const questionFallback = (os: Os) => (os === 'windows' ? 'Windows Message Nudge' : os === 'mac' ? 'Ping' : '')
-
-/** The `.wav` files of the person's folder, by name without the extension, `question` left out. */
+/** The `.wav` files of the person's folder, by name without the extension. */
 export function personalSounds(fileNames: readonly string[], folder: string): Sound[] {
   return fileNames
     .filter(file => /\.wav$/i.test(file))
     .map(file => ({ name: file.slice(0, -4), path: `${folder}/${file}` }))
-    .filter(sound => sound.name.toLowerCase() !== QUESTION)
     .sort((a, b) => a.name.localeCompare(b.name))
-}
-
-/** `question.wav` in the person's folder, else the system's fallback, else nothing to play. */
-export function questionPath(fileNames: readonly string[], folder: string, system: Sound[], os: Os): string | undefined {
-  const own = fileNames.find(file => file.toLowerCase() === `${QUESTION}.wav`)
-  if (own) return `${folder}/${own}`
-  return system.find(sound => sound.name === questionFallback(os))?.path
 }
 
 export const listOf = (s: Sounds): Sound[] => [...s.personal, ...s.system]
@@ -73,6 +59,22 @@ export function nextName(s: Sounds, name: string): string {
   return list[(at + 1) % list.length]?.name ?? ''
 }
 
+/** The sent sound: the one named. Empty, or one that is gone, is no sound, unlike Claude's, which falls back to the first. */
+export const sentChoice = (s: Sounds, name: string): Sound | undefined => (name === '' ? undefined : listOf(s).find(x => x.name === name))
+
+/** The name after the sent sound in `none`, then the list, wrapping back to none. */
+export function nextSent(s: Sounds, name: string): string {
+  const names = ['', ...listOf(s).map(x => x.name)]
+  const at = names.indexOf(sentChoice(s, name)?.name ?? '')
+  return names[(at + 1) % names.length] ?? ''
+}
+
+/** What `prompt.submit` knows of a prompt, as far as this needs. */
+export type SubmittedPrompt = { origin: { kind: string }; isMeta?: true; command?: unknown }
+
+/** The swoosh is for the person's own Enter on a prompt: not a slash command, a plugin's or a peer's prompt, or one they never see. */
+export const shouldPlaySent = (p: SubmittedPrompt) => p.origin.kind === 'composer' && !p.isMeta && !p.command
+
 /** The command that plays `path`, or null where nothing can. The path goes inside single quotes, doubled. */
 export function playerFor(path: string, os: Os): string[] | null {
   if (os === 'windows') {
@@ -86,15 +88,16 @@ export function playerFor(path: string, os: Os): string[] | null {
 /** What `$.store.get('chime')` gave, read back. Anything unexpected is the chime off. */
 export function chimeFromStore(raw: unknown): ArsenalChime {
   const held = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {}
-  return { isOn: held.isOn === true, sound: typeof held.sound === 'string' ? held.sound : '' }
+  return { isOn: held.isOn === true, sound: typeof held.sound === 'string' ? held.sound : '', sent: typeof held.sent === 'string' ? held.sent : '' }
 }
 
-/** The value to save for `chime`. */
-export const chimeToStore = (c: ArsenalChime) => ({ version: 1 as const, isOn: c.isOn, sound: c.sound })
+/** The value to save for `chime`. `sent` is left out while it is none, so a 0.4.0 store reads back the same. */
+export const chimeToStore = (c: ArsenalChime) => ({ version: 1 as const, isOn: c.isOn, sound: c.sound, ...(c.sent ? { sent: c.sent } : {}) })
 
 // ── /chime ───────────────────────────────────────────────────────────────
 
-export type ChimeCommand = { kind: 'show' | 'on' | 'off' | 'test' | 'help' } | { kind: 'sound'; name: string }
+/** `sent`'s name is empty for `none`. */
+export type ChimeCommand = { kind: 'show' | 'on' | 'off' | 'test' | 'help' } | { kind: 'sound' | 'sent'; name: string }
 
 export function parseChime(args: string): ChimeCommand {
   const text = args.trim()
@@ -103,11 +106,24 @@ export function parseChime(args: string): ChimeCommand {
   if (text === '') return { kind: 'show' }
   if (lower === 'on' || lower === 'off' || lower === 'test') return { kind: lower }
   const name = rest.join(' ').trim()
-  return lower === 'sound' && name !== '' ? { kind: 'sound', name } : { kind: 'help' }
+  if (lower === 'sound' && name !== '') return { kind: 'sound', name }
+  if (lower === 'sent' && name !== '') return { kind: 'sent', name: name.toLowerCase() === 'none' ? '' : name }
+  return { kind: 'help' }
 }
 
-export const CHIME_HELP = ['`/chime on` · `/chime off` · `/chime test`', '`/chime sound <name>`: pick the sound for replies'].join('\n')
+export const CHIME_HELP = [
+  '`/chime on` · `/chime off` · `/chime test`',
+  "`/chime sound <name>`: pick Claude's sound (a reply, a question, a permission prompt)",
+  "`/chime sent <name|none>`: pick the sound for your own Enter",
+].join('\n')
 
-/** What bare `/chime` says: on or off, the sound shown, and the names to pick from. */
-export const describeChime = (c: ArsenalChime, shownName: string, names: readonly string[]) =>
-  [`Sound notifications are **${c.isOn ? 'on' : 'off'}**.`, `Sound: ${shownName || 'none found'}`, names.length ? `Sounds: ${names.join(', ')}` : 'No sounds found.', '', CHIME_HELP].join('\n')
+/** What bare `/chime` says: on or off, both sounds shown, and the names to pick from. */
+export const describeChime = (c: ArsenalChime, shownName: string, sentName: string, names: readonly string[]) =>
+  [
+    `Sound notifications are **${c.isOn ? 'on' : 'off'}**.`,
+    `Sound: ${shownName || 'none found'}`,
+    `Sent: ${sentName || 'none'}`,
+    names.length ? `Sounds: ${names.join(', ')}` : 'No sounds found.',
+    '',
+    CHIME_HELP,
+  ].join('\n')

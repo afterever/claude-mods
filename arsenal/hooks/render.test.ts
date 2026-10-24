@@ -39,6 +39,8 @@ type Opts = {
   cannotFill?: boolean
   /** The sound player never returns (a hung PowerShell). */
   hangs?: boolean
+  /** A hook beneath the plugin holds every prompt, as Prompt Upgrade can. */
+  holds?: boolean
 }
 
 type World = {
@@ -172,6 +174,8 @@ function world(on: On, o: Opts = {}): World {
   on('turn.complete', async (_$, e) => ({ text: e.answer }) as any)
   on('tool.call', async () => ({ result: 'ok', ref: 0, text: 'ok' }) as any)
   on('classic.Notification', async () => ({}) as any)
+  // and a prompt the person sends
+  on('prompt.submit', async (_$, e) => (o.holds ? { drop: 'held' } : { text: e.text }) as any)
   on('turn.step', async function* (_$, e) {
     w.steps.push({ model: e.model, effort: e.effort, agentId: e.agentId })
     return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: 'end_turn' as const, usage: null }
@@ -898,12 +902,11 @@ test('/chime test plays the chosen sound even while the chime is off', async ($,
   expect(w.played[0]?.[4]).toContain('Windows Notify Messaging.wav')
 })
 
-test('the sounds folder lists wav files by name; question.wav and other files are not choices', async ($, on) => {
+test('the sounds folder lists wav files by name, question.wav among them; other files are not choices', async ($, on) => {
   world(on, { disk: { [`${SOUNDS_DIR}/mine.wav`]: '', [`${SOUNDS_DIR}/question.wav`]: '', [`${SOUNDS_DIR}/notes.txt`]: '' } })
   await start($)
   const said = await chime($, '')
-  expect(said).toContain('Sounds: mine, Windows Notify Messaging')
-  expect(said).not.toContain('question')
+  expect(said).toContain('Sounds: mine, question, Windows Notify Messaging')
   expect(said).not.toContain('notes')
 })
 
@@ -934,13 +937,14 @@ test('the Sound notifications switch follows the chime, and a press saves it', a
   expect(w.runs).toEqual([])
 })
 
-test('the chime’s keys are c and o', async ($, on) => {
+test('the chime’s keys are c, o and m', async ($, on) => {
   world(on, { store: ON })
   await start($)
   await open($)
   const ui = await pane($)
   expect(((await ui.find({ key: 'arsenal-chime-switch' }))?.props as { hotkey?: string }).hotkey).toBe('c')
   expect(((await ui.find({ key: 'arsenal-chime-sound' }))?.props as { hotkey?: string }).hotkey).toBe('o')
+  expect(((await ui.find({ key: 'arsenal-chime-sent' }))?.props as { hotkey?: string }).hotkey).toBe('m')
 })
 
 test('the Sound row is there only while the chime is on, and names the default', async ($, on) => {
@@ -976,7 +980,44 @@ test('a saved sound that is gone shows the default’s name', async ($, on) => {
   expect(await inPane($, soundLabel)).toContain('Windows Notify Messaging')
 })
 
-// ── The three events ─────────────────────────────────────────────────────
+/** The words on the Sent row's button. */
+const sentLabel = async (ui: Mounted) => (await texts(ui)).find(t => t.endsWith('▸') && !t.includes('Windows Notify Messaging ▸'))
+
+test('the Sent row is there only while the chime is on, and starts at none', async ($, on) => {
+  world(on)
+  await start($)
+  await open($)
+  expect(await inPane($, ui => ui.find({ key: 'arsenal-chime-sent' }))).toBeUndefined()
+  await inPane($, ui => ui.press({ key: 'arsenal-chime-switch' }))
+  const ui = await pane($)
+  try {
+    expect(await ui.find({ key: 'arsenal-chime-sent' })).toBeDefined()
+    expect(await sentLabel(ui)).toContain('none')
+  } finally {
+    await ui.unmount()
+  }
+})
+
+test('a press on Sent saves the first sound and plays it; none plays nothing', async ($, on) => {
+  const w = world(on, { store: ON, disk: { [`${SOUNDS_DIR}/mine.wav`]: '' } })
+  await start($)
+  await open($)
+  await inPane($, ui => ui.press({ key: 'arsenal-chime-sent' }))
+  expect(w.store.chime).toEqual({ version: 1, isOn: true, sound: '', sent: 'mine' })
+  expect(w.played).toHaveLength(1)
+  expect(w.played[0]?.[4]).toContain('mine.wav')
+  // the Sound row is untouched
+  expect((w.store.chime as { sound: string }).sound).toBe('')
+})
+
+test('a saved sent sound is loaded, and one that is gone is none', async ($, on) => {
+  world(on, { store: { chime: { version: 1, isOn: true, sound: '', sent: 'gone' } } })
+  await start($)
+  await open($)
+  expect(await inPane($, sentLabel)).toContain('none')
+})
+
+// ── The events ───────────────────────────────────────────────────────────
 
 const DONE = { answer: 'x', durationMs: 1, isAborted: false, reason: 'answer' as const }
 const finish = ($: Engine, more: object = {}) => $.turn.complete({ ...DONE, turnId: 't1', ...more } as any)
@@ -1000,6 +1041,7 @@ test('with the chime off nothing plays', async ($, on) => {
   await finish($)
   await ask($)
   await notice($, 'permission_prompt')
+  await send($)
   await settle()
   expect(w.played).toEqual([])
 })
@@ -1013,24 +1055,27 @@ test('a subagent’s turn and a stopped turn play nothing', async ($, on) => {
   expect(w.played).toEqual([])
 })
 
-test('AskUserQuestion plays the question sound: question.wav when there is one, else the system’s', async ($, on) => {
+test('AskUserQuestion plays the Claude sound, the one a reply plays', async ($, on) => {
   const w = world(on, { store: ON })
   await start($)
   await ask($)
   await settle()
   expect(w.played).toHaveLength(1)
-  expect(w.played[0]?.[4]).toContain('Windows Message Nudge.wav')
+  expect(w.played[0]?.[4]).toContain('Windows Notify Messaging.wav')
 })
 
-test('a question.wav in the folder is the question sound', async ($, on) => {
-  const w = world(on, { store: ON, disk: { [`${SOUNDS_DIR}/question.wav`]: '' } })
+test('a question.wav in the folder is an ordinary sound: picked, it plays for a question', async ($, on) => {
+  const w = world(on, {
+    store: { chime: { version: 1, isOn: true, sound: 'question' } },
+    disk: { [`${SOUNDS_DIR}/question.wav`]: '' },
+  })
   await start($)
   await ask($)
   await settle()
   expect(w.played[0]?.[4]).toContain('question.wav')
 })
 
-test('a permission prompt plays the question sound once, and another notice plays nothing', async ($, on) => {
+test('a permission prompt plays the Claude sound once, and another notice plays nothing', async ($, on) => {
   const w = world(on, { store: ON })
   await start($)
   await notice($, 'idle_prompt')
@@ -1039,15 +1084,79 @@ test('a permission prompt plays the question sound once, and another notice play
   await notice($, 'permission_prompt')
   await settle()
   expect(w.played).toHaveLength(1)
-  expect(w.played[0]?.[4]).toContain('Windows Message Nudge.wav')
+  expect(w.played[0]?.[4]).toContain('Windows Notify Messaging.wav')
 })
 
-test('a player that never returns does not hold the turn, the question or the notice', async ($, on) => {
-  const w = world(on, { store: ON, hangs: true })
+/** What the person's Enter on a prompt raises; `more` overrides, for a command or another origin. */
+const send = ($: Engine, more: object = {}) => $.prompt.submit({ text: 'hello', wait: false, origin: { kind: 'composer' }, ...more } as any)
+const SENT = { chime: { version: 1, isOn: true, sound: '', sent: 'Windows Ding' } }
+
+test('the person’s Enter plays the sent sound once and sends the prompt on unchanged', async ($, on) => {
+  const w = world(on, { store: SENT })
+  await start($)
+  const sent: any = await send($)
+  await settle()
+  expect(sent.text).toBe('hello')
+  expect(w.played).toHaveLength(1)
+  expect(w.played[0]?.[4]).toContain('Windows Ding.wav')
+})
+
+test('with the sent sound at none, an Enter plays nothing', async ($, on) => {
+  const w = world(on, { store: ON })
+  await start($)
+  await send($)
+  await settle()
+  expect(w.played).toEqual([])
+})
+
+test('with the chime off, an Enter plays nothing even with a sent sound saved', async ($, on) => {
+  const w = world(on, { store: { chime: { version: 1, isOn: false, sound: '', sent: 'Windows Ding' } } })
+  await start($)
+  await send($)
+  await settle()
+  expect(w.played).toEqual([])
+})
+
+test('a slash command, a plugin’s prompt and a hidden prompt play no sent sound', async ($, on) => {
+  const w = world(on, { store: SENT })
+  await start($)
+  await send($, { command: { name: 'chime', args: 'test' } })
+  await send($, { origin: { kind: 'plugin', name: 'prompt-upgrade' } })
+  await send($, { isMeta: true })
+  await settle()
+  expect(w.played).toEqual([])
+})
+
+test('a prompt another hook drops still played its sound: it was the person’s Enter', async ($, on) => {
+  const w = world(on, { store: SENT, holds: true })
+  await start($)
+  const held: any = await send($)
+  await settle()
+  expect(held.drop).toBeDefined()
+  expect(w.played).toHaveLength(1)
+})
+
+test('/chime sent saves a name or none, plays the name, and says so', async ($, on) => {
+  const w = world(on, { store: ON })
+  await start($)
+  expect(await chime($, 'sent windows ding')).toContain('Windows Ding')
+  expect(w.store.chime).toEqual({ version: 1, isOn: true, sound: '', sent: 'Windows Ding' })
+  expect(w.played).toHaveLength(1)
+  expect(await chime($, 'sent none')).toContain('none')
+  expect(w.store.chime).toEqual({ version: 1, isOn: true, sound: '' })
+  expect(w.played).toHaveLength(1)
+  const said = await chime($, 'sent nope')
+  expect(said).toContain('No sound called "nope"')
+  expect(w.store.chime).toEqual({ version: 1, isOn: true, sound: '' })
+})
+
+test('a player that never returns does not hold the turn, the question, the notice or the prompt', async ($, on) => {
+  const w = world(on, { store: SENT, hangs: true })
   await start($)
   await finish($)
   await ask($)
   await notice($, 'permission_prompt')
+  await send($)
   await settle()
-  expect(w.played).toHaveLength(3)
+  expect(w.played).toHaveLength(4)
 })

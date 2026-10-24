@@ -1,6 +1,6 @@
 # arsenal
 
-A Claude Code mod that puts the tool mods in this repo, and your own skills and commands, one press away. A `[ ◆ Arsenal ▾ ]` button in Claude's orange, in the footer on the first row under the prompt box, opens a menu pane docked on the right with a **Prompt Upgrade** switch, a **Sound notifications** switch and sound picker, shortcuts to `/prompt-upgrade` and `/work-report`, and a **USER** and a **PROJECT** section listing the skills and commands you wrote. You no longer have to remember `/prompt-upgrade history` or `/work-report week`, or what you named your own commands, and you can look away while Claude works: a sound tells you when it is done or needs you.
+A Claude Code mod that puts the tool mods in this repo, and your own skills and commands, one press away. A `[ ◆ Arsenal ▾ ]` button in Claude's orange, in the footer on the first row under the prompt box, opens a menu pane docked on the right with a **Prompt Upgrade** switch, a **Sound notifications** switch with a sound for you and one for Claude, shortcuts to `/prompt-upgrade` and `/work-report`, and a **USER** and a **PROJECT** section listing the skills and commands you wrote. You no longer have to remember `/prompt-upgrade history` or `/work-report week`, or what you named your own commands, and you can look away while Claude works: a sound tells you when it is done or needs you.
 
 > **Credit.** The idea comes from a YouTube video by Tristen O'Brien ([tristenobrien.ai](https://tristenobrien.ai/)), who also gave us the idea for prompt-upgrade. In it, a "Tristen's Tools ▼" button in the footer opens a menu of settings and shortcuts. arsenal is that menu for the tools in this repo, under a name that is not a person's. The sound notifications are an idea from [angomedia/claude-mods](https://github.com/angomedia/claude-mods) (their done-chime, MIT); the code here is written fresh for Windows. Why it is built the way it is: [DESIGN.md](./DESIGN.md).
 
@@ -12,8 +12,9 @@ A Claude Code mod that puts the tool mods in this repo, and your own skills and 
  ────────────────────────────────────────────   │ ○ Prompt Upgrade        ○ Off    │
  [ ◆ Arsenal ▴ ] ◎ plan 44% · ~2m               │   upgrade every prompt first     │
                                                 │ ● Sound notifications   ● On     │
-                                                │   reply done · asked a question  │
-                                                │ ♪ Sound       Windows Notify ▸   │
+                                                │   you send · Claude replies/asks │
+                                                │ ♪ Claude      Windows Notify ▸   │
+                                                │ ↗ Sent                    none ▸ │
                                                 │ ── L A U N C H                   │
                                                 │ u: ✦ Upgrade a prompt            │
                                                 │ h: ◷ Prompt history              │
@@ -42,7 +43,8 @@ A Claude Code mod that puts the tool mods in this repo, and your own skills and 
 | --- | --- |
 | Prompt Upgrade switch (`p`) | `/prompt-upgrade on` or `/prompt-upgrade off`. The pill shows the real setting: `● On` or `○ Off`. |
 | Sound notifications switch (`c`) | Turns the sounds on or off, as `/chime on` and `/chime off` do. |
-| ♪ Sound (`o`) | Only while the sounds are on. Picks the next sound in the list and plays it. |
+| ♪ Claude (`o`) | Only while the sounds are on. Picks the next sound in the list for Claude's sound and plays it. |
+| ↗ Sent (`m`) | Only while the sounds are on. Picks the next sound for your own Enter and plays it; `none` comes first and plays nothing. |
 | ✦ Upgrade a prompt (`u`) | `/prompt-upgrade` |
 | ◷ Prompt history (`h`) | `/prompt-upgrade history` |
 | ▤ Today's report (`t`) | `/work-report today` |
@@ -63,25 +65,26 @@ arsenal reads the session's command list and keeps only the tools' rows whose co
 
 ## Sound notifications
 
-Off until you turn them on: press the switch (`c`), or `/chime on`. Then:
+Off until you turn them on: press the switch (`c`), or `/chime on`. There are two sounds, as in iMessage:
 
-- **A reply is done:** the picked sound plays (only for Claude's own turn, not a subagent's, and not one you stopped).
-- **Claude asks you something** (a question dialog) **or needs a permission OK:** a second, fixed sound plays, so you can tell them apart.
+- **Sent:** your own Enter on a prompt plays the *Sent* sound. It is `none` until you pick one. A slash command, a prompt another mod sends for you (Prompt Upgrade's upgrade) and a prompt you never see play nothing. It plays as you press Enter, even if another mod then holds the prompt back.
+- **Claude's sound:** it plays when a reply is done (only Claude's own turn, not a subagent's, and not one you stopped), when Claude asks you something (a question dialog) and when it needs a permission OK.
 
-The ♪ Sound row (`o`) goes down the list: your own sounds first, then the system's (`Windows Notify Messaging`, `Windows Notify System Generic`, `Windows Message Nudge`, `Windows Ding`, `Windows Background`; on a Mac `Glass`, `Ping`, `Pop`, `Hero`, `Tink`). Each press plays the sound it lands on.
+Each row goes down the same list: your own sounds first, then the system's (`Windows Notify Messaging`, `Windows Notify System Generic`, `Windows Message Nudge`, `Windows Ding`, `Windows Background`; on a Mac `Glass`, `Ping`, `Pop`, `Hero`, `Tink`). Each press plays the sound it lands on. The ↗ Sent row has `none` before the list.
 
-**Your own sounds.** Put `.wav` files in `~/.claude/arsenal/sounds/` (`C:\Users\<you>\.claude\arsenal\sounds\`). Each file name, without `.wav`, is a choice in the list, and the folder is read again every time the menu opens. A file called `question.wav` there is the question sound instead of the system's, and is not a choice in the list. If the sound you picked is deleted, the default plays.
+**Your own sounds.** Put `.wav` files in `~/.claude/arsenal/sounds/` (`C:\Users\<you>\.claude\arsenal\sounds\`). Each file name, without `.wav`, is a choice in both lists, and the folder is read again every time the menu opens. If the sound you picked for Claude is deleted, the default plays; if it was the Sent sound, that is `none` again. (0.4.0 treated a file called `question.wav` as a separate question sound. It is now a sound like any other.)
 
-**Apple's original sounds** are not in this repo, because they are Apple's. Copy them from a Mac and convert them once, because Windows cannot play `.caf` or `.aiff`: `afconvert -f WAVE -d LEI16 in.caf out.wav`. iMessage's tones are in `/System/Library/PrivateFrameworks/ToneLibrary.framework/Versions/A/Resources/AlertTones/` (`ReceivedMessage.caf` for a new message), and the alert sounds in `/System/Library/Sounds/` (`Glass.aiff`). Only `.wav` works so far.
+**Apple's original sounds** are not in this repo, because they are Apple's. Copy the two iMessage tones from a Mac and convert them once, because Windows cannot play `.caf` or `.aiff`: `afconvert -f WAVE -d LEI16 in.caf out.wav`. The new-message tone is `ReceivedMessage.caf` in `/System/Library/PrivateFrameworks/ToneLibrary.framework/Versions/A/Resources/AlertTones/` (pick it for Claude). Where the sent swoosh is depends on the macOS version, so search your Mac for it (Spotlight, `sent` with a `.caf` or `.aiff` file) and pick it for Sent. Name the converted files what you like, for example `imessage-sent.wav` and `imessage-new.wav`. Only `.wav` works so far.
 
 | Command | Does |
 | --- | --- |
-| `/chime` | Says whether the sounds are on, which sound is picked, and the names to pick from. |
+| `/chime` | Says whether the sounds are on, which sound each row has, and the names to pick from. |
 | `/chime on`, `/chime off` | The switch, from the keyboard. They work while Claude is busy. |
-| `/chime sound <name>` | Picks a sound by name (any case) and plays it. |
-| `/chime test` | Plays the picked sound, even while the sounds are off. |
+| `/chime sound <name>` | Picks Claude's sound by name (any case) and plays it. |
+| `/chime sent <name>`, `/chime sent none` | Picks the Sent sound and plays it, or turns it off. |
+| `/chime test` | Plays Claude's sound, even while the sounds are off. |
 
-The switch and the sound are saved on this machine. Sounds play through PowerShell on Windows and `afplay` on a Mac; on Linux nothing plays.
+The switch and both sounds are saved on this machine. Sounds play through PowerShell on Windows and `afplay` on a Mac; on Linux nothing plays.
 
 ## Your own commands
 
@@ -107,7 +110,7 @@ These rows have no hotkeys. LAUNCH keeps its own.
 - **It is a remote control, with one thing of its own: the sound notifications.** Every other row ends in a slash command that already exists. arsenal never writes another mod's state or your skill and command files, and never imports another mod's code. If you uninstall a tool, its rows disappear.
 - **It leaves the status mods alone.** `ctx`, `subagent-progress` and `agent-pulse` keep their bands. The button is not in the band at all; it sits in the footer, before the labels other mods add there, such as waypoints' plan.
 - **It has no model or effort picker.** There is no "auto model" and no helper-agent model setting.
-- **It keeps two things between sessions: which of your own commands you turned off, and the sound notifications' switch and sound.** A new session starts with the menu closed.
+- **It keeps two things between sessions: which of your own commands you turned off, and the sound notifications' switch and two sounds.** A new session starts with the menu closed.
 - **It makes no model calls and sends nothing anywhere.**
 
 ## Install

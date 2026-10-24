@@ -25,7 +25,7 @@ Paste this into Claude Code on the new computer:
 | `skins` | `hellosverre/claude-skins` | 0.5.13 | Colour scheme and words for the transcript |
 | `superpowers` | `obra/superpowers` | 7.0.0 | Skills library: brainstorming, planning, test-driven development, debugging and review workflows |
 | `agent-pulse` | `afterever/claude-mods` (this repo) | 1.1.0 | Box above the prompt naming the step Claude is on, in color and motion, with a step history |
-| `arsenal` | `afterever/claude-mods` (this repo) | 0.4.0 | Button in the footer under the prompt that opens a docked menu: Prompt Upgrade switch, Sound notifications switch and sound picker, shortcuts to `/prompt-upgrade` and `/work-report`, and your own skills and commands (USER and PROJECT), each of which you can turn off |
+| `arsenal` | `afterever/claude-mods` (this repo) | 0.4.1 | Button in the footer under the prompt that opens a docked menu: Prompt Upgrade switch, Sound notifications switch with a sound for your Enter and one for Claude, shortcuts to `/prompt-upgrade` and `/work-report`, and your own skills and commands (USER and PROJECT), each of which you can turn off |
 
 ## Install
 
@@ -257,20 +257,22 @@ jellyfish on the desktop. Written against 1.1.0. What changed:
 
 My own mod, from an idea in a video by the author of AI Made Easy ([tristenobrien.ai](https://tristenobrien.ai/)):
 a `[ ◆ Arsenal ▾ ]` button in Claude's orange, in the footer on the first row under the prompt box, opens a menu pane docked on the
-right, with a Prompt Upgrade on/off switch, a Sound notifications switch and sound picker, one-press shortcuts to
+right, with a Prompt Upgrade on/off switch, a Sound notifications switch with a sound for your Enter and one for Claude, one-press shortcuts to
 `/prompt-upgrade` and `/work-report`, and two sections for your own commands: **USER**
 (`~/.claude/skills` and `~/.claude/commands`) and **PROJECT** (the same two folders in the current
-repo). `/arsenal` toggles it from the keyboard. Written against 0.4.0. Nothing to configure.
+repo). `/arsenal` toggles it from the keyboard. Written against 0.4.1. Nothing to configure.
 
 - **The menu always shows.** The sound notifications need no other mod. It lists the session's
   commands and keeps only the tools' rows whose command exists. Restart Claude Code after
   installing a tool.
-- **Sound notifications are off until you turn them on** (`c` in the menu, or `/chime on`). A
-  sound plays when a reply is done and another when Claude asks you something or needs a
-  permission OK; `/chime test` plays the picked one. The sounds are the `.wav` files you put in
-  `~/.claude/arsenal/sounds/`, then Windows' own. Apple's originals work once converted to `.wav`
-  (on a Mac: `afconvert -f WAVE -d LEI16 in.caf out.wav`); they are not in the repo. A file named
-  `question.wav` there is the question sound. The idea is from
+- **Sound notifications are off until you turn them on** (`c` in the menu, or `/chime on`). There
+  are two sounds, as in iMessage: **Sent** plays when you press Enter on a prompt (`none` until
+  you pick one, `m` in the menu or `/chime sent <name>`), and **Claude's** plays when a reply is
+  done, when Claude asks you something and when it needs a permission OK (`o`, or
+  `/chime sound <name>`; `/chime test` plays it). Both pick from the `.wav` files you put in
+  `~/.claude/arsenal/sounds/`, then Windows' own. Apple's two iMessage sounds work once converted
+  to `.wav` (on a Mac: `afconvert -f WAVE -d LEI16 in.caf out.wav`); they are not in the repo. The
+  idea is from
   [angomedia/claude-mods](https://github.com/angomedia/claude-mods)' done-chime; the code is
   written fresh.
 - **USER and PROJECT list every skill and command you wrote, all on.** `✎ edit` on a section's
@@ -283,7 +285,7 @@ repo). `/arsenal` toggles it from the keyboard. Written against 0.4.0. Nothing t
   runs a slash command that already exists, and it never writes another mod's state or your skill
   files. It shows the model and effort in its header and never changes them.
 - **It makes no model calls.** It keeps two things between sessions: which of your commands you
-  turned off, and the sound notifications' switch and sound.
+  turned off, and the sound notifications' switch and two sounds.
 - What it does, the keys and the rows: [arsenal/README.md](./arsenal/README.md); why:
   [arsenal/DESIGN.md](./arsenal/DESIGN.md).
 
