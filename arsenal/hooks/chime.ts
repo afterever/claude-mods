@@ -37,12 +37,18 @@ export function systemCandidates(os: Os): Sound[] {
   return []
 }
 
-/** The `.wav` files of the person's folder, by name without the extension. */
+const WAV = /\.wav$/i
+const MP3 = /\.mp3$/i
+
+/** The `.wav` and `.mp3` files of the person's folder, by name without the extension; a wav and an mp3 of one name are one sound, the wav. */
 export function personalSounds(fileNames: readonly string[], folder: string): Sound[] {
-  return fileNames
-    .filter(file => /\.wav$/i.test(file))
-    .map(file => ({ name: file.slice(0, -4), path: `${folder}/${file}` }))
-    .sort((a, b) => a.name.localeCompare(b.name))
+  const byName = new Map<string, Sound>()
+  for (const file of fileNames) {
+    if (!WAV.test(file) && !MP3.test(file)) continue
+    const name = file.slice(0, -4)
+    if (!byName.has(name) || WAV.test(file)) byName.set(name, { name, path: `${folder}/${file}` })
+  }
+  return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name))
 }
 
 export const listOf = (s: Sounds): Sound[] => [...s.personal, ...s.system]
@@ -78,10 +84,29 @@ export const shouldPlaySent = (p: SubmittedPrompt) => p.origin.kind === 'compose
 /** The command that plays `path`, or null where nothing can. The path goes inside single quotes, doubled. */
 export function playerFor(path: string, os: Os): string[] | null {
   if (os === 'windows') {
-    return ['powershell', '-NoProfile', '-NonInteractive', '-Command', `(New-Object System.Media.SoundPlayer '${path.replace(/'/g, "''")}').PlaySync()`]
+    const quoted = path.replace(/'/g, "''")
+    return ['powershell', '-NoProfile', '-NonInteractive', '-Command', MP3.test(path) ? mp3Script(quoted) : `(New-Object System.Media.SoundPlayer '${quoted}').PlaySync()`]
   }
   return os === 'mac' ? ['afplay', path] : null
 }
+
+/**
+ * `SoundPlayer` plays only wav, so an mp3 goes through WPF's `MediaPlayer`
+ * (PowerShell 5.1 has it; the script has no dispatcher, so no `MediaEnded`).
+ * It starts at once and then waits for the length to be known, and for what is
+ * left of it, so the process outlives the clip. `quoted` has its `'` doubled.
+ */
+const mp3Script = (quoted: string) =>
+  [
+    'Add-Type -AssemblyName presentationCore',
+    '$p = New-Object System.Windows.Media.MediaPlayer',
+    `$p.Open((New-Object System.Uri('${quoted}')))`,
+    '$p.Play()',
+    '$t = [Diagnostics.Stopwatch]::StartNew()',
+    'while (-not $p.NaturalDuration.HasTimeSpan -and $t.ElapsedMilliseconds -lt 3000) { Start-Sleep -Milliseconds 20 }',
+    'if ($p.NaturalDuration.HasTimeSpan) { Start-Sleep -Milliseconds ([int][Math]::Max(0, $p.NaturalDuration.TimeSpan.TotalMilliseconds - $p.Position.TotalMilliseconds) + 100) }',
+    '$p.Close()',
+  ].join('; ')
 
 // ── The store ────────────────────────────────────────────────────────────
 

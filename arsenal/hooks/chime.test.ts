@@ -44,9 +44,26 @@ test('an apostrophe in the path is doubled, so it cannot leave the quotes', () =
   expect(argv?.[4]).toBe("(New-Object System.Media.SoundPlayer 'C:/Users/O''Brien/x.wav').PlaySync()")
 })
 
-test('macOS plays with afplay, and Linux plays nothing', () => {
+test('Windows plays an mp3 through WPF’s MediaPlayer, which starts at once and waits out the clip', () => {
+  const argv = playerFor('C:/a/b.MP3', 'windows')
+  expect(argv?.slice(0, 4)).toEqual(['powershell', '-NoProfile', '-NonInteractive', '-Command'])
+  const script = argv?.[4] ?? ''
+  expect(script).toContain('System.Windows.Media.MediaPlayer')
+  expect(script).toContain("(New-Object System.Uri('C:/a/b.MP3'))")
+  // play first, then wait for the length to be known and for what is left of it
+  expect(script.indexOf('.Play()')).toBeLessThan(script.indexOf('NaturalDuration'))
+  expect(script).toContain('.Close()')
+})
+
+test('an apostrophe in an mp3’s path is doubled too', () => {
+  expect(playerFor("C:/O'Brien/x.mp3", 'windows')?.[4]).toContain("System.Uri('C:/O''Brien/x.mp3')")
+})
+
+test('macOS plays with afplay, an mp3 as well, and Linux plays nothing', () => {
   expect(playerFor('/x.aiff', 'mac')).toEqual(['afplay', '/x.aiff'])
+  expect(playerFor('/x.mp3', 'mac')).toEqual(['afplay', '/x.mp3'])
   expect(playerFor('/x.wav', 'linux')).toBeNull()
+  expect(playerFor('/x.mp3', 'linux')).toBeNull()
 })
 
 test('the OS comes from the Windows environment, else a Mac-style home', () => {
@@ -57,12 +74,18 @@ test('the OS comes from the Windows environment, else a Mac-style home', () => {
 
 // ── The list ─────────────────────────────────────────────────────────────
 
-test('the person’s sounds are the wav files, by name; a question.wav is a sound like any other', () => {
-  expect(personalSounds(['b.WAV', 'a.wav', 'question.wav', 'notes.txt', 'c.mp3'], 'F')).toEqual([
+test('the person’s sounds are the wav and mp3 files, by name; a question.wav is a sound like any other', () => {
+  expect(personalSounds(['b.WAV', 'a.wav', 'question.wav', 'notes.txt', 'c.MP3', 'd.m4a'], 'F')).toEqual([
     { name: 'a', path: 'F/a.wav' },
     { name: 'b', path: 'F/b.WAV' },
+    { name: 'c', path: 'F/c.MP3' },
     { name: 'question', path: 'F/question.wav' },
   ])
+})
+
+test('a wav and an mp3 of one name are one sound, the wav', () => {
+  expect(personalSounds(['bell.mp3', 'bell.wav'], 'F')).toEqual([{ name: 'bell', path: 'F/bell.wav' }])
+  expect(personalSounds(['bell.wav', 'bell.mp3'], 'F')).toEqual([{ name: 'bell', path: 'F/bell.wav' }])
 })
 
 test('the folder is under .claude/arsenal/sounds in the home folder', () => {

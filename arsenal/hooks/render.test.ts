@@ -1150,6 +1150,20 @@ test('/chime sent saves a name or none, plays the name, and says so', async ($, 
   expect(w.store.chime).toEqual({ version: 1, isOn: true, sound: '' })
 })
 
+test('an mp3 in the folder is a choice in both lists and plays through the media player', async ($, on) => {
+  const w = world(on, { store: ON, disk: { [`${SOUNDS_DIR}/swoosh.mp3`]: '' } })
+  await start($)
+  expect(await chime($, '')).toContain('Sounds: swoosh, Windows Notify Messaging')
+  await chime($, 'sent swoosh')
+  expect(w.store.chime).toEqual({ version: 1, isOn: true, sound: '', sent: 'swoosh' })
+  expect(w.played).toHaveLength(1)
+  expect(w.played[0]?.[4]).toContain('System.Windows.Media.MediaPlayer')
+  expect(w.played[0]?.[4]).toContain('swoosh.mp3')
+  // a wav still goes to the lighter player
+  await chime($, 'sound windows ding')
+  expect(w.played[1]?.[4]).toContain('SoundPlayer')
+})
+
 test('a player that never returns does not hold the turn, the question, the notice or the prompt', async ($, on) => {
   const w = world(on, { store: SENT, hangs: true })
   await start($)
