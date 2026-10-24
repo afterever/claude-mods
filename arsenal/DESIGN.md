@@ -1137,6 +1137,29 @@ The person asked for `.mp3` after 0.4.1: the iMessage sounds circulate as `.mp3`
   are still not listed, which is a follow-up if a Mac user asks.)
 - The 15-second `timeoutMs` still ends a long clip.
 
+## 0.4.3: a plainer sound section
+
+Seen live on 0.4.1 and 0.4.2 (2026-10-24, the person, Windows terminal): the pane read
+
+```
+Sound notifications                  c:  ● On
+  you send · Claude replies/asks
+♪ Claude                   o: imessage_receive ▸
+↗ Sent                      m: iphone_msg_sent
+```
+
+and the person asked for less. What changed, all in the labels:
+
+- **The caption under the switch is gone** (`you send · Claude replies/asks`). The two rows name
+  themselves, and the line cost a row in a pane that sizes itself to its lines: `settingsLines`
+  counts the title, the switch and, while the chime is on, the two sound rows. The cost: with the
+  chime off, only the switch shows, and nothing in the pane says what it covers; the README does.
+- **`↗ Sent` is now `↗ You`**, so the pair reads as a sender each: `♪ Claude` is the sound Claude
+  makes, `↗ You` the sound you make. "Sent" named an event beside a sender.
+- **Unchanged on purpose:** the key `m`, the button key `arsenal-chime-sent`, the state key
+  `sent`, the store and `/chime sent <name|none>`. A rename of the command would break what 0.4.1
+  taught, for a word nobody types often. The person chose to keep it.
+
 ## Alternatives turned down
 
 - **For 0.4.1: three sounds (sent, reply, a fixed question sound).** Closer to 0.4.0, but "only two

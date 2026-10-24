@@ -12,9 +12,8 @@ A Claude Code mod that puts the tool mods in this repo, and your own skills and 
  ────────────────────────────────────────────   │ ○ Prompt Upgrade        ○ Off    │
  [ ◆ Arsenal ▴ ] ◎ plan 44% · ~2m               │   upgrade every prompt first     │
                                                 │ ● Sound notifications   ● On     │
-                                                │   you send · Claude replies/asks │
                                                 │ ♪ Claude      Windows Notify ▸   │
-                                                │ ↗ Sent                    none ▸ │
+                                                │ ↗ You                     none ▸ │
                                                 │ ── L A U N C H                   │
                                                 │ u: ✦ Upgrade a prompt            │
                                                 │ h: ◷ Prompt history              │
@@ -44,7 +43,7 @@ A Claude Code mod that puts the tool mods in this repo, and your own skills and 
 | Prompt Upgrade switch (`p`) | `/prompt-upgrade on` or `/prompt-upgrade off`. The pill shows the real setting: `● On` or `○ Off`. |
 | Sound notifications switch (`c`) | Turns the sounds on or off, as `/chime on` and `/chime off` do. |
 | ♪ Claude (`o`) | Only while the sounds are on. Picks the next sound in the list for Claude's sound and plays it. |
-| ↗ Sent (`m`) | Only while the sounds are on. Picks the next sound for your own Enter and plays it; `none` comes first and plays nothing. |
+| ↗ You (`m`) | Only while the sounds are on. Picks the next sound for your own Enter and plays it; `none` comes first and plays nothing. |
 | ✦ Upgrade a prompt (`u`) | `/prompt-upgrade` |
 | ◷ Prompt history (`h`) | `/prompt-upgrade history` |
 | ▤ Today's report (`t`) | `/work-report today` |
@@ -67,21 +66,21 @@ arsenal reads the session's command list and keeps only the tools' rows whose co
 
 Off until you turn them on: press the switch (`c`), or `/chime on`. There are two sounds, as in iMessage:
 
-- **Sent:** your own Enter on a prompt plays the *Sent* sound. It is `none` until you pick one. A slash command, a prompt another mod sends for you (Prompt Upgrade's upgrade) and a prompt you never see play nothing. It plays as you press Enter, even if another mod then holds the prompt back.
-- **Claude's sound:** it plays when a reply is done (only Claude's own turn, not a subagent's, and not one you stopped), when Claude asks you something (a question dialog) and when it needs a permission OK.
+- **You** (the ↗ You row): your own Enter on a prompt plays your sound, the swoosh. It is `none` until you pick one. A slash command, a prompt another mod sends for you (Prompt Upgrade's upgrade) and a prompt you never see play nothing. It plays as you press Enter, even if another mod then holds the prompt back.
+- **Claude** (the ♪ Claude row): its sound plays when a reply is done (only Claude's own turn, not a subagent's, and not one you stopped), when Claude asks you something (a question dialog) and when it needs a permission OK.
 
-Each row goes down the same list: your own sounds first, then the system's (`Windows Notify Messaging`, `Windows Notify System Generic`, `Windows Message Nudge`, `Windows Ding`, `Windows Background`; on a Mac `Glass`, `Ping`, `Pop`, `Hero`, `Tink`). Each press plays the sound it lands on. The ↗ Sent row has `none` before the list.
+Each row goes down the same list: your own sounds first, then the system's (`Windows Notify Messaging`, `Windows Notify System Generic`, `Windows Message Nudge`, `Windows Ding`, `Windows Background`; on a Mac `Glass`, `Ping`, `Pop`, `Hero`, `Tink`). Each press plays the sound it lands on. The ↗ You row has `none` before the list.
 
 **Your own sounds.** Put `.wav` or `.mp3` files in `~/.claude/arsenal/sounds/` (`C:\Users\<you>\.claude\arsenal\sounds\`). Each file name, without the extension, is a choice in both lists, and the folder is read again every time the menu opens. Keep them short: a sound is cut off after 15 seconds. If a `.wav` and an `.mp3` have one name, the `.wav` is the one listed. If the sound you picked for Claude is deleted, the default plays; if it was the Sent sound, that is `none` again. (0.4.0 treated a file called `question.wav` as a separate question sound. It is now a sound like any other.)
 
-**Apple's original sounds** are not in this repo, because they are Apple's. If you already have the two iMessage sounds as `.mp3` (many sound-effect sites offer them), drop those in the folder as they are. Otherwise copy them from a Mac and convert them once, because Windows cannot play `.caf` or `.aiff`: `afconvert -f WAVE -d LEI16 in.caf out.wav`. The new-message tone is `ReceivedMessage.caf` in `/System/Library/PrivateFrameworks/ToneLibrary.framework/Versions/A/Resources/AlertTones/` (pick it for Claude). Where the sent swoosh is depends on the macOS version, so search your Mac for it (Spotlight, `sent` with a `.caf` or `.aiff` file) and pick it for Sent. Name the converted files what you like, for example `imessage-sent.wav` and `imessage-new.wav`. Only `.wav` and `.mp3` are listed. An `.mp3` goes through a heavier Windows player than a `.wav`, so it may start a little later; the delay was not measured by ear.
+**Apple's original sounds** are not in this repo, because they are Apple's. If you already have the two iMessage sounds as `.mp3` (many sound-effect sites offer them), drop those in the folder as they are. Otherwise copy them from a Mac and convert them once, because Windows cannot play `.caf` or `.aiff`: `afconvert -f WAVE -d LEI16 in.caf out.wav`. The new-message tone is `ReceivedMessage.caf` in `/System/Library/PrivateFrameworks/ToneLibrary.framework/Versions/A/Resources/AlertTones/` (pick it for Claude). Where the sent swoosh is depends on the macOS version, so search your Mac for it (Spotlight, `sent` with a `.caf` or `.aiff` file) and pick it for You. Name the converted files what you like, for example `imessage-sent.wav` and `imessage-new.wav`. Only `.wav` and `.mp3` are listed. An `.mp3` goes through a heavier Windows player than a `.wav`, so it may start a little later; the delay was not measured by ear.
 
 | Command | Does |
 | --- | --- |
 | `/chime` | Says whether the sounds are on, which sound each row has, and the names to pick from. |
 | `/chime on`, `/chime off` | The switch, from the keyboard. They work while Claude is busy. |
 | `/chime sound <name>` | Picks Claude's sound by name (any case) and plays it. |
-| `/chime sent <name>`, `/chime sent none` | Picks the Sent sound and plays it, or turns it off. |
+| `/chime sent <name>`, `/chime sent none` | Picks the sound for your own Enter (the ↗ You row) and plays it, or turns it off. |
 | `/chime test` | Plays Claude's sound, even while the sounds are off. |
 
 The switch and both sounds are saved on this machine. Sounds play through PowerShell on Windows and `afplay` on a Mac; on Linux nothing plays.

@@ -130,9 +130,9 @@ export const hasPromptUpgrade = (tools: ArsenalTools) => tools['prompt-upgrade']
 
 /**
  * Lines SETTINGS takes: its title, Prompt Upgrade's switch and description,
- * the chime's switch and description, and the Claude and Sent rows while the chime is on.
+ * the chime's switch, and the Claude and You rows while the chime is on.
  */
-export const settingsLines = (tools: ArsenalTools, chime: ArsenalChime) => 1 + (hasPromptUpgrade(tools) ? 2 : 0) + 2 + (chime.isOn ? 2 : 0)
+export const settingsLines = (tools: ArsenalTools, chime: ArsenalChime) => 1 + (hasPromptUpgrade(tools) ? 2 : 0) + 1 + (chime.isOn ? 2 : 0)
 
 /** The Launch rows whose tool is there, in the order they are listed. */
 export const launchItems = (tools: ArsenalTools): LaunchItem[] => LAUNCH.filter(item => tools[item.command])

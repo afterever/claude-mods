@@ -161,11 +161,11 @@ const NO_OFF = { user: [], project: {} }
 test('SETTINGS always holds the chime, and Prompt Upgrade when its tool is there', () => {
   expect(hasPromptUpgrade(BOTH)).toBe(true)
   expect(hasPromptUpgrade(REPORT)).toBe(false)
-  // while the chime is on it adds a row for Claude's sound and one for the sent sound
+  // the title and the chime's switch; while the chime is on, a row for Claude's sound and one for yours
   const on = { isOn: true, sound: '', sent: '' }
-  expect(settingsLines(NONE, NO_CHIME)).toBe(3)
-  expect(settingsLines(NONE, on)).toBe(5)
-  expect(settingsLines(BOTH, on)).toBe(7)
+  expect(settingsLines(NONE, NO_CHIME)).toBe(2)
+  expect(settingsLines(NONE, on)).toBe(4)
+  expect(settingsLines(BOTH, on)).toBe(6)
 })
 
 test('the rows left are the commands not turned off, and edit mode shows them all', () => {
@@ -232,13 +232,13 @@ test('a section takes its header and its rows, or one line when all are off', ()
 })
 
 test('the pane asks for 0.1.0’s rows until the menu needs more', () => {
-  // 2 header + 5 settings + 6 launch + 1 note = 14, and 2 of slack: the chime's rows made 0.1.0's 14 a floor no more
-  expect(paneRows(BOTH, NO_OWN, NO_OFF, 'k', null, 48)).toBe(16)
+  // 2 header + 4 settings + 6 launch + 1 note = 13, and 2 of slack: 0.1.0's 14 is still the floor
+  expect(paneRows(BOTH, NO_OWN, NO_OFF, 'k', null, 48)).toBe(15)
   expect(paneRows(NONE, NO_OWN, NO_OFF, 'k', null, 48)).toBe(14)
   const ten = Array.from({ length: 10 }, (_, i) => cmd(`c${i}`))
   const own = { user: ten, project: [cmd('p')] }
-  // 2 header + 5 settings + 6 launch (title and 5) + 11 user + 2 project + 1 note = 27, and 2 of slack
-  expect(paneRows(BOTH, own, NO_OFF, 'k', null, 48)).toBe(29)
+  // 2 header + 4 settings + 6 launch (title and 5) + 11 user + 2 project + 1 note = 26, and 2 of slack
+  expect(paneRows(BOTH, own, NO_OFF, 'k', null, 48)).toBe(28)
 })
 
 test('edit mode counts the rows that are off, and a section that is all off counts its line', () => {
@@ -247,7 +247,7 @@ test('edit mode counts the rows that are off, and a section that is all off coun
   const closed = paneRows(BOTH, own, off, 'k', null, 48)
   const editing = paneRows(BOTH, own, off, 'k', 'user', 48)
   expect(editing - closed).toBe(9)
-  expect(closed).toBe(2 + 5 + 6 + 2 + 1 + 2)
+  expect(closed).toBe(2 + 4 + 6 + 2 + 1 + 2)
 })
 
 test('the draft note names the command', () => {
