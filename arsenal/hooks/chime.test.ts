@@ -79,7 +79,7 @@ test('the OS comes from the Windows environment, else a Mac-style home', () => {
 // ── The list ─────────────────────────────────────────────────────────────
 
 test('the person’s sounds are the wav and mp3 files, by name; a question.wav is a sound like any other', () => {
-  expect(personalSounds(['b.WAV', 'a.wav', 'question.wav', 'notes.txt', 'c.MP3', 'd.m4a'], 'F')).toEqual([
+  expect(personalSounds(['b.WAV', 'a.wav', 'question.wav', 'notes.txt', 'c.MP3', 'd.m4a', 'e.aiff', 'f.caf'], 'F', 'windows')).toEqual([
     { name: 'a', path: 'F/a.wav' },
     { name: 'b', path: 'F/b.WAV' },
     { name: 'c', path: 'F/c.MP3' },
@@ -88,8 +88,26 @@ test('the person’s sounds are the wav and mp3 files, by name; a question.wav i
 })
 
 test('a wav and an mp3 of one name are one sound, the wav', () => {
-  expect(personalSounds(['bell.mp3', 'bell.wav'], 'F')).toEqual([{ name: 'bell', path: 'F/bell.wav' }])
-  expect(personalSounds(['bell.wav', 'bell.mp3'], 'F')).toEqual([{ name: 'bell', path: 'F/bell.wav' }])
+  expect(personalSounds(['bell.mp3', 'bell.wav'], 'F', 'windows')).toEqual([{ name: 'bell', path: 'F/bell.wav' }])
+  expect(personalSounds(['bell.wav', 'bell.mp3'], 'F', 'windows')).toEqual([{ name: 'bell', path: 'F/bell.wav' }])
+})
+
+test('a Mac also lists .m4a, .aiff and .caf, and a four-letter extension is cut whole', () => {
+  expect(personalSounds(['a.aiff', 'b.caf', 'c.m4a', 'notes.txt'], 'F', 'mac')).toEqual([
+    { name: 'a', path: 'F/a.aiff' },
+    { name: 'b', path: 'F/b.caf' },
+    { name: 'c', path: 'F/c.m4a' },
+  ])
+})
+
+test('on a Mac one name in several formats is one sound: wav, mp3, m4a, aiff, then caf', () => {
+  expect(personalSounds(['x.caf', 'x.wav', 'x.m4a'], 'F', 'mac')).toEqual([{ name: 'x', path: 'F/x.wav' }])
+  expect(personalSounds(['x.caf', 'x.aiff'], 'F', 'mac')).toEqual([{ name: 'x', path: 'F/x.aiff' }])
+  expect(personalSounds(['x.aiff', 'x.m4a', 'x.mp3'], 'F', 'mac')).toEqual([{ name: 'x', path: 'F/x.mp3' }])
+})
+
+test('Linux lists the same files as Windows, though nothing plays there', () => {
+  expect(personalSounds(['a.wav', 'b.aiff'], 'F', 'linux')).toEqual([{ name: 'a', path: 'F/a.wav' }])
 })
 
 test('the folder is under .claude/arsenal/sounds in the home folder', () => {

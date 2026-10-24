@@ -237,7 +237,7 @@ async function soundsOf($: EngineInterface): Promise<{ sounds: Sounds; os: Os }>
       }
     }),
   )
-  return { sounds: { personal: personalSounds(fileNames, folder), system: found.filter((s): s is Sound => s !== null) }, os }
+  return { sounds: { personal: personalSounds(fileNames, folder, os), system: found.filter((s): s is Sound => s !== null) }, os }
 }
 
 /** What was chosen, from the last session on this machine. */
