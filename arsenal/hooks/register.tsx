@@ -1,7 +1,26 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { ArsenalOff, ArsenalOwn, ArsenalTools } from '../types'
+import type { ArsenalChime, ArsenalOff, ArsenalOwn, ArsenalTools } from '../types'
+import {
+  CHIME_HELP,
+  CHIME_STORE_KEY,
+  NO_CHIME,
+  chimeFromStore,
+  chimeToStore,
+  chosen,
+  describeChime,
+  listOf,
+  nextName,
+  osFrom,
+  parseChime,
+  personalSounds,
+  playerFor,
+  questionPath,
+  soundsFolder,
+  systemCandidates,
+} from './chime'
+import type { Os, Sound, Sounds } from './chime'
 import {
   NO_OFF,
   NO_OWN,
@@ -9,8 +28,7 @@ import {
   draftNote,
   failedNote,
   flipped,
-  hasRows,
-  hasSettings,
+  hasPromptUpgrade,
   headerNote,
   launchColumns,
   launchItems,
@@ -46,6 +64,7 @@ const ownAtom = atom({ plugin: 'arsenal', key: 'own' } as const, NO_OWN)
 const offAtom = atom({ plugin: 'arsenal', key: 'off' } as const, NO_OFF)
 const editingAtom = atom({ plugin: 'arsenal', key: 'editing' } as const, null)
 const projectKeyAtom = atom({ plugin: 'arsenal', key: 'projectKey' } as const, '')
+const chimeAtom = atom({ plugin: 'arsenal', key: 'chime' } as const, NO_CHIME)
 
 // The menu is a pane, docked at the right in fullscreen like the tools' own
 const PANE = 'arsenal'
@@ -181,6 +200,75 @@ async function loadOff($: EngineInterface) {
   }
 }
 
+// ── Sound notifications ──────────────────────────────────────────────────
+
+/**
+ * The sounds there are now: the `.wav` files of the person's folder and the
+ * system's own that exist on disk. Read each time it is needed, so a file
+ * dropped in mid-session is found.
+ */
+async function soundsOf($: EngineInterface): Promise<{ sounds: Sounds; os: Os; folder: string; fileNames: string[] }> {
+  const home = (await $.env.get('USERPROFILE')) || (await $.env.get('HOME')) || ''
+  const os = osFrom(await $.env.get('OS'), home)
+  const folder = soundsFolder(home)
+  const fileNames = home ? (await entriesOf($, folder)).filter(f => f.kind === 'file' || f.isLink).map(f => f.name) : []
+  const found = await Promise.all(
+    systemCandidates(os).map(async (s): Promise<Sound | null> => {
+      try {
+        return (await $.fs.exists(s.path)) ? s : null
+      } catch {
+        return null
+      }
+    }),
+  )
+  return { sounds: { personal: personalSounds(fileNames, folder), system: found.filter((s): s is Sound => s !== null) }, os, folder, fileNames }
+}
+
+/** What was chosen, from the last session on this machine. */
+async function loadChime($: EngineInterface) {
+  try {
+    const held = chimeFromStore(await $.store.get(CHIME_STORE_KEY))
+    await update($, chimeAtom, () => held)
+  } catch {
+    // the chime is off until the person turns it on
+  }
+}
+
+/** Writes the setting to state (the drawing follows), then to the store. */
+async function setChime($: EngineInterface, next: ArsenalChime) {
+  await update($, chimeAtom, () => next)
+  try {
+    await $.store.set(CHIME_STORE_KEY, chimeToStore(next))
+  } catch {
+    // the state stands for this session
+    $.ui.toast('Could not save the chime setting.')
+  }
+}
+
+/** Plays one sound file. Silent when nothing can play it or the player fails. */
+async function playPath($: EngineInterface, path: string | undefined, os: Os) {
+  const argv = path ? playerFor(path, os) : null
+  if (!argv) return
+  try {
+    await $.process.run(argv, { timeoutMs: 15000 })
+  } catch {
+    // no player, or the sound is gone: stay quiet
+  }
+}
+
+/** Starts a sound without holding the caller: nothing here may slow or fail a turn. */
+const quiet = (run: () => Promise<void>) => {
+  void run().catch(() => {})
+}
+
+/** The sound for an event: the picked one for a reply, the question sound for a question. Nothing while the chime is off. */
+async function playFor($: EngineInterface, kind: 'reply' | 'question') {
+  const chime = (await read($, chimeAtom)) ?? NO_CHIME
+  if (!chime.isOn) return
+  const { sounds, os, folder, fileNames } = await soundsOf($)
+  await playPath($, kind === 'reply' ? chosen(sounds, chime.sound)?.path : questionPath(fileNames, folder, sounds.system, os), os)
+}
+
 async function openMenu($: EngineInterface) {
   await refreshModel($)
   await scan($)
@@ -191,6 +279,7 @@ async function openMenu($: EngineInterface) {
     (await read($, projectKeyAtom)) ?? '',
     null,
     PANE_COLUMNS,
+    (await read($, chimeAtom)) ?? NO_CHIME,
   )
   await update($, isOpenAtom, () => true)
   const { isPlaced } = await $.ui.open(paneArgs(rows))
@@ -207,7 +296,6 @@ async function closeMenu($: EngineInterface) {
 }
 
 async function toggleMenu($: EngineInterface) {
-  if (!hasRows(await read($, toolsAtom), (await read($, ownAtom)) ?? NO_OWN)) return
   if ((await read($, isOpenAtom)) === true) await closeMenu($)
   else await openMenu($)
 }
@@ -281,6 +369,16 @@ async function flipOff($: EngineInterface, section: Section, name: string) {
   }
 }
 
+/** The Sound row: the next sound in the list, saved and played at once. */
+async function cycleSound($: EngineInterface) {
+  const held = (await read($, chimeAtom)) ?? NO_CHIME
+  const { sounds, os } = await soundsOf($)
+  const name = nextName(sounds, held.sound)
+  if (!name) return
+  await setChime($, { ...held, sound: name })
+  await playPath($, listOf(sounds).find(s => s.name === name)?.path, os)
+}
+
 /** `✎ edit` and `✓ done`: one section is in edit mode at a time. */
 const setEditing = ($: EngineInterface, section: Section | null) => update($, editingAtom, () => section)
 
@@ -295,6 +393,9 @@ type View = {
   off: ArsenalOff
   editing: Section | null
   projectKey: string
+  chime: ArsenalChime
+  /** The name the Sound row shows: the chosen sound, or the default when the saved one is gone. */
+  sound: string
 }
 
 function drawMenu($: EngineInterface, e: Parameters<typeof $.ui.resolve>[0], bodyColumns: number, view: View) {
@@ -372,23 +473,47 @@ function drawMenu($: EngineInterface, e: Parameters<typeof $.ui.resolve>[0], bod
         <Text dimColor>{view.header}</Text>
       </Box>
       <Text dimColor>{'─'.repeat(inner)}</Text>
-      {hasSettings(tools) ? (
-        <Box key="arsenal-settings-section" flexDirection="column">
-          <Text dimColor>{sectionTitle('SETTINGS')}</Text>
+      <Box key="arsenal-settings-section" flexDirection="column">
+        <Text dimColor>{sectionTitle('SETTINGS')}</Text>
+        {hasPromptUpgrade(tools) ? (
+          <Box key="arsenal-auto-rows" flexDirection="column">
+            <Box justifyContent="space-between">
+              <Box>
+                <Text color={auto ? COLORS.teal : undefined} dimColor={!auto}>
+                  {auto ? '● ' : '○ '}
+                </Text>
+                <Text bold>Prompt Upgrade</Text>
+              </Box>
+              <Button key="arsenal-auto" plain hotkey="p" onPress={() => press($, 'prompt-upgrade', auto ? 'off' : 'on', false)}>
+                {pill(auto)}
+              </Button>
+            </Box>
+            <Text dimColor>{'  upgrade every prompt first'}</Text>
+          </Box>
+        ) : null}
+        <Box key="arsenal-chime-rows" flexDirection="column">
           <Box justifyContent="space-between">
             <Box>
-              <Text color={auto ? COLORS.teal : undefined} dimColor={!auto}>
-                {auto ? '● ' : '○ '}
+              <Text color={view.chime.isOn ? COLORS.teal : undefined} dimColor={!view.chime.isOn}>
+                {view.chime.isOn ? '● ' : '○ '}
               </Text>
-              <Text bold>Prompt Upgrade</Text>
+              <Text bold>Sound notifications</Text>
             </Box>
-            <Button key="arsenal-auto" plain hotkey="p" onPress={() => press($, 'prompt-upgrade', auto ? 'off' : 'on', false)}>
-              {pill(auto)}
+            <Button key="arsenal-chime-switch" plain hotkey="c" onPress={() => setChime($, { ...view.chime, isOn: !view.chime.isOn })}>
+              {pill(view.chime.isOn)}
             </Button>
           </Box>
-          <Text dimColor>{'  upgrade every prompt first'}</Text>
+          <Text dimColor>{'  reply done · asked a question'}</Text>
+          {view.chime.isOn ? (
+            <Box justifyContent="space-between">
+              <Text>♪ Sound</Text>
+              <Button key="arsenal-chime-sound" plain hotkey="o" onPress={() => cycleSound($)}>
+                <Text dimColor>{`${view.sound || 'none found'} ▸`}</Text>
+              </Button>
+            </Box>
+          ) : null}
         </Box>
-      ) : null}
+      </Box>
       {launchItems(tools).length > 0 ? (
         <Box key="arsenal-launch-section" flexDirection="column">
           <Text dimColor>{sectionTitle('LAUNCH')}</Text>
@@ -430,8 +555,19 @@ export const register: Register = on => {
     } catch {
       // a menu that stays as it was is still a menu
     }
+    try {
+      await $.command.register({
+        name: 'chime',
+        description: 'Sound notifications: on, off, test, or pick a sound',
+        argumentHint: '[on|off|test|sound <name>]',
+        immediate: true,
+      })
+    } catch {
+      // the switch in the menu still works without the command
+    }
     await refreshTools($)
     await loadOff($)
+    await loadChime($)
     await scan($)
     try {
       const model = await $.session.model()
@@ -473,6 +609,51 @@ export const register: Register = on => {
     return {}
   }).catch(() => ({ text: 'Arsenal could not do that right now.' }))
 
+  on('command.run', { command: 'chime' }, async ($, e) => {
+    const held = (await read($, chimeAtom)) ?? NO_CHIME
+    const { sounds, os } = await soundsOf($)
+    const names = listOf(sounds).map(s => s.name)
+    const now = chosen(sounds, held.sound)
+    const command = parseChime(e.args)
+    if (command.kind === 'on' || command.kind === 'off') {
+      await setChime($, { ...held, isOn: command.kind === 'on' })
+      return { text: command.kind === 'on' ? 'Sound notifications on.' : 'Sound notifications off. `/chime on` turns them back on.' }
+    }
+    if (command.kind === 'test') {
+      await playPath($, now?.path, os)
+      return { text: now ? `Played "${now.name}".` : 'No sounds found.' }
+    }
+    if (command.kind === 'sound') {
+      const picked = listOf(sounds).find(s => s.name.toLowerCase() === command.name.toLowerCase())
+      if (!picked) return { text: `No sound called "${command.name}". Pick one of: ${names.join(', ')}` }
+      await setChime($, { ...held, sound: picked.name })
+      await playPath($, picked.path, os)
+      return { text: `Sound set to "${picked.name}".` }
+    }
+    return { text: command.kind === 'show' ? describeChime(held, now?.name ?? '', names) : CHIME_HELP }
+  }).catch(() => ({ text: 'Chime could not do that right now.' }))
+
+  // A reply done: the main loop's turns only, and not one the person stopped.
+  // The sound is started and never waited for
+  on('turn.complete', async ($, e, next) => {
+    const done = await next(e)
+    if (!e.agentId && !e.isAborted) quiet(() => playFor($, 'reply'))
+    return done
+  })
+
+  // The dialog opens while the call runs, so the sound starts as it appears
+  on('tool.call', { tool: 'AskUserQuestion' }, async ($, e, next) => {
+    quiet(() => playFor($, 'question'))
+    return next(e)
+  })
+
+  // A permission prompt, where the engine raises one
+  on('classic.Notification', async ($, e, next) => {
+    const done = await next(e)
+    if (e.notification_type === 'permission_prompt') quiet(() => playFor($, 'question'))
+    return done
+  })
+
   // A close by the person (Esc, the pane's mark) turns the launcher's arrow
   // back; an unload (hot reload, exit) is not a close they asked for
   on('ui.close', async ($, e, next) => {
@@ -494,8 +675,6 @@ export const register: Register = on => {
   // mods added (waypoints' plan) already in it, so it is wrapped, never
   // rebuilt from `modes`. A space after the button keeps the two apart
   on('ui.render', { component: 'SessionMode' }, async ($, e, next) => {
-    const tools = await read($, toolsAtom)
-    if (!hasRows(tools, (await read($, ownAtom)) ?? NO_OWN)) return next(e)
     const open = (await read($, isOpenAtom)) === true
     const footer = await next(e)
     const { Box, Button, Text } = $.ui.resolve(e)
@@ -513,8 +692,20 @@ export const register: Register = on => {
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const tools = await read($, toolsAtom)
+    const chime = (await read($, chimeAtom)) ?? NO_CHIME
+    // the list is read as the pane draws, so a file dropped in is found
+    let sound = ''
+    if (chime.isOn) {
+      try {
+        sound = chosen((await soundsOf($)).sounds, chime.sound)?.name ?? ''
+      } catch {
+        // the row says none found
+      }
+    }
     const view: View = {
       tools,
+      chime,
+      sound,
       auto: await readAuto($),
       header: headerNote((await read($, runningAtom)) ?? null),
       note: (await read($, noteAtom)) ?? '',

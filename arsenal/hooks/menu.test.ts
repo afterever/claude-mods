@@ -1,5 +1,6 @@
 import { test, expect } from 'claude-code/testing'
 
+import { NO_CHIME } from './chime'
 import {
   MORE_CELLS,
   NO_OWN,
@@ -10,8 +11,7 @@ import {
   effortLabel,
   failedNote,
   flipped,
-  hasOwn,
-  hasRows,
+  hasPromptUpgrade,
   headerNote,
   launchColumns,
   launchItems,
@@ -25,6 +25,7 @@ import {
   reconcile,
   runningFrom,
   sectionTitle,
+  settingsLines,
   shownRows,
   toolsFrom,
   withOff,
@@ -114,10 +115,6 @@ test('the Launch rows follow the tools that are there', () => {
   expect(keys(UPGRADE)).toEqual(['upgrade', 'history'])
   expect(keys(REPORT)).toEqual(['today', 'week', 'settings'])
   expect(keys(NONE)).toEqual([])
-  expect(hasRows(BOTH)).toBe(true)
-  expect(hasRows(UPGRADE)).toBe(true)
-  expect(hasRows(REPORT)).toBe(true)
-  expect(hasRows(NONE)).toBe(false)
 })
 
 test('each Launch row runs the command its tool already has', () => {
@@ -161,15 +158,13 @@ test('titles and notes read as the design draws them', () => {
 const cmd = (name: string, description = `about ${name}`, takesArgs = false) => ({ name, description, takesArgs })
 const NO_OFF = { user: [], project: {} }
 
-test('the launcher shows for commands of the person’s own, even with no tools and all of them off', () => {
-  const own = { user: [cmd('handoff')], project: [] }
-  expect(hasOwn(own)).toBe(true)
-  expect(hasOwn(NO_OWN)).toBe(false)
-  expect(hasRows(NONE, own)).toBe(true)
-  expect(hasRows(NONE, { user: [], project: [cmd('seed-db')] })).toBe(true)
-  expect(hasRows(NONE, NO_OWN)).toBe(false)
-  expect(hasRows(NONE)).toBe(false)
-  expect(hasRows(UPGRADE, NO_OWN)).toBe(true)
+test('SETTINGS always holds the chime, and Prompt Upgrade when its tool is there', () => {
+  expect(hasPromptUpgrade(BOTH)).toBe(true)
+  expect(hasPromptUpgrade(REPORT)).toBe(false)
+  const on = { isOn: true, sound: '' }
+  expect(settingsLines(NONE, NO_CHIME)).toBe(3)
+  expect(settingsLines(NONE, on)).toBe(4)
+  expect(settingsLines(BOTH, on)).toBe(6)
 })
 
 test('the rows left are the commands not turned off, and edit mode shows them all', () => {
@@ -236,12 +231,13 @@ test('a section takes its header and its rows, or one line when all are off', ()
 })
 
 test('the pane asks for 0.1.0’s rows until the menu needs more', () => {
-  expect(paneRows(BOTH, NO_OWN, NO_OFF, 'k', null, 48)).toBe(14)
+  // 2 header + 5 settings + 6 launch + 1 note = 14, and 2 of slack: the chime's rows made 0.1.0's 14 a floor no more
+  expect(paneRows(BOTH, NO_OWN, NO_OFF, 'k', null, 48)).toBe(16)
   expect(paneRows(NONE, NO_OWN, NO_OFF, 'k', null, 48)).toBe(14)
   const ten = Array.from({ length: 10 }, (_, i) => cmd(`c${i}`))
   const own = { user: ten, project: [cmd('p')] }
-  // 2 header + 3 settings + 6 launch (title and 5) + 11 user + 2 project + 1 note = 25, and 2 of slack
-  expect(paneRows(BOTH, own, NO_OFF, 'k', null, 48)).toBe(27)
+  // 2 header + 5 settings + 6 launch (title and 5) + 11 user + 2 project + 1 note = 27, and 2 of slack
+  expect(paneRows(BOTH, own, NO_OFF, 'k', null, 48)).toBe(29)
 })
 
 test('edit mode counts the rows that are off, and a section that is all off counts its line', () => {
@@ -250,7 +246,7 @@ test('edit mode counts the rows that are off, and a section that is all off coun
   const closed = paneRows(BOTH, own, off, 'k', null, 48)
   const editing = paneRows(BOTH, own, off, 'k', 'user', 48)
   expect(editing - closed).toBe(9)
-  expect(closed).toBe(2 + 3 + 6 + 2 + 1 + 2)
+  expect(closed).toBe(2 + 5 + 6 + 2 + 1 + 2)
 })
 
 test('the draft note names the command', () => {

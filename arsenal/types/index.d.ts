@@ -18,6 +18,9 @@ export type ArsenalOwn = { user: OwnCommand[]; project: OwnCommand[] }
 /** The names turned off in edit mode. `project` is keyed by the project key (the repo's shared `.git` folder). */
 export type ArsenalOff = { user: string[]; project: Record<string, string[]> }
 
+/** The sound notifications' two settings. `sound` is a name from the list; empty means the default. */
+export type ArsenalChime = { isOn: boolean; sound: string }
+
 declare module 'claude-code' {
   interface PluginState {
     arsenal: {
@@ -32,6 +35,7 @@ declare module 'claude-code' {
       editing: 'user' | 'project' | null
       /** The key into `off.project` for this session's repo, from the last scan. */
       projectKey: string
+      chime: ArsenalChime
     }
   }
 }

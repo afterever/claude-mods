@@ -22,7 +22,9 @@ not a person's name.
 
 - **A remote control, not an owner.** Every row ends in a slash command that the tool already
   has. arsenal never writes another mod's `$.state` (the engine refuses that anyway) and never
-  imports another mod's code. If you uninstall a tool, its rows disappear.
+  imports another mod's code. If you uninstall a tool, its rows disappear. **One exception since
+  0.4.0: the sound notifications are arsenal's own**, because a sound setting has no tool to
+  belong to ("0.4.0: sound notifications").
 - **Never changes the model or effort.** The person never switches model or effort mid-session,
   so arsenal has no model or effort picker, no "auto model" and no subagent model setting. The
   header shows the model and effort in use, and that is all: arsenal only watches, it never
@@ -794,6 +796,219 @@ it comes from. The LAUNCH rows run what the person would type, so arsenal's rows
   0.3.1 shows no rows for that tool, and an old arsenal against the new names shows rows that run
   a command that no longer exists. Update all three.
 - The sections above keep the names as they were when they were written (`better`, `report`).
+
+## 0.4.0: sound notifications
+
+Designed on 2026-10-24 (Sonnet 5.5) in conversation with the person. Nothing in this section is
+built yet. **Read** means read from the API types or a source file, not run; **probed** means run.
+
+### Where it comes from, and the credit
+
+The idea is angomedia's **done-chime** (https://github.com/angomedia/claude-mods, MIT, copyright
+Ango Media): play a sound when Claude finishes a reply or asks you something, so you can look away.
+The person found the repo on YouTube and asked for the chime to live in Arsenal's SETTINGS.
+
+- **The code is written fresh.** The design was made after reading done-chime's `register.tsx`,
+  which is why the credit is given, but nothing is pasted from it. It could not be: that mod plays
+  through `afplay`, shows banners through `osascript` and finds the front app with `lsappinfo`,
+  and none of those exist on the person's Windows PCs.
+- **Credit is given anyway**, as for prompt-upgrade and arsenal's own idea: a Credit paragraph in
+  `README.md`, a closing line in the marketplace entry ("Sound notifications idea from
+  https://github.com/angomedia/claude-mods."), and the same line in the header comment of
+  `chime.ts`. Because no code is copied, MIT does not require their copyright notice, and no
+  `THIRD-PARTY` file is added. **If code is ever copied from their repo, that changes**: their
+  copyright and the MIT permission text must then travel with it.
+- **Not taken:** the "sent" swoosh, macOS banners and the iMessage framing. Files-changed and
+  project-notes were looked at and left out (the person does not need files-changed, and
+  project-notes is macOS-only; if they install it themselves, Arsenal could later show a row for
+  `/notes` the way it shows `/work-report`, with no code of its own).
+
+### Goals, non-goals, anti-goals
+
+**Goals**
+
+- A **Sound notifications** switch in SETTINGS, and a **Sound** row beside it that picks which
+  sound plays.
+- A sound when the main loop finishes a reply, and when Claude asks a question or needs a
+  permission OK.
+- The person's own sounds, Apple's original ones included, from a folder they fill.
+- It works on the Windows home and work PCs, and still plays on macOS.
+
+**Non-goals**
+
+- Banners or toasts. The Desktop app has notifications of its own.
+- Bundling Apple's sounds (they are Apple's and not ours to ship in a public repo).
+- Speech (`$.audio.speak`), a volume setting, "only for replies over N seconds" (a possible 0.4.x
+  row), per-event sounds beyond the one fixed question sound below.
+- A Linux player. It plays nothing there, as `$.audio.play` itself does.
+
+**Anti-goals** (a failure even if it worked)
+
+- A sound for a subagent's turn, or for a turn the person stopped (`isAborted`).
+- A hook that can slow or fail a turn: every sound is fire-and-forget behind `void … .catch`.
+- Sound by default for someone who only updated the mod. **The default is off.**
+- A press on the Sound row that plays nothing: it plays what it just picked.
+
+### Approaches considered
+
+1. **Built into Arsenal (chosen).** One install; the pill follows Arsenal's own state. Cost: Arsenal
+   now owns one feature, so its "remote control" principle gets one stated exception.
+2. **A separate `chime` mod, Arsenal reading its state** (the prompt-upgrade way). Keeps the
+   principle whole. Turned down: a whole package and a cross-plugin state read for about 150
+   lines, and the person did not want a standalone mod for it.
+3. **Three mods or one companion for chime, files and notes.** Turned down with the scope cut above.
+
+The principle in "Principles" is amended, not dropped: *a remote control, with one thing of its
+own, the chime, because a sound setting has no tool to belong to.*
+
+### The menu
+
+```
+│ ── S E T T I N G S                       │
+│ ○ Prompt Upgrade                ○ Off    │
+│   upgrade every prompt first             │
+│ ● Sound notifications           ● On     │
+│   reply done · asked a question          │
+│ ♪ Sound                Windows Notify ▸  │
+```
+
+- **Sound notifications:** the same `●`/`○` dot, bold name, dim description and `● On` / `○ Off`
+  pill as Prompt Upgrade. A press calls `setChime` directly, as `/chime on` and `/chime off` do
+  (the menu stays open). **Changed in building:** it does not go through `$.command.run`, which
+  queues until the session is idle, so a toggle during a turn would wait for the turn's end.
+- **Sound:** a `plain` Button showing the current sound's name and `▸`. A press picks the next
+  sound in the list, saves it and plays it. At the end of the list it wraps. Shown only when the
+  switch is on, so an off chime offers nothing to pick.
+- **SETTINGS is now always drawn**, and so is the launcher: the chime needs no other tool, so
+  `hasRows` and `hasSettings` no longer depend on prompt-upgrade or work-report. Prompt Upgrade's
+  own row still needs prompt-upgrade. (This changes 0.2.0's "nothing found → no launcher".)
+- Hotkeys while the pane is focused: `c` for the switch, `o` for the sound (a call of this
+  design; `p u h t w s` are taken).
+
+### The sounds
+
+A pure module `hooks/chime.ts` (tested in `hooks/chime.test.ts`) holds the list and the player.
+
+- **The list, in order:**
+  1. the person's files: every `*.wav` in `<home>/.claude/arsenal/sounds/`, by file name without
+     the extension, sorted (listed with `$.fs.list`; a missing folder is an empty list);
+  2. the system's own, only the ones found on disk. **Windows:** `Windows Notify Messaging`,
+     `Windows Notify System Generic`, `Windows Message Nudge`, `Windows Ding`, `Windows Background`,
+     all `C:\Windows\Media\*.wav` (**probed**: present on the home PC). **macOS:** `Glass`, `Ping`,
+     `Pop`, `Hero`, `Tink` from `/System/Library/Sounds/*.aiff`. Linux: none.
+- **Default:** the first sound of the system's own that exists (`Windows Notify Messaging`;
+  `Glass` on macOS).
+- **Question sound:** a file named `question.wav` in the person's folder if there is one, else the
+  system's `Windows Message Nudge` (`Ping` on macOS). It is not a setting; one fixed sound is
+  enough to tell "done" from "asking". A file named `question` is left out of the picker.
+- **Apple's originals:** copy them to the folder as `.wav`. They are `.caf` / `.aiff` on a Mac and
+  Windows cannot play those, so convert once on the Mac:
+  `afconvert -f WAVE -d LEI16 <file>.caf <name>.wav`. Where iMessage keeps them is
+  `/System/Library/PrivateFrameworks/ToneLibrary.framework/Versions/A/Resources/AlertTones/`
+  (`ReceivedMessage.caf` for a new message) and `/System/Library/Sounds/` for the alerts
+  (`Glass.aiff`). The README says this in two lines; the files are never in the repo.
+- **`.mp3` is not in 0.4.0.** Only `.wav` was probed (`System.Media.SoundPlayer` loads one in
+  26 ms). `System.Windows.Media.MediaPlayer` may play mp3 and `.m4a`, but that is unverified.
+  Listed as a follow-up, to be probed first.
+- **Playing:** `playerFor(path, os)` returns the argv, as ctx's `openerFor` does:
+  - Windows: `powershell -NoProfile -NonInteractive -Command` with
+    `(New-Object System.Media.SoundPlayer '<path>').PlaySync()`, the path with `'` doubled;
+  - macOS: `afplay <path>`;
+  - Linux: none (nothing plays).
+  Run with `$.process.run(argv, { timeoutMs: 15000 })` inside a `try`; a failure is silent. The OS
+  comes from the same test ctx uses (`$.env.get('OS') === 'Windows_NT'`, else a `/Users/` home).
+  **Not probed:** that this plays from a Desktop session, and PowerShell's start-up time on the
+  work PC (the sound may lag a half second behind the reply).
+
+### The hooks
+
+| Event | What arsenal does |
+|---|---|
+| `session.start` | register `/chime` (`immediate: true`); load `chime` from `$.store` into `$.state`; list the sounds |
+| `command.run` `{ command: 'chime' }` | `''` shows the state and the list; `on`, `off`; `sound <name>`; `test` plays the picked sound; anything else, the help text |
+| `turn.complete` | after `await next(e)`: main loop only (no `e.agentId`), not `isAborted`, and the chime on → play the picked sound, fire and forget |
+| `tool.call` `{ tool: 'AskUserQuestion' }` | the dialog opens while the call runs, so start the question sound, fire and forget, then `return next(e)` |
+| `classic.Notification` | after `await next(e)`: `e.notification_type === 'permission_prompt'` and the chime on → the question sound |
+| `ui.render` `Pane` | the two new SETTINGS rows |
+
+- **Each hook reads the switch fresh** (`$.state`), so a `/chime off` takes effect on the next event.
+- **Read from done-chime, to check live:** that `classic.Notification` is raised with
+  `notification_type: 'permission_prompt'` on this engine (the type is `notification_type:
+  string`, and the value is the part that is unverified), and that `AskUserQuestion` reaches a
+  `tool.call` hook. If a permission prompt makes no sound, that is the one to look at.
+
+### State and store
+
+```ts
+/** The chime's two settings, as the menu shows them. */
+export type ArsenalChime = { isOn: boolean; sound: string }
+
+// in PluginState['arsenal']:
+chime: ArsenalChime
+```
+
+**Changed in building:** the `sounds: string[]` state key is gone. The pane and the Sound press
+read the list fresh (`soundsOf`), so a mirrored list nothing read was dead state.
+
+- **Saved:** `chime` lives in `$.store` under `chime`, as `{ version: 1, isOn, sound }`, read
+  tolerantly (anything unexpected is `{ isOn: false, sound: '' }`). `''` means the default. A
+  saved sound that is no longer in the list also plays the default, and the row shows the default's
+  name, so a deleted file never goes quiet.
+- **Mirrored into `$.state`** the way `off` is (a `$.store` read while drawing does not subscribe
+  the drawing). A press writes state, then store; a failed save is a toast and the state stands for
+  the session.
+- The list is read again each time the menu opens, so a file dropped in mid-session shows up.
+
+### Testing
+
+- **`chime.test.ts`:** `playerFor` for each OS (a `'` in the path is doubled; none on Linux), the
+  list order and the `question` exclusion, the default, "next sound" and its wrap, the tolerant
+  store read, the `/chime` argument parser.
+- **`render.test.ts`:** the Sound notifications pill follows state; the Sound row is absent when
+  the chime is off; a press on the switch calls `command.run` with `chime` / `on|off`; a press on
+  Sound saves the next name and plays it; SETTINGS and the launcher draw with neither tool
+  installed; `turn.complete` with an `agentId`, or `isAborted`, plays nothing; `AskUserQuestion`
+  plays once; a throwing player never reaches the caller.
+- **Live check, on the home PC:**
+  - the switch and the Sound row work; the sound plays on each press;
+  - a reply finishing, an `AskUserQuestion` dialog, and a permission prompt each make their sound;
+  - a file dropped into `~/.claude/arsenal/sounds/` shows up after reopening the menu;
+  - a converted Apple `.wav` plays;
+  - the same on Claude Desktop;
+  - nothing plays for a subagent or a stopped turn.
+
+### Shipping 0.4.0 (repo checklist)
+
+A new version of a mod goes on a branch and through a PR (repo `CLAUDE.md`). The branch is
+`arsenal-0.4.0`.
+
+1. `plugin.json` version `0.4.0` and a description that says the menu holds one thing of its own.
+2. `README.md`: the SETTINGS rows, the sounds folder and how to get the Apple sounds into it, and
+   the Credit paragraph.
+3. `marketplace.json`: the description (it says "A remote control, so every row runs a command that
+   already exists"; make that true again) and the closing credit line.
+4. `SETUP.md`: the arsenal section, its "Mods at a glance" row, and ctx-style version line.
+5. This file's "Principles" bullet, amended as above.
+6. PR titled like the earlier ones ("arsenal 0.4.0: …"), then merged and released as repo
+   `CLAUDE.md` says.
+
+### Calls made in this design (the person did not choose these)
+
+Default **off**; the question sound **fixed**; **wav only**; the macOS list; the hotkeys `c` and
+`o`; the Sound row **hidden** when the switch is off; the launcher and SETTINGS **always drawn**.
+
+### What building changed in this design (0.4.0)
+
+- **The switch calls `setChime` directly** and the `sounds` state key is gone (see above).
+- **`hasRows`, `hasSettings` and `hasOwn` are gone** from `menu.ts`: with the chime there is always
+  something to show. `hasPromptUpgrade` and `settingsLines` replace them, and `paneRows` takes the
+  chime as its last argument. The two-tool menu now asks for 16 rows at least, not 14.
+- **The engine's hook loader refuses a function named `sound`** beside a local `let sound`
+  ("assigned to elsewhere"), so the event's player is `playFor`.
+- **`playPath` takes the OS** and `quiet` takes only the function to run; `soundsOf` also gives the
+  folder and the file names, which the question sound needs.
+- **Tested in the kit, not in a terminal:** that a player is started with the right command line for
+  each event. That it makes a sound, on Windows and on Desktop, is the live check.
 
 ## Alternatives turned down
 
