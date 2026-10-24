@@ -37,6 +37,8 @@ type Opts = {
   draft?: string
   /** The prompt box cannot take text (a dialog holds the keys). */
   cannotFill?: boolean
+  /** The sound player never returns (a hung PowerShell). */
+  hangs?: boolean
 }
 
 type World = {
@@ -113,6 +115,7 @@ function world(on: On, o: Opts = {}): World {
     // the sound player: logged, and answered as played
     if (e.argv[0] === 'powershell' || e.argv[0] === 'afplay') {
       w.played.push([...e.argv])
+      if (o.hangs) return new Promise(() => {}) as any
       return { value: { exitCode: 0, stdout: '', stderr: '' } } as any
     }
     const git = o.git
@@ -165,6 +168,10 @@ function world(on: On, o: Opts = {}): World {
     return { value: undefined } as any
   })
   on('turn.start', async (_$, e) => ({ turnId: e.turnId }))
+  // what the engine does beneath the plugin when a reply ends, a tool is called and a notice comes
+  on('turn.complete', async (_$, e) => ({ text: e.answer }) as any)
+  on('tool.call', async () => ({ result: 'ok', ref: 0, text: 'ok' }) as any)
+  on('classic.Notification', async () => ({}) as any)
   on('turn.step', async function* (_$, e) {
     w.steps.push({ model: e.model, effort: e.effort, agentId: e.agentId })
     return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: 'end_turn' as const, usage: null }
@@ -967,4 +974,80 @@ test('a saved sound that is gone shows the default’s name', async ($, on) => {
   await start($)
   await open($)
   expect(await inPane($, soundLabel)).toContain('Windows Notify Messaging')
+})
+
+// ── The three events ─────────────────────────────────────────────────────
+
+const DONE = { answer: 'x', durationMs: 1, isAborted: false, reason: 'answer' as const }
+const finish = ($: Engine, more: object = {}) => $.turn.complete({ ...DONE, turnId: 't1', ...more } as any)
+const ask = ($: Engine) => $.tool.call({ tool: 'AskUserQuestion', tool_use_id: 'q1', questions: [] } as any)
+const notice = ($: Engine, type: string) => $.classic.Notification({ notification_type: type, message: 'ok?' } as any)
+/** The sounds are started and not waited for: give them a moment to be seen. */
+const settle = () => new Promise<void>(done => setTimeout(done, 60))
+
+test('a finished reply plays the picked sound once', async ($, on) => {
+  const w = world(on, { store: ON })
+  await start($)
+  await finish($)
+  await settle()
+  expect(w.played).toHaveLength(1)
+  expect(w.played[0]?.[4]).toContain('Windows Notify Messaging.wav')
+})
+
+test('with the chime off nothing plays', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await finish($)
+  await ask($)
+  await notice($, 'permission_prompt')
+  await settle()
+  expect(w.played).toEqual([])
+})
+
+test('a subagent’s turn and a stopped turn play nothing', async ($, on) => {
+  const w = world(on, { store: ON })
+  await start($)
+  await finish($, { agentId: 'a1' })
+  await finish($, { isAborted: true })
+  await settle()
+  expect(w.played).toEqual([])
+})
+
+test('AskUserQuestion plays the question sound: question.wav when there is one, else the system’s', async ($, on) => {
+  const w = world(on, { store: ON })
+  await start($)
+  await ask($)
+  await settle()
+  expect(w.played).toHaveLength(1)
+  expect(w.played[0]?.[4]).toContain('Windows Message Nudge.wav')
+})
+
+test('a question.wav in the folder is the question sound', async ($, on) => {
+  const w = world(on, { store: ON, disk: { [`${SOUNDS_DIR}/question.wav`]: '' } })
+  await start($)
+  await ask($)
+  await settle()
+  expect(w.played[0]?.[4]).toContain('question.wav')
+})
+
+test('a permission prompt plays the question sound once, and another notice plays nothing', async ($, on) => {
+  const w = world(on, { store: ON })
+  await start($)
+  await notice($, 'idle_prompt')
+  await settle()
+  expect(w.played).toEqual([])
+  await notice($, 'permission_prompt')
+  await settle()
+  expect(w.played).toHaveLength(1)
+  expect(w.played[0]?.[4]).toContain('Windows Message Nudge.wav')
+})
+
+test('a player that never returns does not hold the turn, the question or the notice', async ($, on) => {
+  const w = world(on, { store: ON, hangs: true })
+  await start($)
+  await finish($)
+  await ask($)
+  await notice($, 'permission_prompt')
+  await settle()
+  expect(w.played).toHaveLength(3)
 })

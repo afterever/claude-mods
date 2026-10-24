@@ -16,6 +16,7 @@ import {
   parseChime,
   personalSounds,
   playerFor,
+  questionPath,
   soundsFolder,
   systemCandidates,
 } from './chime'
@@ -206,7 +207,7 @@ async function loadOff($: EngineInterface) {
  * system's own that exist on disk. Read each time it is needed, so a file
  * dropped in mid-session is found.
  */
-async function soundsOf($: EngineInterface): Promise<{ sounds: Sounds; os: Os }> {
+async function soundsOf($: EngineInterface): Promise<{ sounds: Sounds; os: Os; folder: string; fileNames: string[] }> {
   const home = (await $.env.get('USERPROFILE')) || (await $.env.get('HOME')) || ''
   const os = osFrom(await $.env.get('OS'), home)
   const folder = soundsFolder(home)
@@ -220,7 +221,7 @@ async function soundsOf($: EngineInterface): Promise<{ sounds: Sounds; os: Os }>
       }
     }),
   )
-  return { sounds: { personal: personalSounds(fileNames, folder), system: found.filter((s): s is Sound => s !== null) }, os }
+  return { sounds: { personal: personalSounds(fileNames, folder), system: found.filter((s): s is Sound => s !== null) }, os, folder, fileNames }
 }
 
 /** What was chosen, from the last session on this machine. */
@@ -258,6 +259,14 @@ async function playPath($: EngineInterface, path: string | undefined, os: Os) {
 /** Starts a sound without holding the caller: nothing here may slow or fail a turn. */
 const quiet = (run: () => Promise<void>) => {
   void run().catch(() => {})
+}
+
+/** The sound for an event: the picked one for a reply, the question sound for a question. Nothing while the chime is off. */
+async function playFor($: EngineInterface, kind: 'reply' | 'question') {
+  const chime = (await read($, chimeAtom)) ?? NO_CHIME
+  if (!chime.isOn) return
+  const { sounds, os, folder, fileNames } = await soundsOf($)
+  await playPath($, kind === 'reply' ? chosen(sounds, chime.sound)?.path : questionPath(fileNames, folder, sounds.system, os), os)
 }
 
 async function openMenu($: EngineInterface) {
@@ -623,6 +632,27 @@ export const register: Register = on => {
     }
     return { text: command.kind === 'show' ? describeChime(held, now?.name ?? '', names) : CHIME_HELP }
   }).catch(() => ({ text: 'Chime could not do that right now.' }))
+
+  // A reply done: the main loop's turns only, and not one the person stopped.
+  // The sound is started and never waited for
+  on('turn.complete', async ($, e, next) => {
+    const done = await next(e)
+    if (!e.agentId && !e.isAborted) quiet(() => playFor($, 'reply'))
+    return done
+  })
+
+  // The dialog opens while the call runs, so the sound starts as it appears
+  on('tool.call', { tool: 'AskUserQuestion' }, async ($, e, next) => {
+    quiet(() => playFor($, 'question'))
+    return next(e)
+  })
+
+  // A permission prompt, where the engine raises one
+  on('classic.Notification', async ($, e, next) => {
+    const done = await next(e)
+    if (e.notification_type === 'permission_prompt') quiet(() => playFor($, 'question'))
+    return done
+  })
 
   // A close by the person (Esc, the pane's mark) turns the launcher's arrow
   // back; an unload (hot reload, exit) is not a close they asked for
