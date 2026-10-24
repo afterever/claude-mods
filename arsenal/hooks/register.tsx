@@ -21,6 +21,7 @@ import {
   sentChoice,
   shouldPlaySent,
   soundsFolder,
+  soundsReadme,
   systemCandidates,
 } from './chime'
 import type { Os, Sound, Sounds } from './chime'
@@ -238,6 +239,23 @@ async function soundsOf($: EngineInterface): Promise<{ sounds: Sounds; os: Os }>
     }),
   )
   return { sounds: { personal: personalSounds(fileNames, folder, os), system: found.filter((s): s is Sound => s !== null) }, os }
+}
+
+/**
+ * Makes the person's sounds folder when it is missing, with a README.txt in it
+ * (a write creates the folders above it). A folder that is there is left as it
+ * is, empty or not. A failure leaves no folder; the sounds still work without.
+ */
+async function ensureSoundsFolder($: EngineInterface) {
+  try {
+    const home = (await $.env.get('USERPROFILE')) || (await $.env.get('HOME')) || ''
+    if (!home) return
+    const folder = soundsFolder(home)
+    if (await $.fs.exists(folder)) return
+    await $.fs.write(`${folder}/README.txt`, soundsReadme(await osOf($, home)))
+  } catch {
+    // no folder, and no harm
+  }
 }
 
 /** What was chosen, from the last session on this machine. */
@@ -603,6 +621,7 @@ export const register: Register = on => {
     await refreshTools($)
     await loadOff($)
     await loadChime($)
+    await ensureSoundsFolder($)
     await scan($)
     try {
       const model = await $.session.model()

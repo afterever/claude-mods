@@ -49,6 +49,21 @@ const FORMATS: Record<Os, readonly string[]> = {
   mac: ['wav', 'mp3', 'm4a', 'aiff', 'caf'],
 }
 
+/** The README.txt written into a sounds folder arsenal has just made: what goes in it, in plain text. */
+export const soundsReadme = (os: Os) =>
+  [
+    'Arsenal sound notifications: your own sounds',
+    '',
+    `Put sound files here (${FORMATS[os].map(f => `.${f}`).join(', ')}). Each file name, without the extension, becomes a choice`,
+    'for both sounds in the Arsenal menu (Sound notifications) and for /chime sound and /chime sent.',
+    'The folder is read again every time the menu opens, so a file you add shows up without a restart.',
+    '',
+    'Keep them short: a sound is cut off after 15 seconds.',
+    'If one name has several formats, the first format in the list above is the one used.',
+    'Other files, this README.txt included, are ignored.',
+    '',
+  ].join('\n')
+
 /** The files of the person's folder this system plays, by name without the extension; one name in several formats is one sound, in the best format. */
 export function personalSounds(fileNames: readonly string[], folder: string, os: Os): Sound[] {
   const formats = FORMATS[os]

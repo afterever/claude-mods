@@ -17,6 +17,7 @@ import {
   sentChoice,
   shouldPlaySent,
   soundsFolder,
+  soundsReadme,
   systemCandidates,
 } from './chime'
 import type { Sounds } from './chime'
@@ -108,6 +109,16 @@ test('on a Mac one name in several formats is one sound: wav, mp3, m4a, aiff, th
 
 test('Linux lists the same files as Windows, though nothing plays there', () => {
   expect(personalSounds(['a.wav', 'b.aiff'], 'F', 'linux')).toEqual([{ name: 'a', path: 'F/a.wav' }])
+})
+
+test('the folder’s README names the formats this system plays and the 15-second cut-off', () => {
+  const windows = soundsReadme('windows')
+  expect(windows).toContain('.wav')
+  expect(windows).toContain('.mp3')
+  expect(windows).not.toContain('.caf')
+  expect(windows).toContain('15 seconds')
+  expect(soundsReadme('mac')).toContain('.caf')
+  expect(soundsReadme('mac')).toContain('15 seconds')
 })
 
 test('the folder is under .claude/arsenal/sounds in the home folder', () => {

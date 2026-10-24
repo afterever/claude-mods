@@ -38,6 +38,8 @@ type Opts = {
   store?: Record<string, unknown>
   /** `$.store.set` rejects. */
   saveFails?: boolean
+  /** `$.fs.write` rejects. */
+  writeFails?: boolean
   /** What the prompt box holds. */
   draft?: string
   /** The prompt box cannot take text (a dialog holds the keys). */
@@ -68,6 +70,8 @@ type World = {
   rows: (number | undefined)[]
   /** Every sound player the plugin ran, as its argv. */
   played: string[][]
+  /** Every file the plugin wrote, by path, and its text. */
+  writes: Record<string, string>
 }
 
 // The fake disk is keyed by Windows paths (`C:/home/...`). Off Windows the
@@ -82,7 +86,7 @@ const fake = (path: string) => {
 // The world beneath the plugin: the command list, the model, prompt-upgrade's
 // switch, the panes, and the line and footer other mods draw
 function world(on: On, o: Opts = {}): World {
-  const w: World = { runs: [], registered: [], toasts: [], calls: [], steps: [], auto: { on: o.auto ?? false }, model: { value: o.model ?? 'opus' }, store: { ...o.store }, fills: [], rows: [], played: [] }
+  const w: World = { runs: [], registered: [], toasts: [], calls: [], steps: [], auto: { on: o.auto ?? false }, model: { value: o.model ?? 'opus' }, store: { ...o.store }, fills: [], rows: [], played: [], writes: {} }
   const panes = new Set(o.panes ?? [])
   const draft = { text: o.draft ?? '' }
   const disk = o.disk ?? {}
@@ -106,7 +110,14 @@ function world(on: On, o: Opts = {}): World {
   // (on a Windows machine the engine reads Apple's absolute path as relative, so match it by its tail)
   const isSystemSound = (path: string) =>
     o.os === 'mac' ? /(^|\/)System\/Library\/Sounds(\/|$)/.test(fake(path)) : fake(path).startsWith('C:/Windows/Media/')
-  on('fs.exists', async (_$, e) => ({ value: isSystemSound(e.path) || fake(e.path) in disk }) as any)
+  // a folder is there when a file is under it
+  const isFolder = (path: string) => Object.keys(disk).some(k => k.startsWith(`${fake(path).replace(/\/+$/, '')}/`))
+  on('fs.exists', async (_$, e) => ({ value: isSystemSound(e.path) || fake(e.path) in disk || isFolder(e.path) }) as any)
+  on('fs.write', async (_$, e) => {
+    if (o.writeFails) throw new Error('read-only')
+    w.writes[fake(e.path)] = e.text
+    return { value: undefined } as any
+  })
   on('session.root', async () => ({ value: o.root ?? 'C:/bats' }) as any)
   on('fs.list', async (_$, e) => {
     const below = `${fake(e.path).replace(/\/+$/, '')}/`
@@ -931,6 +942,32 @@ test('the sounds folder lists wav files by name, question.wav among them; other 
 test('no sounds folder at all still lists the system’s sounds', async ($, on) => {
   world(on, { disk: {} })
   await start($)
+  expect(await chime($, '')).toContain('Sounds: Windows Notify Messaging')
+})
+
+test('a session without a sounds folder makes it, with a README.txt', async ($, on) => {
+  const w = world(on, { disk: {} })
+  await start($)
+  expect(Object.keys(w.writes)).toEqual([`${SOUNDS_DIR}/README.txt`])
+  expect(w.writes[`${SOUNDS_DIR}/README.txt`]).toContain('.wav')
+})
+
+test('a sounds folder that is there is left alone', async ($, on) => {
+  const w = world(on, { disk: { [`${SOUNDS_DIR}/mine.wav`]: '' } })
+  await start($)
+  expect(w.writes).toEqual({})
+})
+
+test('the README.txt is not a sound', async ($, on) => {
+  world(on, { disk: { [`${SOUNDS_DIR}/mine.wav`]: '', [`${SOUNDS_DIR}/README.txt`]: 'x' } })
+  await start($)
+  expect(await chime($, '')).toContain('Sounds: mine, Windows Notify Messaging')
+})
+
+test('a folder that cannot be made does not stop the session', async ($, on) => {
+  const w = world(on, { disk: {}, writeFails: true })
+  await start($)
+  expect(w.writes).toEqual({})
   expect(await chime($, '')).toContain('Sounds: Windows Notify Messaging')
 })
 
