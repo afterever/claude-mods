@@ -833,8 +833,8 @@ test('the pane asks for as many rows as the menu has lines', async ($, on) => {
   await start($)
   await open($)
   expect(w.calls).toEqual(['open arsenal'])
-  // 2 header + 5 settings + 6 launch + 13 user + 1 note, and 2 of slack
-  expect(w.rows).toEqual([29])
+  // 2 header + 4 settings + 6 launch + 13 user + 1 note, and 2 of slack
+  expect(w.rows).toEqual([28])
 })
 
 test('nothing found and nothing broken: no folders, no git, no home', async ($, on) => {
@@ -980,7 +980,17 @@ test('a saved sound that is gone shows the default’s name', async ($, on) => {
   expect(await inPane($, soundLabel)).toContain('Windows Notify Messaging')
 })
 
-/** The words on the Sent row's button. */
+test('the sound rows are Claude and You, and nothing explains them under the switch', async ($, on) => {
+  world(on, { store: ON })
+  await start($)
+  await open($)
+  const shown = await inPane($, texts)
+  expect(shown).toContain('♪ Claude')
+  expect(shown).toContain('↗ You')
+  expect(shown.some(t => t.includes('Sent') || t.includes('you send') || t.includes('replies/asks'))).toBe(false)
+})
+
+/** The words on the You row's button (its key is `arsenal-chime-sent`). */
 const sentLabel = async (ui: Mounted) => (await texts(ui)).find(t => t.endsWith('▸') && !t.includes('Windows Notify Messaging ▸'))
 
 test('the Sent row is there only while the chime is on, and starts at none', async ($, on) => {

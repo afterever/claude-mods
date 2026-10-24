@@ -1,6 +1,6 @@
 {
   "name": "arsenal",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "A menu for the tool mods in this repo and for your own commands: a button in the footer under the prompt box opens a menu pane, docked on the right, with a Prompt Upgrade switch, a Sound notifications switch with a sound for your own Enter and one for Claude, one-press shortcuts to /prompt-upgrade and /work-report, and USER and PROJECT sections listing your own skills and commands, each of which you can turn off. A remote control for the tools, with one thing of its own: the sound notifications.",
   "author": {
     "name": "afterever"

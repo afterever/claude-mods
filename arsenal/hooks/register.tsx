@@ -407,7 +407,7 @@ type View = {
   chime: ArsenalChime
   /** The name the Claude row shows: the chosen sound, or the default when the saved one is gone. */
   sound: string
-  /** The name the Sent row shows: the chosen sound, or empty for none (also when the saved one is gone). */
+  /** The name the You row shows: the chosen sound, or empty for none (also when the saved one is gone). */
   sentSound: string
 }
 
@@ -516,7 +516,6 @@ function drawMenu($: EngineInterface, e: Parameters<typeof $.ui.resolve>[0], bod
               {pill(view.chime.isOn)}
             </Button>
           </Box>
-          <Text dimColor>{'  you send · Claude replies/asks'}</Text>
           {view.chime.isOn ? (
             <Box key="arsenal-chime-pickers" flexDirection="column">
               <Box justifyContent="space-between">
@@ -526,7 +525,7 @@ function drawMenu($: EngineInterface, e: Parameters<typeof $.ui.resolve>[0], bod
                 </Button>
               </Box>
               <Box justifyContent="space-between">
-                <Text>↗ Sent</Text>
+                <Text>↗ You</Text>
                 <Button key="arsenal-chime-sent" plain hotkey="m" onPress={() => cycleSent($)}>
                   <Text dimColor>{`${view.sentSound || 'none'} ▸`}</Text>
                 </Button>
