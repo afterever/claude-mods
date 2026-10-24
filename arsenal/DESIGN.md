@@ -22,7 +22,9 @@ not a person's name.
 
 - **A remote control, not an owner.** Every row ends in a slash command that the tool already
   has. arsenal never writes another mod's `$.state` (the engine refuses that anyway) and never
-  imports another mod's code. If you uninstall a tool, its rows disappear.
+  imports another mod's code. If you uninstall a tool, its rows disappear. **One exception since
+  0.4.0: the sound notifications are arsenal's own**, because a sound setting has no tool to
+  belong to ("0.4.0: sound notifications").
 - **Never changes the model or effort.** The person never switches model or effort mid-session,
   so arsenal has no model or effort picker, no "auto model" and no subagent model setting. The
   header shows the model and effort in use, and that is all: arsenal only watches, it never
@@ -871,8 +873,9 @@ own, the chime, because a sound setting has no tool to belong to.*
 ```
 
 - **Sound notifications:** the same `●`/`○` dot, bold name, dim description and `● On` / `○ Off`
-  pill as Prompt Upgrade. A press runs `/chime on` or `/chime off` through the same `press`
-  path (menu stays open, `sent:` / `ran:` in the note line).
+  pill as Prompt Upgrade. A press calls `setChime` directly, as `/chime on` and `/chime off` do
+  (the menu stays open). **Changed in building:** it does not go through `$.command.run`, which
+  queues until the session is idle, so a toggle during a turn would wait for the turn's end.
 - **Sound:** a `plain` Button showing the current sound's name and `▸`. A press picks the next
   sound in the list, saves it and plays it. At the end of the list it wraps. Shown only when the
   switch is on, so an off chime offers nothing to pick.
@@ -942,9 +945,10 @@ export type ArsenalChime = { isOn: boolean; sound: string }
 
 // in PluginState['arsenal']:
 chime: ArsenalChime
-/** The names the Sound row cycles through, from the last listing. */
-sounds: string[]
 ```
+
+**Changed in building:** the `sounds: string[]` state key is gone. The pane and the Sound press
+read the list fresh (`soundsOf`), so a mirrored list nothing read was dead state.
 
 - **Saved:** `chime` lives in `$.store` under `chime`, as `{ version: 1, isOn, sound }`, read
   tolerantly (anything unexpected is `{ isOn: false, sound: '' }`). `''` means the default. A
@@ -992,6 +996,19 @@ A new version of a mod goes on a branch and through a PR (repo `CLAUDE.md`). The
 
 Default **off**; the question sound **fixed**; **wav only**; the macOS list; the hotkeys `c` and
 `o`; the Sound row **hidden** when the switch is off; the launcher and SETTINGS **always drawn**.
+
+### What building changed in this design (0.4.0)
+
+- **The switch calls `setChime` directly** and the `sounds` state key is gone (see above).
+- **`hasRows`, `hasSettings` and `hasOwn` are gone** from `menu.ts`: with the chime there is always
+  something to show. `hasPromptUpgrade` and `settingsLines` replace them, and `paneRows` takes the
+  chime as its last argument. The two-tool menu now asks for 16 rows at least, not 14.
+- **The engine's hook loader refuses a function named `sound`** beside a local `let sound`
+  ("assigned to elsewhere"), so the event's player is `playFor`.
+- **`playPath` takes the OS** and `quiet` takes only the function to run; `soundsOf` also gives the
+  folder and the file names, which the question sound needs.
+- **Tested in the kit, not in a terminal:** that a player is started with the right command line for
+  each event. That it makes a sound, on Windows and on Desktop, is the live check.
 
 ## Alternatives turned down
 
