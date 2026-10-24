@@ -1233,6 +1233,21 @@ writing). `SETUP.md` row to 0.4.5 (`marketplace.json` holds no version).
 That a Mac plays `.caf` from the folder and finds the system folder (needs the person's Mac);
 that the sounds folder README appears on a clean install.
 
+### What building changed in this design (0.4.5)
+
+- **`osOf` asks the system folder only off Windows**, and a rejected `$.fs.exists` counts as "not a
+  Mac" (the home test still applies). `MAC_SOUNDS_FOLDER` is exported from `chime.ts`.
+- **`personalSounds` takes the OS and holds one list of formats per OS** (`FORMATS`), best first;
+  the name is the file name up to its last dot, so `.aiff` is cut whole. Linux lists what Windows
+  does, though nothing plays there.
+- **The folder is made by `ensureSoundsFolder`**, after `loadChime` at session start; its text is
+  `soundsReadme(os)`, which names only the formats that system plays.
+- **The fake world in `render.test.ts` gained a Mac** (`os: 'mac'`), a record of `$.fs.write`
+  (`writes`, `writeFails`) and "a folder is there when a file is under it". On a Windows machine the
+  engine reads Apple's absolute path as relative, so the fake matches `/System/Library/Sounds` by
+  its tail. A Mac run in the tests proves the argv the plugin builds, never a sound.
+- **`marketplace.json` holds no version**, so the release does not touch it.
+
 ## Alternatives turned down
 
 - **For 0.4.1: three sounds (sent, reply, a fixed question sound).** Closer to 0.4.0, but "only two

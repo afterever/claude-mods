@@ -52,6 +52,8 @@ A Claude Code mod that puts the tool mods in this repo, and your own skills and 
 
 Click a row, or focus the pane and press its letter.
 
+The last line of the pane is dim and reads `arsenal v0.4.5 · 2026-10-24`: the version running and the day it was released.
+
 - **A Launch row** closes the Arsenal pane, then runs its command, so the tool's own pane takes its place. During a turn, the engine runs the command once Claude is idle.
 - **The switch** leaves the pane open so you can watch the pill change. The line at the bottom says `sent: /prompt-upgrade on`, then `ran: /prompt-upgrade on`.
 - **A failure** shows on that bottom line, or as a toast if the pane had already closed.
@@ -71,7 +73,7 @@ Off until you turn them on: press the switch (`c`), or `/chime on`. There are tw
 
 Each row goes down the same list: your own sounds first, then the system's (`Windows Notify Messaging`, `Windows Notify System Generic`, `Windows Message Nudge`, `Windows Ding`, `Windows Background`; on a Mac `Glass`, `Ping`, `Pop`, `Hero`, `Tink`). Each press plays the sound it lands on. The ↗ You row has `none` before the list.
 
-**Your own sounds.** Put `.wav` or `.mp3` files in `~/.claude/arsenal/sounds/` (`C:\Users\<you>\.claude\arsenal\sounds\`). Each file name, without the extension, is a choice in both lists, and the folder is read again every time the menu opens. Keep them short: a sound is cut off after 15 seconds. If a `.wav` and an `.mp3` have one name, the `.wav` is the one listed. If the sound you picked for Claude is deleted, the default plays; if it was the Sent sound, that is `none` again. (0.4.0 treated a file called `question.wav` as a separate question sound. It is now a sound like any other.)
+**Your own sounds.** Put `.wav` or `.mp3` files in `~/.claude/arsenal/sounds/` (`C:\Users\<you>\.claude\arsenal\sounds\` on Windows). On a Mac `.m4a`, `.aiff` and `.caf` files work too. Arsenal makes the folder the first time a session starts without it, with a `README.txt` that says the same; a folder that is already there is never touched. Each file name, without the extension, is a choice in both lists, and the folder is read again every time the menu opens. Keep them short: a sound is cut off after 15 seconds. If a `.wav` and an `.mp3` have one name, the `.wav` is the one listed. If the sound you picked for Claude is deleted, the default plays; if it was the Sent sound, that is `none` again. (0.4.0 treated a file called `question.wav` as a separate question sound. It is now a sound like any other.)
 
 **Apple's original sounds** are not in this repo, because they are Apple's. If you already have the two iMessage sounds as `.mp3` (many sound-effect sites offer them), drop those in the folder as they are. Otherwise copy them from a Mac and convert them once, because Windows cannot play `.caf` or `.aiff`: `afconvert -f WAVE -d LEI16 in.caf out.wav`. The new-message tone is `ReceivedMessage.caf` in `/System/Library/PrivateFrameworks/ToneLibrary.framework/Versions/A/Resources/AlertTones/` (pick it for Claude). Where the sent swoosh is depends on the macOS version, so search your Mac for it (Spotlight, `sent` with a `.caf` or `.aiff` file) and pick it for You. Name the converted files what you like, for example `imessage-sent.wav` and `imessage-new.wav`. Only `.wav` and `.mp3` are listed. An `.mp3` goes through a heavier Windows player than a `.wav`, so it may start a little later; the delay was not measured by ear.
 
@@ -84,6 +86,8 @@ Each row goes down the same list: your own sounds first, then the system's (`Win
 | `/chime test` | Plays Claude's sound, even while the sounds are off. |
 
 The switch and both sounds are saved on this machine. Sounds play through PowerShell on Windows and `afplay` on a Mac; on Linux nothing plays.
+
+**On a Mac.** Apple's `Glass`, `Ping`, `Pop`, `Hero` and `Tink` are listed after your own sounds, and a Mac is recognised by `/System/Library/Sounds` being there, whatever your home folder is called. Apple's iMessage sounds need no conversion: `afplay` plays `.caf`, so copy them into `~/.claude/arsenal/sounds/` as they are (paths above). **This has not been run on a Mac yet.** It is covered by tests of the command it runs (`afplay <file>`), not by a listen; if something is off, that is the first place to look.
 
 ## Your own commands
 

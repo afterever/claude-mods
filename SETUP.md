@@ -25,7 +25,7 @@ Paste this into Claude Code on the new computer:
 | `skins` | `hellosverre/claude-skins` | 0.5.13 | Colour scheme and words for the transcript |
 | `superpowers` | `obra/superpowers` | 7.0.0 | Skills library: brainstorming, planning, test-driven development, debugging and review workflows |
 | `agent-pulse` | `afterever/claude-mods` (this repo) | 1.1.0 | Box above the prompt naming the step Claude is on, in color and motion, with a step history |
-| `arsenal` | `afterever/claude-mods` (this repo) | 0.4.3 | Button in the footer under the prompt that opens a docked menu: Prompt Upgrade switch, Sound notifications switch with a sound for your Enter and one for Claude, shortcuts to `/prompt-upgrade` and `/work-report`, and your own skills and commands (USER and PROJECT), each of which you can turn off |
+| `arsenal` | `afterever/claude-mods` (this repo) | 0.4.5 | Button in the footer under the prompt that opens a docked menu: Prompt Upgrade switch, Sound notifications switch with a sound for your Enter and one for Claude, shortcuts to `/prompt-upgrade` and `/work-report`, and your own skills and commands (USER and PROJECT), each of which you can turn off |
 
 ## Install
 
@@ -260,7 +260,8 @@ a `[ ◆ Arsenal ▾ ]` button in Claude's orange, in the footer on the first ro
 right, with a Prompt Upgrade on/off switch, a Sound notifications switch with a sound for your Enter and one for Claude, one-press shortcuts to
 `/prompt-upgrade` and `/work-report`, and two sections for your own commands: **USER**
 (`~/.claude/skills` and `~/.claude/commands`) and **PROJECT** (the same two folders in the current
-repo). `/arsenal` toggles it from the keyboard. Written against 0.4.3. Nothing to configure.
+repo). `/arsenal` toggles it from the keyboard. Written against 0.4.5. Nothing to configure. The last
+line of the pane says the version and the day it was released.
 
 - **The menu always shows.** The sound notifications need no other mod. It lists the session's
   commands and keeps only the tools' rows whose command exists. Restart Claude Code after
@@ -270,8 +271,10 @@ repo). `/arsenal` toggles it from the keyboard. Written against 0.4.3. Nothing t
   you pick one, `m` in the menu or `/chime sent <name>`), and **Claude's** plays when a reply is
   done, when Claude asks you something and when it needs a permission OK (`o`, or
   `/chime sound <name>`; `/chime test` plays it). Both pick from the `.wav` and `.mp3` files you put in
-  `~/.claude/arsenal/sounds/`, then Windows' own. Apple's two iMessage sounds work as `.mp3`, or
-  converted to `.wav` (on a Mac: `afconvert -f WAVE -d LEI16 in.caf out.wav`); they are not in the repo. The
+  `~/.claude/arsenal/sounds/` (made for you, with a `README.txt`, the first time a session starts without it),
+  then Windows' own. Apple's two iMessage sounds work as `.mp3`, or
+  converted to `.wav` (on a Mac: `afconvert -f WAVE -d LEI16 in.caf out.wav`); they are not in the repo. A Mac
+  plays `.caf`, `.aiff` and `.m4a` as they are and has Apple's own sounds, but arsenal has not been run on a Mac yet. The
   idea is from
   [angomedia/claude-mods](https://github.com/angomedia/claude-mods)' done-chime; the code is
   written fresh.
