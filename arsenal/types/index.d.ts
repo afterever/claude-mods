@@ -36,8 +36,6 @@ declare module 'claude-code' {
       /** The key into `off.project` for this session's repo, from the last scan. */
       projectKey: string
       chime: ArsenalChime
-      /** The names the Sound row cycles through, from the last listing. */
-      sounds: string[]
     }
   }
 }

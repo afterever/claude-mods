@@ -353,10 +353,12 @@ test('the Prompt Upgrade pill follows prompt-upgrade’s auto value', async ($, 
   const w = world(on, { auto: false })
   await start($)
   await open($)
-  expect(await inPane($, texts)).toContain(' ○ Off ')
+  // two switches draw a pill: Prompt Upgrade's and the chime's, which is off
+  const pills = async (pill: string) => (await inPane($, texts)).filter(t => t === pill).length
+  expect(await pills(' ○ Off ')).toBe(2)
   w.auto.on = true
-  expect(await inPane($, texts)).toContain(' ● On ')
-  expect(await inPane($, texts)).not.toContain(' ○ Off ')
+  expect(await pills(' ● On ')).toBe(1)
+  expect(await pills(' ○ Off ')).toBe(1)
 })
 
 test('pressing the pill asks /prompt-upgrade for the other state and keeps the pane open, the pill unchanged until prompt-upgrade writes', async ($, on) => {
@@ -395,18 +397,25 @@ test('a missing tool takes its rows with it, and the section if none are left', 
   expect(await ui.find({ key: 'arsenal-today' })).toBeDefined()
   expect(await ui.find({ key: 'arsenal-upgrade' })).toBeUndefined()
   const all = await texts(ui)
-  expect(all).not.toContain('── S E T T I N G S')
+  // SETTINGS stays: the chime needs no tool, so only Prompt Upgrade goes
+  expect(all).toContain('── S E T T I N G S')
+  expect(all).not.toContain('Prompt Upgrade')
   expect(all).toContain('── L A U N C H')
 })
 
-test('with neither tool there is no launcher, and /arsenal opens nothing', async ($, on) => {
+test('with neither tool the launcher and SETTINGS still draw, and /arsenal opens the menu', async ($, on) => {
   const w = world(on, { commands: ['model', 'ctx'] })
   await start($)
   const ui = await footer($)
   expect(await ui.find({ key: 'engine-footer' })).toBeDefined()
-  expect(await ui.find({ key: 'arsenal-launcher' })).toBeUndefined()
+  expect(await ui.find({ key: 'arsenal-launcher' })).toBeDefined()
   await $.command.run({ command: 'arsenal', args: '' } as any)
-  expect(w.calls).toEqual([])
+  expect(w.calls).toEqual(['open arsenal'])
+  const all = await inPane($, texts)
+  expect(all).toContain('── S E T T I N G S')
+  expect(all).toContain('Sound notifications')
+  expect(all).not.toContain('Prompt Upgrade')
+  expect(all).not.toContain('── L A U N C H')
 })
 
 test('the Launch rows are two columns from 64 cells and one below', async ($, on) => {
@@ -796,7 +805,8 @@ test('the launcher shows for commands of the person’s own with neither tool, e
   expect(w.calls).toEqual(['open arsenal'])
   const all = await inPane($, texts)
   expect(all).not.toContain('── L A U N C H')
-  expect(all).not.toContain('── S E T T I N G S')
+  // SETTINGS is always there: the chime needs no tool
+  expect(all).toContain('── S E T T I N G S')
   expect(all).toContain('── U S E R')
 })
 
@@ -812,8 +822,8 @@ test('the pane asks for as many rows as the menu has lines', async ($, on) => {
   await start($)
   await open($)
   expect(w.calls).toEqual(['open arsenal'])
-  // 2 header + 3 settings + 6 launch + 13 user + 1 note, and 2 of slack
-  expect(w.rows).toEqual([27])
+  // 2 header + 5 settings + 6 launch + 13 user + 1 note, and 2 of slack
+  expect(w.rows).toEqual([29])
 })
 
 test('nothing found and nothing broken: no folders, no git, no home', async ($, on) => {
@@ -894,4 +904,67 @@ test('no sounds folder at all still lists the system’s sounds', async ($, on) 
   world(on, { disk: {} })
   await start($)
   expect(await chime($, '')).toContain('Sounds: Windows Notify Messaging')
+})
+
+// ── The SETTINGS rows ────────────────────────────────────────────────────
+
+/** What the switch's pill says: ` ● On ` or ` ○ Off `. */
+const chimePill = async (ui: Mounted) =>
+  ((await ui.find({ key: 'arsenal-chime-switch' })) as unknown as { children: { children: string[] }[] } | undefined)?.children[0]?.children[0]
+
+const soundLabel = async (ui: Mounted) => (await texts(ui)).find(t => t.includes('Windows') || t.includes('mine'))
+
+test('the Sound notifications switch follows the chime, and a press saves it', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await open($)
+  expect(await inPane($, chimePill)).toBe(' ○ Off ')
+  await inPane($, ui => ui.press({ key: 'arsenal-chime-switch' }))
+  expect(w.store.chime).toEqual({ version: 1, isOn: true, sound: '' })
+  expect(await inPane($, chimePill)).toBe(' ● On ')
+  await inPane($, ui => ui.press({ key: 'arsenal-chime-switch' }))
+  expect(w.store.chime).toEqual({ version: 1, isOn: false, sound: '' })
+  expect(w.runs).toEqual([])
+})
+
+test('the chime’s keys are c and o', async ($, on) => {
+  world(on, { store: ON })
+  await start($)
+  await open($)
+  const ui = await pane($)
+  expect(((await ui.find({ key: 'arsenal-chime-switch' }))?.props as { hotkey?: string }).hotkey).toBe('c')
+  expect(((await ui.find({ key: 'arsenal-chime-sound' }))?.props as { hotkey?: string }).hotkey).toBe('o')
+})
+
+test('the Sound row is there only while the chime is on, and names the default', async ($, on) => {
+  world(on)
+  await start($)
+  await open($)
+  expect(await inPane($, ui => ui.find({ key: 'arsenal-chime-sound' }))).toBeUndefined()
+  await inPane($, ui => ui.press({ key: 'arsenal-chime-switch' }))
+  const ui = await pane($)
+  try {
+    expect(await ui.find({ key: 'arsenal-chime-sound' })).toBeDefined()
+    expect(await soundLabel(ui)).toContain('Windows Notify Messaging')
+  } finally {
+    await ui.unmount()
+  }
+})
+
+test('a press on Sound saves the next sound and plays it', async ($, on) => {
+  const w = world(on, { store: ON, disk: { [`${SOUNDS_DIR}/mine.wav`]: '' } })
+  await start($)
+  await open($)
+  // the list is mine, Windows Notify Messaging, …; the default is the second
+  await inPane($, ui => ui.press({ key: 'arsenal-chime-sound' }))
+  expect(w.store.chime).toEqual({ version: 1, isOn: true, sound: 'Windows Notify System Generic' })
+  expect(w.played).toHaveLength(1)
+  expect(w.played[0]?.[4]).toContain('Windows Notify System Generic.wav')
+})
+
+test('a saved sound that is gone shows the default’s name', async ($, on) => {
+  world(on, { store: { chime: { version: 1, isOn: true, sound: 'gone' } } })
+  await start($)
+  await open($)
+  expect(await inPane($, soundLabel)).toContain('Windows Notify Messaging')
 })

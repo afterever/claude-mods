@@ -11,6 +11,7 @@ import {
   chosen,
   describeChime,
   listOf,
+  nextName,
   osFrom,
   parseChime,
   personalSounds,
@@ -26,8 +27,7 @@ import {
   draftNote,
   failedNote,
   flipped,
-  hasRows,
-  hasSettings,
+  hasPromptUpgrade,
   headerNote,
   launchColumns,
   launchItems,
@@ -64,7 +64,6 @@ const offAtom = atom({ plugin: 'arsenal', key: 'off' } as const, NO_OFF)
 const editingAtom = atom({ plugin: 'arsenal', key: 'editing' } as const, null)
 const projectKeyAtom = atom({ plugin: 'arsenal', key: 'projectKey' } as const, '')
 const chimeAtom = atom({ plugin: 'arsenal', key: 'chime' } as const, NO_CHIME)
-const soundsAtom = atom({ plugin: 'arsenal', key: 'sounds' } as const, [] as string[])
 
 // The menu is a pane, docked at the right in fullscreen like the tools' own
 const PANE = 'arsenal'
@@ -224,16 +223,6 @@ async function soundsOf($: EngineInterface): Promise<{ sounds: Sounds; os: Os }>
   return { sounds: { personal: personalSounds(fileNames, folder), system: found.filter((s): s is Sound => s !== null) }, os }
 }
 
-/** The names the Sound row cycles through, kept in state for the drawing. */
-async function refreshSounds($: EngineInterface) {
-  try {
-    const { sounds } = await soundsOf($)
-    await update($, soundsAtom, () => listOf(sounds).map(s => s.name))
-  } catch {
-    // the list stays as it was
-  }
-}
-
 /** What was chosen, from the last session on this machine. */
 async function loadChime($: EngineInterface) {
   try {
@@ -281,6 +270,7 @@ async function openMenu($: EngineInterface) {
     (await read($, projectKeyAtom)) ?? '',
     null,
     PANE_COLUMNS,
+    (await read($, chimeAtom)) ?? NO_CHIME,
   )
   await update($, isOpenAtom, () => true)
   const { isPlaced } = await $.ui.open(paneArgs(rows))
@@ -297,7 +287,6 @@ async function closeMenu($: EngineInterface) {
 }
 
 async function toggleMenu($: EngineInterface) {
-  if (!hasRows(await read($, toolsAtom), (await read($, ownAtom)) ?? NO_OWN)) return
   if ((await read($, isOpenAtom)) === true) await closeMenu($)
   else await openMenu($)
 }
@@ -371,6 +360,16 @@ async function flipOff($: EngineInterface, section: Section, name: string) {
   }
 }
 
+/** The Sound row: the next sound in the list, saved and played at once. */
+async function cycleSound($: EngineInterface) {
+  const held = (await read($, chimeAtom)) ?? NO_CHIME
+  const { sounds, os } = await soundsOf($)
+  const name = nextName(sounds, held.sound)
+  if (!name) return
+  await setChime($, { ...held, sound: name })
+  await playPath($, listOf(sounds).find(s => s.name === name)?.path, os)
+}
+
 /** `✎ edit` and `✓ done`: one section is in edit mode at a time. */
 const setEditing = ($: EngineInterface, section: Section | null) => update($, editingAtom, () => section)
 
@@ -385,6 +384,9 @@ type View = {
   off: ArsenalOff
   editing: Section | null
   projectKey: string
+  chime: ArsenalChime
+  /** The name the Sound row shows: the chosen sound, or the default when the saved one is gone. */
+  sound: string
 }
 
 function drawMenu($: EngineInterface, e: Parameters<typeof $.ui.resolve>[0], bodyColumns: number, view: View) {
@@ -462,23 +464,47 @@ function drawMenu($: EngineInterface, e: Parameters<typeof $.ui.resolve>[0], bod
         <Text dimColor>{view.header}</Text>
       </Box>
       <Text dimColor>{'─'.repeat(inner)}</Text>
-      {hasSettings(tools) ? (
-        <Box key="arsenal-settings-section" flexDirection="column">
-          <Text dimColor>{sectionTitle('SETTINGS')}</Text>
+      <Box key="arsenal-settings-section" flexDirection="column">
+        <Text dimColor>{sectionTitle('SETTINGS')}</Text>
+        {hasPromptUpgrade(tools) ? (
+          <Box key="arsenal-auto-rows" flexDirection="column">
+            <Box justifyContent="space-between">
+              <Box>
+                <Text color={auto ? COLORS.teal : undefined} dimColor={!auto}>
+                  {auto ? '● ' : '○ '}
+                </Text>
+                <Text bold>Prompt Upgrade</Text>
+              </Box>
+              <Button key="arsenal-auto" plain hotkey="p" onPress={() => press($, 'prompt-upgrade', auto ? 'off' : 'on', false)}>
+                {pill(auto)}
+              </Button>
+            </Box>
+            <Text dimColor>{'  upgrade every prompt first'}</Text>
+          </Box>
+        ) : null}
+        <Box key="arsenal-chime-rows" flexDirection="column">
           <Box justifyContent="space-between">
             <Box>
-              <Text color={auto ? COLORS.teal : undefined} dimColor={!auto}>
-                {auto ? '● ' : '○ '}
+              <Text color={view.chime.isOn ? COLORS.teal : undefined} dimColor={!view.chime.isOn}>
+                {view.chime.isOn ? '● ' : '○ '}
               </Text>
-              <Text bold>Prompt Upgrade</Text>
+              <Text bold>Sound notifications</Text>
             </Box>
-            <Button key="arsenal-auto" plain hotkey="p" onPress={() => press($, 'prompt-upgrade', auto ? 'off' : 'on', false)}>
-              {pill(auto)}
+            <Button key="arsenal-chime-switch" plain hotkey="c" onPress={() => setChime($, { ...view.chime, isOn: !view.chime.isOn })}>
+              {pill(view.chime.isOn)}
             </Button>
           </Box>
-          <Text dimColor>{'  upgrade every prompt first'}</Text>
+          <Text dimColor>{'  reply done · asked a question'}</Text>
+          {view.chime.isOn ? (
+            <Box justifyContent="space-between">
+              <Text>♪ Sound</Text>
+              <Button key="arsenal-chime-sound" plain hotkey="o" onPress={() => cycleSound($)}>
+                <Text dimColor>{`${view.sound || 'none found'} ▸`}</Text>
+              </Button>
+            </Box>
+          ) : null}
         </Box>
-      ) : null}
+      </Box>
       {launchItems(tools).length > 0 ? (
         <Box key="arsenal-launch-section" flexDirection="column">
           <Text dimColor>{sectionTitle('LAUNCH')}</Text>
@@ -533,7 +559,6 @@ export const register: Register = on => {
     await refreshTools($)
     await loadOff($)
     await loadChime($)
-    await refreshSounds($)
     await scan($)
     try {
       const model = await $.session.model()
@@ -579,7 +604,6 @@ export const register: Register = on => {
     const held = (await read($, chimeAtom)) ?? NO_CHIME
     const { sounds, os } = await soundsOf($)
     const names = listOf(sounds).map(s => s.name)
-    await update($, soundsAtom, () => names)
     const now = chosen(sounds, held.sound)
     const command = parseChime(e.args)
     if (command.kind === 'on' || command.kind === 'off') {
@@ -621,8 +645,6 @@ export const register: Register = on => {
   // mods added (waypoints' plan) already in it, so it is wrapped, never
   // rebuilt from `modes`. A space after the button keeps the two apart
   on('ui.render', { component: 'SessionMode' }, async ($, e, next) => {
-    const tools = await read($, toolsAtom)
-    if (!hasRows(tools, (await read($, ownAtom)) ?? NO_OWN)) return next(e)
     const open = (await read($, isOpenAtom)) === true
     const footer = await next(e)
     const { Box, Button, Text } = $.ui.resolve(e)
@@ -640,8 +662,20 @@ export const register: Register = on => {
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const tools = await read($, toolsAtom)
+    const chime = (await read($, chimeAtom)) ?? NO_CHIME
+    // the list is read as the pane draws, so a file dropped in is found
+    let sound = ''
+    if (chime.isOn) {
+      try {
+        sound = chosen((await soundsOf($)).sounds, chime.sound)?.name ?? ''
+      } catch {
+        // the row says none found
+      }
+    }
     const view: View = {
       tools,
+      chime,
+      sound,
       auto: await readAuto($),
       header: headerNote((await read($, runningAtom)) ?? null),
       note: (await read($, noteAtom)) ?? '',

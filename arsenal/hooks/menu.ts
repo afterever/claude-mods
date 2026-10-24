@@ -2,7 +2,8 @@
 // header, which rows the session has, and how they fall into columns. Nothing
 // here touches the engine, so all of it is tested without one.
 
-import type { ArsenalOff, ArsenalOwn, ArsenalRunning, ArsenalTools, OwnCommand } from '../types'
+import type { ArsenalChime, ArsenalOff, ArsenalOwn, ArsenalRunning, ArsenalTools, OwnCommand } from '../types'
+import { NO_CHIME } from './chime'
 
 /** Menus at least this many cells wide draw the Launch rows in two columns. */
 export const TWO_COLUMNS = 64
@@ -124,17 +125,14 @@ export const NO_OWN: ArsenalOwn = { user: [], project: [] }
 /** Nothing turned off. */
 export const NO_OFF: ArsenalOff = { user: [], project: {} }
 
-/** Whether the scan found any command of the person's own, turned off or not. */
-export const hasOwn = (own: ArsenalOwn) => own.user.length > 0 || own.project.length > 0
+/** The Prompt Upgrade switch needs prompt-upgrade. The chime's rows need nothing, so the menu always has something to show. */
+export const hasPromptUpgrade = (tools: ArsenalTools) => tools['prompt-upgrade']
 
 /**
- * Nothing to show, so no button either. Commands of the person's own count
- * when found, even if every one is off: edit mode must stay reachable.
+ * Lines SETTINGS takes: its title, Prompt Upgrade's switch and description,
+ * the chime's switch and description, and the Sound row while the chime is on.
  */
-export const hasRows = (tools: ArsenalTools, own: ArsenalOwn = NO_OWN) => tools['prompt-upgrade'] || tools['work-report'] || hasOwn(own)
-
-/** The Prompt Upgrade switch is the only setting, and it needs prompt-upgrade. */
-export const hasSettings = (tools: ArsenalTools) => tools['prompt-upgrade']
+export const settingsLines = (tools: ArsenalTools, chime: ArsenalChime) => 1 + (hasPromptUpgrade(tools) ? 2 : 0) + 2 + (chime.isOn ? 1 : 0)
 
 /** The Launch rows whose tool is there, in the order they are listed. */
 export const launchItems = (tools: ArsenalTools): LaunchItem[] => LAUNCH.filter(item => tools[item.command])
@@ -219,6 +217,7 @@ export function paneRows(
   projectKey: string,
   editing: Section | null,
   bodyColumns: number,
+  chime: ArsenalChime = NO_CHIME,
 ): number {
   const columns = launchColumns(tools, bodyColumns)
   const launch = columns.length ? 1 + Math.max(...columns.map(c => c.length)) : 0
@@ -226,7 +225,7 @@ export function paneRows(
     (sum, s) => sum + sectionLines(own[s], offFor(off, s, projectKey), editing === s),
     0,
   )
-  const lines = 2 + (hasSettings(tools) ? 3 : 0) + launch + sections + 1
+  const lines = 2 + settingsLines(tools, chime) + launch + sections + 1
   return Math.max(MIN_PANE_ROWS, lines + PANE_SLACK)
 }
 
