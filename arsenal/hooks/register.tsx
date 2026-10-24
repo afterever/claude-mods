@@ -220,7 +220,7 @@ async function osOf($: EngineInterface, home: string): Promise<Os> {
 }
 
 /**
- * The sounds there are now: the `.wav` files of the person's folder and the
+ * The sounds there are now: the sound files of the person's folder and the
  * system's own that exist on disk. Read each time it is needed, so a file
  * dropped in mid-session is found.
  */

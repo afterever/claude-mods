@@ -271,7 +271,7 @@ line of the pane says the version and the day it was released.
   you pick one, `m` in the menu or `/chime sent <name>`), and **Claude's** plays when a reply is
   done, when Claude asks you something and when it needs a permission OK (`o`, or
   `/chime sound <name>`; `/chime test` plays it). Both pick from the `.wav` and `.mp3` files you put in
-  `~/.claude/arsenal/sounds/` (made for you, with a `README.txt`, the first time a session starts without it),
+  `~/.claude/arsenal/sounds/` (made for you, with a `README.txt`, whenever a session starts without it),
   then Windows' own. Apple's two iMessage sounds work as `.mp3`, or
   converted to `.wav` (on a Mac: `afconvert -f WAVE -d LEI16 in.caf out.wav`); they are not in the repo. A Mac
   plays `.caf`, `.aiff` and `.m4a` as they are and has Apple's own sounds, but arsenal has not been run on a Mac yet. The
