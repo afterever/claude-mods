@@ -911,7 +911,7 @@ A pure module `hooks/chime.ts` (tested in `hooks/chime.test.ts`) holds the list 
   (`Glass.aiff`). The README says this in two lines; the files are never in the repo.
 - **`.mp3` is not in 0.4.0.** Only `.wav` was probed (`System.Media.SoundPlayer` loads one in
   26 ms). `System.Windows.Media.MediaPlayer` may play mp3 and `.m4a`, but that is unverified.
-  Listed as a follow-up, to be probed first.
+  Listed as a follow-up, to be probed first. **Done in 0.4.2** ("0.4.2: .mp3 sounds").
 - **Playing:** `playerFor(path, os)` returns the argv, as ctx's `openerFor` does:
   - Windows: `powershell -NoProfile -NonInteractive -Command` with
     `(New-Object System.Media.SoundPlayer '<path>').PlaySync()`, the path with `'` doubled;
@@ -1104,6 +1104,38 @@ tried); Remote Control messages (a phone) staying silent; `/chime test` playing 
 
 Branch `arsenal-0.4.1`, PR, release `arsenal-v0.4.1`: `plugin.json` and the SETUP.md row to 0.4.1;
 the README's rows, Sound notifications section and `/chime` table; this section.
+
+## 0.4.2: .mp3 sounds
+
+The person asked for `.mp3` after 0.4.1: the iMessage sounds circulate as `.mp3` downloads, and a
+`.wav` was the only format 0.4.0 could play. Converting needs a Mac or ffmpeg, so `.mp3` came in.
+
+### What was probed (2026-10-24, Windows PowerShell 5.1, the `powershell` arsenal runs)
+
+- **`System.Windows.Media.MediaPlayer` plays an mp3** from a console script, loaded with
+  `Add-Type -AssemblyName presentationCore`. The `pwsh` 7 this session's shell uses is not the
+  one that matters: arsenal starts `powershell`, which is 5.1.
+- **It needs no dispatcher to play**, but a console script gets no `MediaEnded`. The script calls
+  `Play()` straight after `Open()`, polls until `NaturalDuration.HasTimeSpan` (3 s at most), then
+  sleeps for what is left of the clip, so the process outlives the sound. Waiting for the duration
+  *before* `Play()` took 640 ms in the first try; playing first reaches `Play()` in about 90 ms.
+- **Start-up compared, inside the script:** a `.wav` through `SoundPlayer` is loaded after about
+  80 ms; an mp3 reaches `Play()` after about 90 ms (three runs each, the same to a few ms). The
+  PowerShell process start-up comes before both. **Not measured:** when the mp3 becomes audible
+  after `Play()` (decoding and buffering), which only the ear can tell; the wav's `PlaySync()` has
+  the same unknown. If the swoosh lags, that is the place to look.
+- **A hard path works:** `it's a #1 swoosh%20.mp3` (an apostrophe, a `#` and a `%20`) plays, with
+  the path as `New-Object System.Uri('<path>')` and `'` doubled. A `[uri]'…'` cast was not used.
+- **Not probed:** `.m4a`, and that it makes a sound on Claude Desktop (a `.wav` was heard there).
+
+### The change
+
+- `personalSounds` lists `.wav` and `.mp3`. A wav and an mp3 of one name are one sound, the wav.
+- `playerFor(path, 'windows')` picks the player from the extension: `.mp3` through the script
+  above, anything else through `SoundPlayer` as before. The system's own sounds stay `.wav`.
+- macOS needed nothing: `afplay` plays an mp3. (It would play `.caf` and `.aiff` as well; those
+  are still not listed, which is a follow-up if a Mac user asks.)
+- The 15-second `timeoutMs` still ends a long clip.
 
 ## Alternatives turned down
 
