@@ -1160,6 +1160,79 @@ and the person asked for less. What changed, all in the labels:
   `sent`, the store and `/chime sent <name|none>`. A rename of the command would break what 0.4.1
   taught, for a word nobody types often. The person chose to keep it.
 
+## 0.4.5: a Mac that is looked after, a sounds folder that exists, a version row
+
+**Status: approved 2026-10-24 as 0.4.5.** Asked for on 2026-10-24 after the person read the README
+and thought only Windows was covered.
+
+### What the survey found
+
+- **macOS was already covered in code**: `playerFor(path, 'mac')` is `afplay`, `systemCandidates('mac')`
+  is `Glass Ping Pop Hero Tink` under `/System/Library/Sounds/`, and both have tests. The README
+  said so in one line (`arsenal/README.md`, last line of Sound notifications) but its how-to is
+  written for Windows (`C:\Users\<you>\…`, "Windows cannot play `.caf`").
+- **Real gaps:** (1) a Mac is recognised only by a home under `/Users/` (`osFrom`), so a Mac with
+  another home plays nothing; (2) a Mac's own sounds are limited to `.wav` and `.mp3` although
+  `afplay` plays `.aiff`, `.caf` and `.m4a` (a follow-up 0.4.2 left open "if a Mac user asks");
+  (3) **no run on a real Mac exists**: this was built and tested on Windows.
+- **The sounds folder was never created.** `soundsOf` only lists it. `$.fs.write` creates a file
+  "and its directories as needed", and there is no `mkdir` in `$.fs`.
+- **`$.audio.play` is not an option**: the engine's own player is `afplay` on macOS only and
+  plays nothing on Windows.
+
+### Goals, non-goals, anti-goals
+
+- **Goals:** a Mac user can follow the README start to finish; the sounds folder is there to be
+  found; the pane says which version of arsenal is running and when it was released.
+- **Non-goals:** Apple's iMessage tones as built-in sounds (their paths vary by macOS version and
+  can't be checked from a Windows PC); Linux playback; `.m4a` on Windows.
+- **Anti-goal:** a Mac claim the README can't back. It says plainly that the Mac path has not been
+  run on a Mac.
+
+### The changes
+
+1. **The OS test** (`osFrom`) stays pure but gains a third input: whether `/System/Library/Sounds`
+   exists (`$.fs.exists`, asked in `soundsOf`). Order: `Windows_NT` is Windows; else that folder
+   exists, or a `/Users/` home: a Mac; else Linux. Tested for each.
+2. **Mac sound files:** on a Mac `personalSounds` also lists `.aiff`, `.caf` and `.m4a`. On Windows
+   it stays `.wav` and `.mp3`, because `SoundPlayer` and `MediaPlayer` cannot be trusted with the
+   rest. A file's name without its extension is still the sound's name; with one name in several
+   formats, `.wav` first, then the others in the order `.mp3`, `.m4a`, `.aiff`, `.caf`.
+3. **The folder:** at session start, if `~/.claude/arsenal/sounds` is not there, write a
+   `README.txt` into it (creating the folder): what goes in, which formats this system plays, the
+   15-second cut-off, and "this file is ignored". It is written only when the folder is missing, so
+   a folder the person made or emptied is never touched. A failed write is silent.
+4. **The version row:** the last line of the pane, below the note line, dim, as ctx has:
+   `arsenal v0.4.5 · 2026-10-24`. `hooks/version.ts` holds `VERSION` and `RELEASED`, the same trick
+   as ctx's `version.ts` (a hooks module cannot read its own manifest, so no test can compare it
+   with `plugin.json`). `paneRows` counts one more line.
+5. **The README** gets a Mac part in Sound notifications (paths with `~`, Apple's `.caf` straight
+   in, `afplay`, "not run on a Mac yet") and the sounds-folder paragraph says the folder is made
+   for you. `SETUP.md` and `marketplace.json` are bumped as for every release.
+
+### Calls made in this design (the person did not choose these)
+
+The version number **0.4.5** (the person's pick: 0.4.4 is skipped, "no double 4"); the row's wording `arsenal v… · date`
+(ctx shows `ctx v…` with no date); the date as **ISO** (`2026-10-24`), no time zone, the day the
+release is made; the file name `README.txt` (plain text, opens anywhere); the Mac format order.
+
+### Testing
+
+`osFrom` for each case, `personalSounds` per OS, a render test for the version row (last line,
+text) and for the extra row in `paneRows`, a hooks test that the folder README is written when
+the folder is missing and not when it is there. The Mac playback stays tested only as the argv.
+
+### Shipping 0.4.5 (repo checklist)
+
+Branch and PR, then release `arsenal-v0.4.5`. Before the release: `plugin.json` `version` equals
+`VERSION` in `hooks/version.ts`, and `RELEASED` is the release day (set it when merging, not when
+writing). `SETUP.md` row to 0.4.5 (`marketplace.json` holds no version).
+
+### Not settled, to check live
+
+That a Mac plays `.caf` from the folder and finds the system folder (needs the person's Mac);
+that the sounds folder README appears on a clean install.
+
 ## Alternatives turned down
 
 - **For 0.4.1: three sounds (sent, reply, a fixed question sound).** Closer to 0.4.0, but "only two

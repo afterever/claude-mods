@@ -28,6 +28,7 @@ import {
   settingsLines,
   shownRows,
   toolsFrom,
+  versionLine,
   withOff,
 } from './menu'
 
@@ -232,13 +233,13 @@ test('a section takes its header and its rows, or one line when all are off', ()
 })
 
 test('the pane asks for 0.1.0’s rows until the menu needs more', () => {
-  // 2 header + 4 settings + 6 launch + 1 note = 13, and 2 of slack: 0.1.0's 14 is still the floor
-  expect(paneRows(BOTH, NO_OWN, NO_OFF, 'k', null, 48)).toBe(15)
+  // 2 header + 4 settings + 6 launch + 1 note + 1 version = 14, and 2 of slack: 0.1.0's 14 is still the floor
+  expect(paneRows(BOTH, NO_OWN, NO_OFF, 'k', null, 48)).toBe(16)
   expect(paneRows(NONE, NO_OWN, NO_OFF, 'k', null, 48)).toBe(14)
   const ten = Array.from({ length: 10 }, (_, i) => cmd(`c${i}`))
   const own = { user: ten, project: [cmd('p')] }
-  // 2 header + 4 settings + 6 launch (title and 5) + 11 user + 2 project + 1 note = 26, and 2 of slack
-  expect(paneRows(BOTH, own, NO_OFF, 'k', null, 48)).toBe(28)
+  // 2 header + 4 settings + 6 launch (title and 5) + 11 user + 2 project + 1 note + 1 version = 27, and 2 of slack
+  expect(paneRows(BOTH, own, NO_OFF, 'k', null, 48)).toBe(29)
 })
 
 test('edit mode counts the rows that are off, and a section that is all off counts its line', () => {
@@ -247,7 +248,11 @@ test('edit mode counts the rows that are off, and a section that is all off coun
   const closed = paneRows(BOTH, own, off, 'k', null, 48)
   const editing = paneRows(BOTH, own, off, 'k', 'user', 48)
   expect(editing - closed).toBe(9)
-  expect(closed).toBe(2 + 4 + 6 + 2 + 1 + 2)
+  expect(closed).toBe(2 + 4 + 6 + 2 + 1 + 1 + 2)
+})
+
+test('the version row says the mod, its version and the day it was released', () => {
+  expect(versionLine('0.4.5', '2026-10-24')).toBe('arsenal v0.4.5 · 2026-10-24')
 })
 
 test('the draft note names the command', () => {

@@ -2,6 +2,9 @@ import { test, expect, mock } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+import { versionLine } from './menu'
+import { RELEASED, VERSION } from './version'
+
 const BOTH = ['prompt-upgrade', 'work-report', 'model', 'ctx']
 
 type Opts = {
@@ -833,8 +836,15 @@ test('the pane asks for as many rows as the menu has lines', async ($, on) => {
   await start($)
   await open($)
   expect(w.calls).toEqual(['open arsenal'])
-  // 2 header + 4 settings + 6 launch + 13 user + 1 note, and 2 of slack
-  expect(w.rows).toEqual([28])
+  // 2 header + 4 settings + 6 launch + 13 user + 1 note + 1 version, and 2 of slack
+  expect(w.rows).toEqual([29])
+})
+
+test('the last row of the pane is the version and its release date, below the note', async ($, on) => {
+  world(on)
+  await start($)
+  const last = await inPane($, async ui => (await texts(ui)).slice(-2))
+  expect(last).toEqual([' ', versionLine(VERSION, RELEASED)])
 })
 
 test('nothing found and nothing broken: no folders, no git, no home', async ($, on) => {
