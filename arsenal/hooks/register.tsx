@@ -12,11 +12,13 @@ import {
   describeChime,
   listOf,
   nextName,
+  nextSent,
   osFrom,
   parseChime,
   personalSounds,
   playerFor,
-  questionPath,
+  sentChoice,
+  shouldPlaySent,
   soundsFolder,
   systemCandidates,
 } from './chime'
@@ -207,7 +209,7 @@ async function loadOff($: EngineInterface) {
  * system's own that exist on disk. Read each time it is needed, so a file
  * dropped in mid-session is found.
  */
-async function soundsOf($: EngineInterface): Promise<{ sounds: Sounds; os: Os; folder: string; fileNames: string[] }> {
+async function soundsOf($: EngineInterface): Promise<{ sounds: Sounds; os: Os }> {
   const home = (await $.env.get('USERPROFILE')) || (await $.env.get('HOME')) || ''
   const os = osFrom(await $.env.get('OS'), home)
   const folder = soundsFolder(home)
@@ -221,7 +223,7 @@ async function soundsOf($: EngineInterface): Promise<{ sounds: Sounds; os: Os; f
       }
     }),
   )
-  return { sounds: { personal: personalSounds(fileNames, folder), system: found.filter((s): s is Sound => s !== null) }, os, folder, fileNames }
+  return { sounds: { personal: personalSounds(fileNames, folder), system: found.filter((s): s is Sound => s !== null) }, os }
 }
 
 /** What was chosen, from the last session on this machine. */
@@ -261,12 +263,12 @@ const quiet = (run: () => Promise<void>) => {
   void run().catch(() => {})
 }
 
-/** The sound for an event: the picked one for a reply, the question sound for a question. Nothing while the chime is off. */
-async function playFor($: EngineInterface, kind: 'reply' | 'question') {
+/** The sound for an event: Claude's (a reply, a question, a permission prompt) or the person's own Enter. Nothing while the chime is off. */
+async function playFor($: EngineInterface, kind: 'claude' | 'sent') {
   const chime = (await read($, chimeAtom)) ?? NO_CHIME
   if (!chime.isOn) return
-  const { sounds, os, folder, fileNames } = await soundsOf($)
-  await playPath($, kind === 'reply' ? chosen(sounds, chime.sound)?.path : questionPath(fileNames, folder, sounds.system, os), os)
+  const { sounds, os } = await soundsOf($)
+  await playPath($, (kind === 'claude' ? chosen(sounds, chime.sound) : sentChoice(sounds, chime.sent))?.path, os)
 }
 
 async function openMenu($: EngineInterface) {
@@ -379,6 +381,15 @@ async function cycleSound($: EngineInterface) {
   await playPath($, listOf(sounds).find(s => s.name === name)?.path, os)
 }
 
+/** The Sent row: the next sound after none and the list, saved and played at once; none plays nothing. */
+async function cycleSent($: EngineInterface) {
+  const held = (await read($, chimeAtom)) ?? NO_CHIME
+  const { sounds, os } = await soundsOf($)
+  const name = nextSent(sounds, held.sent)
+  await setChime($, { ...held, sent: name })
+  await playPath($, sentChoice(sounds, name)?.path, os)
+}
+
 /** `✎ edit` and `✓ done`: one section is in edit mode at a time. */
 const setEditing = ($: EngineInterface, section: Section | null) => update($, editingAtom, () => section)
 
@@ -394,8 +405,10 @@ type View = {
   editing: Section | null
   projectKey: string
   chime: ArsenalChime
-  /** The name the Sound row shows: the chosen sound, or the default when the saved one is gone. */
+  /** The name the Claude row shows: the chosen sound, or the default when the saved one is gone. */
   sound: string
+  /** The name the Sent row shows: the chosen sound, or empty for none (also when the saved one is gone). */
+  sentSound: string
 }
 
 function drawMenu($: EngineInterface, e: Parameters<typeof $.ui.resolve>[0], bodyColumns: number, view: View) {
@@ -503,13 +516,21 @@ function drawMenu($: EngineInterface, e: Parameters<typeof $.ui.resolve>[0], bod
               {pill(view.chime.isOn)}
             </Button>
           </Box>
-          <Text dimColor>{'  reply done · asked a question'}</Text>
+          <Text dimColor>{'  you send · Claude replies/asks'}</Text>
           {view.chime.isOn ? (
-            <Box justifyContent="space-between">
-              <Text>♪ Sound</Text>
-              <Button key="arsenal-chime-sound" plain hotkey="o" onPress={() => cycleSound($)}>
-                <Text dimColor>{`${view.sound || 'none found'} ▸`}</Text>
-              </Button>
+            <Box key="arsenal-chime-pickers" flexDirection="column">
+              <Box justifyContent="space-between">
+                <Text>♪ Claude</Text>
+                <Button key="arsenal-chime-sound" plain hotkey="o" onPress={() => cycleSound($)}>
+                  <Text dimColor>{`${view.sound || 'none found'} ▸`}</Text>
+                </Button>
+              </Box>
+              <Box justifyContent="space-between">
+                <Text>↗ Sent</Text>
+                <Button key="arsenal-chime-sent" plain hotkey="m" onPress={() => cycleSent($)}>
+                  <Text dimColor>{`${view.sentSound || 'none'} ▸`}</Text>
+                </Button>
+              </Box>
             </Box>
           ) : null}
         </Box>
@@ -558,8 +579,8 @@ export const register: Register = on => {
     try {
       await $.command.register({
         name: 'chime',
-        description: 'Sound notifications: on, off, test, or pick a sound',
-        argumentHint: '[on|off|test|sound <name>]',
+        description: 'Sound notifications: on, off, test, or pick the sounds for you and Claude',
+        argumentHint: '[on|off|test|sound <name>|sent <name|none>]',
         immediate: true,
       })
     } catch {
@@ -614,6 +635,7 @@ export const register: Register = on => {
     const { sounds, os } = await soundsOf($)
     const names = listOf(sounds).map(s => s.name)
     const now = chosen(sounds, held.sound)
+    const sentNow = sentChoice(sounds, held.sent)
     const command = parseChime(e.args)
     if (command.kind === 'on' || command.kind === 'off') {
       await setChime($, { ...held, isOn: command.kind === 'on' })
@@ -630,27 +652,47 @@ export const register: Register = on => {
       await playPath($, picked.path, os)
       return { text: `Sound set to "${picked.name}".` }
     }
-    return { text: command.kind === 'show' ? describeChime(held, now?.name ?? '', names) : CHIME_HELP }
+    if (command.kind === 'sent') {
+      if (command.name === '') {
+        await setChime($, { ...held, sent: '' })
+        return { text: 'Sent sound set to none.' }
+      }
+      const picked = listOf(sounds).find(s => s.name.toLowerCase() === command.name.toLowerCase())
+      if (!picked) return { text: `No sound called "${command.name}". Pick one of: ${names.join(', ')}, or none` }
+      await setChime($, { ...held, sent: picked.name })
+      await playPath($, picked.path, os)
+      return { text: `Sent sound set to "${picked.name}".` }
+    }
+    return { text: command.kind === 'show' ? describeChime(held, now?.name ?? '', sentNow?.name ?? '', names) : CHIME_HELP }
   }).catch(() => ({ text: 'Chime could not do that right now.' }))
 
-  // A reply done: the main loop's turns only, and not one the person stopped.
-  // The sound is started and never waited for
+  // The person's own Enter on a prompt. The sound starts as the prompt leaves the
+  // box, before a hook beneath can hold or drop it (Prompt Upgrade holds a prompt
+  // and sends its upgrade later as a plugin's, which would never be heard)
+  on('prompt.submit', async ($, e, next) => {
+    if (shouldPlaySent(e)) quiet(() => playFor($, 'sent'))
+    return next(e)
+  })
+
+  // Claude's sound, for each time it has something for the person. A reply done:
+  // the main loop's turns only, and not one the person stopped. The sound is
+  // started and never waited for
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
-    if (!e.agentId && !e.isAborted) quiet(() => playFor($, 'reply'))
+    if (!e.agentId && !e.isAborted) quiet(() => playFor($, 'claude'))
     return done
   })
 
   // The dialog opens while the call runs, so the sound starts as it appears
   on('tool.call', { tool: 'AskUserQuestion' }, async ($, e, next) => {
-    quiet(() => playFor($, 'question'))
+    quiet(() => playFor($, 'claude'))
     return next(e)
   })
 
   // A permission prompt, where the engine raises one
   on('classic.Notification', async ($, e, next) => {
     const done = await next(e)
-    if (e.notification_type === 'permission_prompt') quiet(() => playFor($, 'question'))
+    if (e.notification_type === 'permission_prompt') quiet(() => playFor($, 'claude'))
     return done
   })
 
@@ -695,17 +737,21 @@ export const register: Register = on => {
     const chime = (await read($, chimeAtom)) ?? NO_CHIME
     // the list is read as the pane draws, so a file dropped in is found
     let sound = ''
+    let sentSound = ''
     if (chime.isOn) {
       try {
-        sound = chosen((await soundsOf($)).sounds, chime.sound)?.name ?? ''
+        const { sounds } = await soundsOf($)
+        sound = chosen(sounds, chime.sound)?.name ?? ''
+        sentSound = sentChoice(sounds, chime.sent)?.name ?? ''
       } catch {
-        // the row says none found
+        // the rows say none found and none
       }
     }
     const view: View = {
       tools,
       chime,
       sound,
+      sentSound,
       auto: await readAuto($),
       header: headerNote((await read($, runningAtom)) ?? null),
       note: (await read($, noteAtom)) ?? '',

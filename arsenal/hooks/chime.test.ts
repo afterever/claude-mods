@@ -9,12 +9,13 @@ import {
   describeChime,
   listOf,
   nextName,
+  nextSent,
   osFrom,
   parseChime,
   personalSounds,
   playerFor,
-  questionFallback,
-  questionPath,
+  sentChoice,
+  shouldPlaySent,
   soundsFolder,
   systemCandidates,
 } from './chime'
@@ -56,10 +57,11 @@ test('the OS comes from the Windows environment, else a Mac-style home', () => {
 
 // ── The list ─────────────────────────────────────────────────────────────
 
-test('the person’s sounds are the wav files, by name, without question.wav', () => {
+test('the person’s sounds are the wav files, by name; a question.wav is a sound like any other', () => {
   expect(personalSounds(['b.WAV', 'a.wav', 'question.wav', 'notes.txt', 'c.mp3'], 'F')).toEqual([
     { name: 'a', path: 'F/a.wav' },
     { name: 'b', path: 'F/b.WAV' },
+    { name: 'question', path: 'F/question.wav' },
   ])
 })
 
@@ -81,15 +83,6 @@ test('the system candidates are the design’s five on Windows, five on a Mac, n
   expect(systemCandidates('linux')).toEqual([])
 })
 
-test('the question sound is question.wav when there is one, else the system’s fallback, else none', () => {
-  expect(questionFallback('windows')).toBe('Windows Message Nudge')
-  expect(questionFallback('mac')).toBe('Ping')
-  expect(questionFallback('linux')).toBe('')
-  expect(questionPath(['question.wav', 'a.wav'], 'F', system, 'windows')).toBe('F/question.wav')
-  expect(questionPath(['a.wav'], 'F', system, 'windows')).toBe('C:/Windows/Media/Windows Message Nudge.wav')
-  expect(questionPath([], 'F', [], 'windows')).toBeUndefined()
-})
-
 test('the chosen sound is the one named, else the first system sound, else the first of the person’s', () => {
   expect(chosen(sounds(['mine']), 'mine')?.name).toBe('mine')
   expect(chosen(sounds(['mine']), 'Windows Message Nudge')?.name).toBe('Windows Message Nudge')
@@ -108,6 +101,30 @@ test('the next sound goes down the list, personal first, and wraps', () => {
   expect(nextName({ personal: [], system: [] }, '')).toBe('')
 })
 
+test('the sent sound is the one named; none, or one that is gone, is no sound', () => {
+  expect(sentChoice(sounds(['mine']), 'mine')?.name).toBe('mine')
+  expect(sentChoice(sounds(['mine']), 'Windows Message Nudge')?.name).toBe('Windows Message Nudge')
+  expect(sentChoice(sounds(['mine']), '')).toBeUndefined()
+  expect(sentChoice(sounds(['mine']), 'gone')).toBeUndefined()
+})
+
+test('the next sent sound goes none, then down the list, and wraps back to none', () => {
+  const s = sounds(['mine'])
+  expect(nextSent(s, '')).toBe('mine')
+  expect(nextSent(s, 'mine')).toBe('Windows Notify Messaging')
+  expect(nextSent(s, 'Windows Message Nudge')).toBe('')
+  expect(nextSent(s, 'gone')).toBe('mine')
+  expect(nextSent({ personal: [], system: [] }, '')).toBe('')
+})
+
+test('only the person’s own Enter on a prompt swooshes: not a command, a plugin, a notice or a hidden prompt', () => {
+  expect(shouldPlaySent({ origin: { kind: 'composer' } })).toBe(true)
+  expect(shouldPlaySent({ origin: { kind: 'composer' }, command: { name: 'chime' } })).toBe(false)
+  expect(shouldPlaySent({ origin: { kind: 'composer' }, isMeta: true })).toBe(false)
+  expect(shouldPlaySent({ origin: { kind: 'plugin' } })).toBe(false)
+  expect(shouldPlaySent({ origin: { kind: 'notification' } })).toBe(false)
+})
+
 // ── The store ────────────────────────────────────────────────────────────
 
 test('anything unexpected in the store is the chime off', () => {
@@ -115,9 +132,16 @@ test('anything unexpected in the store is the chime off', () => {
 })
 
 test('the chime round-trips through the store', () => {
-  const held = { isOn: true, sound: 'Ping' }
+  const held = { isOn: true, sound: 'Ping', sent: '' }
   expect(chimeToStore(held)).toEqual({ version: 1, isOn: true, sound: 'Ping' })
   expect(chimeFromStore(chimeToStore(held))).toEqual(held)
+})
+
+test('a sent sound is saved when there is one, and a 0.4.0 store without it reads as none', () => {
+  const held = { isOn: true, sound: 'Ping', sent: 'Glass' }
+  expect(chimeToStore(held)).toEqual({ version: 1, isOn: true, sound: 'Ping', sent: 'Glass' })
+  expect(chimeFromStore(chimeToStore(held))).toEqual(held)
+  expect(chimeFromStore({ version: 1, isOn: true, sound: 'Ping' })).toEqual({ isOn: true, sound: 'Ping', sent: '' })
 })
 
 // ── /chime ───────────────────────────────────────────────────────────────
@@ -129,14 +153,21 @@ test('/chime arguments: nothing shows, on, off, test, sound <name>, anything els
   expect(parseChime('test')).toEqual({ kind: 'test' })
   expect(parseChime('sound Windows Ding')).toEqual({ kind: 'sound', name: 'Windows Ding' })
   expect(parseChime('sound')).toEqual({ kind: 'help' })
+  expect(parseChime('sent Windows Ding')).toEqual({ kind: 'sent', name: 'Windows Ding' })
+  expect(parseChime('sent none')).toEqual({ kind: 'sent', name: '' })
+  expect(parseChime('SENT None')).toEqual({ kind: 'sent', name: '' })
+  expect(parseChime('sent')).toEqual({ kind: 'help' })
   expect(parseChime('banana')).toEqual({ kind: 'help' })
 })
 
-test('the state line names on or off, the sound shown and the names to pick from', () => {
-  const on = describeChime({ isOn: true, sound: '' }, 'Windows Ding', ['a', 'Windows Ding'])
+test('the state line names on or off, both sounds shown and the names to pick from', () => {
+  const on = describeChime({ isOn: true, sound: '', sent: 'a' }, 'Windows Ding', 'a', ['a', 'Windows Ding'])
   expect(on).toContain('on')
-  expect(on).toContain('Windows Ding')
+  expect(on).toContain('Sound: Windows Ding')
+  expect(on).toContain('Sent: a')
   expect(on).toContain('a, Windows Ding')
-  expect(describeChime(NO_CHIME, 'Windows Ding', [])).toContain('off')
+  expect(describeChime(NO_CHIME, 'Windows Ding', '', [])).toContain('off')
+  expect(describeChime(NO_CHIME, 'Windows Ding', '', [])).toContain('Sent: none')
   expect(CHIME_HELP).toContain('/chime sound')
+  expect(CHIME_HELP).toContain('/chime sent')
 })

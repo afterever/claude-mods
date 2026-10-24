@@ -33,7 +33,7 @@
     {
       "name": "arsenal",
       "source": "./arsenal",
-      "description": "A menu for the tool mods in this repo and for your own commands: a button in the footer under the prompt box opens a menu pane, docked on the right, with a Prompt Upgrade switch, a Sound notifications switch and sound picker, one-press shortcuts to /prompt-upgrade and /work-report, and USER and PROJECT sections listing your own skills and commands, each of which you can turn off. A remote control for the tools, with one thing of its own: the sound notifications. Idea from https://tristenobrien.ai/. Sound notifications idea from https://github.com/angomedia/claude-mods."
+      "description": "A menu for the tool mods in this repo and for your own commands: a button in the footer under the prompt box opens a menu pane, docked on the right, with a Prompt Upgrade switch, a Sound notifications switch with a sound for your own Enter and one for Claude, one-press shortcuts to /prompt-upgrade and /work-report, and USER and PROJECT sections listing your own skills and commands, each of which you can turn off. A remote control for the tools, with one thing of its own: the sound notifications. Idea from https://tristenobrien.ai/. Sound notifications idea from https://github.com/angomedia/claude-mods."
     },
     {
       "name": "waypoints",

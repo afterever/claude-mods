@@ -161,10 +161,11 @@ const NO_OFF = { user: [], project: {} }
 test('SETTINGS always holds the chime, and Prompt Upgrade when its tool is there', () => {
   expect(hasPromptUpgrade(BOTH)).toBe(true)
   expect(hasPromptUpgrade(REPORT)).toBe(false)
-  const on = { isOn: true, sound: '' }
+  // while the chime is on it adds a row for Claude's sound and one for the sent sound
+  const on = { isOn: true, sound: '', sent: '' }
   expect(settingsLines(NONE, NO_CHIME)).toBe(3)
-  expect(settingsLines(NONE, on)).toBe(4)
-  expect(settingsLines(BOTH, on)).toBe(6)
+  expect(settingsLines(NONE, on)).toBe(5)
+  expect(settingsLines(BOTH, on)).toBe(7)
 })
 
 test('the rows left are the commands not turned off, and edit mode shows them all', () => {

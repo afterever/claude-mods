@@ -18,8 +18,12 @@ export type ArsenalOwn = { user: OwnCommand[]; project: OwnCommand[] }
 /** The names turned off in edit mode. `project` is keyed by the project key (the repo's shared `.git` folder). */
 export type ArsenalOff = { user: string[]; project: Record<string, string[]> }
 
-/** The sound notifications' two settings. `sound` is a name from the list; empty means the default. */
-export type ArsenalChime = { isOn: boolean; sound: string }
+/**
+ * The sound notifications' settings. `sound` is Claude's (a reply, a question, a
+ * permission prompt) and `sent` the person's own Enter; each is a name from the
+ * list. Empty `sound` means the default, empty `sent` means no sound.
+ */
+export type ArsenalChime = { isOn: boolean; sound: string; sent: string }
 
 declare module 'claude-code' {
   interface PluginState {
