@@ -5,6 +5,7 @@ import type { ArsenalChime, ArsenalOff, ArsenalOwn, ArsenalTools } from '../type
 import {
   CHIME_HELP,
   CHIME_STORE_KEY,
+  MAC_SOUNDS_FOLDER,
   NO_CHIME,
   chimeFromStore,
   chimeToStore,
@@ -206,6 +207,17 @@ async function loadOff($: EngineInterface) {
 
 // ── Sound notifications ──────────────────────────────────────────────────
 
+/** Windows by its environment; a Mac by Apple's sound folder or its home. The folder is asked only off Windows. */
+async function osOf($: EngineInterface, home: string): Promise<Os> {
+  const windowsEnv = await $.env.get('OS')
+  if (windowsEnv === 'Windows_NT') return 'windows'
+  try {
+    return osFrom(windowsEnv, home, await $.fs.exists(MAC_SOUNDS_FOLDER))
+  } catch {
+    return osFrom(windowsEnv, home)
+  }
+}
+
 /**
  * The sounds there are now: the `.wav` files of the person's folder and the
  * system's own that exist on disk. Read each time it is needed, so a file
@@ -213,7 +225,7 @@ async function loadOff($: EngineInterface) {
  */
 async function soundsOf($: EngineInterface): Promise<{ sounds: Sounds; os: Os }> {
   const home = (await $.env.get('USERPROFILE')) || (await $.env.get('HOME')) || ''
-  const os = osFrom(await $.env.get('OS'), home)
+  const os = await osOf($, home)
   const folder = soundsFolder(home)
   const fileNames = home ? (await entriesOf($, folder)).filter(f => f.kind === 'file' || f.isLink).map(f => f.name) : []
   const found = await Promise.all(

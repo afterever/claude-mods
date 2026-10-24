@@ -22,6 +22,8 @@ type Opts = {
   panes?: string[]
   /** The person's home folder; the files of `disk` are found under it. */
   home?: string
+  /** A Mac: no `OS` and no `USERPROFILE`, `HOME` is the home, and the system sounds are Apple's. */
+  os?: 'mac'
   /** `$.session.root()`. */
   root?: string
   /** Every file there is, by absolute path, and its text. A folder is a path with files under it. */
@@ -96,9 +98,15 @@ function world(on: On, o: Opts = {}): World {
     return { value: [...tools, ...own] } as any
   })
   // the folders and files of the person's own commands, and the git around them
-  on('env.get', async (_$, e) => ({ value: e.name === 'USERPROFILE' ? (o.home ?? 'C:/home') : e.name === 'OS' ? 'Windows_NT' : undefined }) as any)
+  on('env.get', async (_$, e) => {
+    if (o.os === 'mac') return { value: e.name === 'HOME' ? o.home : undefined } as any
+    return { value: e.name === 'USERPROFILE' ? (o.home ?? 'C:/home') : e.name === 'OS' ? 'Windows_NT' : undefined } as any
+  })
   // the system's sounds are all there; the person's folder is whatever `disk` holds
-  on('fs.exists', async (_$, e) => ({ value: fake(e.path).startsWith('C:/Windows/Media/') || fake(e.path) in disk }) as any)
+  // (on a Windows machine the engine reads Apple's absolute path as relative, so match it by its tail)
+  const isSystemSound = (path: string) =>
+    o.os === 'mac' ? /(^|\/)System\/Library\/Sounds(\/|$)/.test(fake(path)) : fake(path).startsWith('C:/Windows/Media/')
+  on('fs.exists', async (_$, e) => ({ value: isSystemSound(e.path) || fake(e.path) in disk }) as any)
   on('session.root', async () => ({ value: o.root ?? 'C:/bats' }) as any)
   on('fs.list', async (_$, e) => {
     const below = `${fake(e.path).replace(/\/+$/, '')}/`
@@ -924,6 +932,13 @@ test('no sounds folder at all still lists the system’s sounds', async ($, on) 
   world(on, { disk: {} })
   await start($)
   expect(await chime($, '')).toContain('Sounds: Windows Notify Messaging')
+})
+
+test('a Mac whose home is not under /Users still plays its system sounds through afplay', async ($, on) => {
+  const w = world(on, { os: 'mac', home: '/Volumes/X/me', store: ON })
+  await start($)
+  await chime($, 'test')
+  expect(w.played).toEqual([['afplay', '/System/Library/Sounds/Glass.aiff']])
 })
 
 // ── The SETTINGS rows ────────────────────────────────────────────────────

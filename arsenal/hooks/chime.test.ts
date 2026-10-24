@@ -70,6 +70,10 @@ test('the OS comes from the Windows environment, else a Mac-style home', () => {
   expect(osFrom('Windows_NT', '')).toBe('windows')
   expect(osFrom(undefined, '/Users/me')).toBe('mac')
   expect(osFrom(undefined, '/home/me')).toBe('linux')
+  // the system's own sounds folder tells a Mac whatever its home is called
+  expect(osFrom(undefined, '/Volumes/X/me', true)).toBe('mac')
+  expect(osFrom(undefined, '/home/me', false)).toBe('linux')
+  expect(osFrom('Windows_NT', '/Users/x', true)).toBe('windows')
 })
 
 // ── The list ─────────────────────────────────────────────────────────────

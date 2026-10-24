@@ -19,11 +19,14 @@ export const NO_CHIME: ArsenalChime = { isOn: false, sound: '', sent: '' }
 
 export const CHIME_STORE_KEY = 'chime'
 
-/** `Windows_NT` is Windows; a home under `/Users/` is a Mac; anything else is Linux. */
-export function osFrom(windowsEnv: string | undefined, home: string): Os {
+/** `Windows_NT` is Windows; Apple's sound folder or a home under `/Users/` is a Mac; anything else is Linux. */
+export function osFrom(windowsEnv: string | undefined, home: string, hasMacSounds = false): Os {
   if (windowsEnv === 'Windows_NT') return 'windows'
-  return home.startsWith('/Users/') ? 'mac' : 'linux'
+  return hasMacSounds || home.startsWith('/Users/') ? 'mac' : 'linux'
 }
+
+/** The folder every Mac has Apple's own alert sounds in. */
+export const MAC_SOUNDS_FOLDER = '/System/Library/Sounds'
 
 export const soundsFolder = (home: string) => `${home}/.claude/arsenal/sounds`
 
