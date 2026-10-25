@@ -1228,10 +1228,12 @@ Branch and PR, then release `arsenal-v0.4.5`. Before the release: `plugin.json` 
 `VERSION` in `hooks/version.ts`, and `RELEASED` is the release day (set it when merging, not when
 writing). `SETUP.md` row to 0.4.5 (`marketplace.json` holds no version).
 
-### Not settled, to check live
+### Checked live (2026-10-24, the person, 0.4.5)
 
-That a Mac plays `.caf` from the folder and finds the system folder (needs the person's Mac);
-that the sounds folder README appears on a clean install.
+On Windows and on macOS, in the Terminal and on Claude Desktop, in new sessions: all of it worked.
+That settles what the design left open about a Mac (that it plays from the folder and finds the
+system sounds) and the survey's "no run on a real Mac exists" above. The README's and SETUP.md's
+"not run on a Mac yet" lines were changed to say so.
 
 ### What building changed in this design (0.4.5)
 

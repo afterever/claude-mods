@@ -87,7 +87,7 @@ Each row goes down the same list: your own sounds first, then the system's (`Win
 
 The switch and both sounds are saved on this machine. Sounds play through PowerShell on Windows and `afplay` on a Mac; on Linux nothing plays.
 
-**On a Mac.** Apple's `Glass`, `Ping`, `Pop`, `Hero` and `Tink` are listed after your own sounds, and a Mac is recognised by `/System/Library/Sounds` being there, whatever your home folder is called. Apple's iMessage sounds need no conversion: `afplay` plays `.caf`, so copy them into `~/.claude/arsenal/sounds/` as they are (paths above). **This has not been run on a Mac yet.** It is covered by tests of the command it runs (`afplay <file>`), not by a listen; if something is off, that is the first place to look.
+**On a Mac.** Apple's `Glass`, `Ping`, `Pop`, `Hero` and `Tink` are listed after your own sounds, and a Mac is recognised by `/System/Library/Sounds` being there, whatever your home folder is called. Apple's iMessage sounds need no conversion: `afplay` plays `.caf`, so copy them into `~/.claude/arsenal/sounds/` as they are (paths above). **Checked on a Mac on 2026-10-24** (0.4.5, in the Terminal and on Desktop): the sounds play. The tests cover the command it runs (`afplay <file>`).
 
 ## Your own commands
 

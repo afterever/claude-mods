@@ -274,7 +274,7 @@ line of the pane says the version and the day it was released.
   `~/.claude/arsenal/sounds/` (made for you, with a `README.txt`, whenever a session starts without it),
   then Windows' own. Apple's two iMessage sounds work as `.mp3`, or
   converted to `.wav` (on a Mac: `afconvert -f WAVE -d LEI16 in.caf out.wav`); they are not in the repo. A Mac
-  plays `.caf`, `.aiff` and `.m4a` as they are and has Apple's own sounds, but arsenal has not been run on a Mac yet. The
+  plays `.caf`, `.aiff` and `.m4a` as they are and has Apple's own sounds, and 0.4.5 was checked on a Mac (Terminal and Desktop). The
   idea is from
   [angomedia/claude-mods](https://github.com/angomedia/claude-mods)' done-chime; the code is
   written fresh.
