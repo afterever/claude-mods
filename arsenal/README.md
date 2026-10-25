@@ -6,7 +6,7 @@ A Claude Code mod that puts the tool mods in this repo, and your own skills and 
 
 ```
   (the other mods' bands)                       ┌ Arsenal ─────────────────────────┐
-                                                │ ◆  A R S E N A L  Opus 5.5 · High │
+                                                │ ◆ A R S E N A L  Opus 5.5 · High │
  ────────────────────────────────────────────   │ ──────────────────────────────── │
  > your prompt                                  │ ── S E T T I N G S               │
  ────────────────────────────────────────────   │ ○ Prompt Upgrade        ○ Off    │

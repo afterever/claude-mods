@@ -17,12 +17,12 @@ The turn so far, as the timeline strip draws it:
 The box above the prompt names the step Claude is on and how long it has been on it. Click ▸ (or focus the band with `ctrl+x tab` and press Enter) to see every step it has taken. This is the original's behaviour, unchanged; [its README](https://github.com/tzafrir/whats-agent-doing#what-it-shows) has the full table of states.
 
 ```
-╭─────────────────────────────────────────────────────────────────╮
+╭──────────────────────────────────────────────────────────────────╮
 │ ▸ ⠹ ❯ Find the commit that broke fixed-amount coupons ▃ · 1m 48s │
 │   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━                       │
 │ ├─ ⠼ Find callers of applyCoupon › Searching for "applyCoupon("  │
 │ └─ ⠧ Check the coupon tests › Reading coupon.test.ts  33s        │
-╰─────────────────────────────────────────────────────────────────╯
+╰──────────────────────────────────────────────────────────────────╯
 ```
 
 ## What this fork adds
