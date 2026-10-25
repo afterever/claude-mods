@@ -2,6 +2,9 @@ import { test, expect, mock } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+import { versionLine } from './menu'
+import { RELEASED, VERSION } from './version'
+
 const BOTH = ['prompt-upgrade', 'work-report', 'model', 'ctx']
 
 type Opts = {
@@ -19,6 +22,8 @@ type Opts = {
   panes?: string[]
   /** The person's home folder; the files of `disk` are found under it. */
   home?: string
+  /** A Mac: no `OS` and no `USERPROFILE`, `HOME` is the home, and the system sounds are Apple's. */
+  os?: 'mac'
   /** `$.session.root()`. */
   root?: string
   /** Every file there is, by absolute path, and its text. A folder is a path with files under it. */
@@ -33,6 +38,8 @@ type Opts = {
   store?: Record<string, unknown>
   /** `$.store.set` rejects. */
   saveFails?: boolean
+  /** `$.fs.write` rejects. */
+  writeFails?: boolean
   /** What the prompt box holds. */
   draft?: string
   /** The prompt box cannot take text (a dialog holds the keys). */
@@ -63,6 +70,8 @@ type World = {
   rows: (number | undefined)[]
   /** Every sound player the plugin ran, as its argv. */
   played: string[][]
+  /** Every file the plugin wrote, by path, and its text. */
+  writes: Record<string, string>
 }
 
 // The fake disk is keyed by Windows paths (`C:/home/...`). Off Windows the
@@ -77,7 +86,7 @@ const fake = (path: string) => {
 // The world beneath the plugin: the command list, the model, prompt-upgrade's
 // switch, the panes, and the line and footer other mods draw
 function world(on: On, o: Opts = {}): World {
-  const w: World = { runs: [], registered: [], toasts: [], calls: [], steps: [], auto: { on: o.auto ?? false }, model: { value: o.model ?? 'opus' }, store: { ...o.store }, fills: [], rows: [], played: [] }
+  const w: World = { runs: [], registered: [], toasts: [], calls: [], steps: [], auto: { on: o.auto ?? false }, model: { value: o.model ?? 'opus' }, store: { ...o.store }, fills: [], rows: [], played: [], writes: {} }
   const panes = new Set(o.panes ?? [])
   const draft = { text: o.draft ?? '' }
   const disk = o.disk ?? {}
@@ -93,9 +102,22 @@ function world(on: On, o: Opts = {}): World {
     return { value: [...tools, ...own] } as any
   })
   // the folders and files of the person's own commands, and the git around them
-  on('env.get', async (_$, e) => ({ value: e.name === 'USERPROFILE' ? (o.home ?? 'C:/home') : e.name === 'OS' ? 'Windows_NT' : undefined }) as any)
+  on('env.get', async (_$, e) => {
+    if (o.os === 'mac') return { value: e.name === 'HOME' ? o.home : undefined } as any
+    return { value: e.name === 'USERPROFILE' ? (o.home ?? 'C:/home') : e.name === 'OS' ? 'Windows_NT' : undefined } as any
+  })
   // the system's sounds are all there; the person's folder is whatever `disk` holds
-  on('fs.exists', async (_$, e) => ({ value: fake(e.path).startsWith('C:/Windows/Media/') || fake(e.path) in disk }) as any)
+  // (on a Windows machine the engine reads Apple's absolute path as relative, so match it by its tail)
+  const isSystemSound = (path: string) =>
+    o.os === 'mac' ? /(^|\/)System\/Library\/Sounds(\/|$)/.test(fake(path)) : fake(path).startsWith('C:/Windows/Media/')
+  // a folder is there when a file is under it
+  const isFolder = (path: string) => Object.keys(disk).some(k => k.startsWith(`${fake(path).replace(/\/+$/, '')}/`))
+  on('fs.exists', async (_$, e) => ({ value: isSystemSound(e.path) || fake(e.path) in disk || isFolder(e.path) }) as any)
+  on('fs.write', async (_$, e) => {
+    if (o.writeFails) throw new Error('read-only')
+    w.writes[fake(e.path)] = e.text
+    return { value: undefined } as any
+  })
   on('session.root', async () => ({ value: o.root ?? 'C:/bats' }) as any)
   on('fs.list', async (_$, e) => {
     const below = `${fake(e.path).replace(/\/+$/, '')}/`
@@ -833,8 +855,15 @@ test('the pane asks for as many rows as the menu has lines', async ($, on) => {
   await start($)
   await open($)
   expect(w.calls).toEqual(['open arsenal'])
-  // 2 header + 4 settings + 6 launch + 13 user + 1 note, and 2 of slack
-  expect(w.rows).toEqual([28])
+  // 2 header + 4 settings + 6 launch + 13 user + 1 note + 1 version, and 2 of slack
+  expect(w.rows).toEqual([29])
+})
+
+test('the last row of the pane is the version and its release date, below the note', async ($, on) => {
+  world(on)
+  await start($)
+  const last = await inPane($, async ui => (await texts(ui)).slice(-2))
+  expect(last).toEqual([' ', versionLine(VERSION, RELEASED)])
 })
 
 test('nothing found and nothing broken: no folders, no git, no home', async ($, on) => {
@@ -914,6 +943,39 @@ test('no sounds folder at all still lists the system’s sounds', async ($, on) 
   world(on, { disk: {} })
   await start($)
   expect(await chime($, '')).toContain('Sounds: Windows Notify Messaging')
+})
+
+test('a session without a sounds folder makes it, with a README.txt', async ($, on) => {
+  const w = world(on, { disk: {} })
+  await start($)
+  expect(Object.keys(w.writes)).toEqual([`${SOUNDS_DIR}/README.txt`])
+  expect(w.writes[`${SOUNDS_DIR}/README.txt`]).toContain('.wav')
+})
+
+test('a sounds folder that is there is left alone', async ($, on) => {
+  const w = world(on, { disk: { [`${SOUNDS_DIR}/mine.wav`]: '' } })
+  await start($)
+  expect(w.writes).toEqual({})
+})
+
+test('the README.txt is not a sound', async ($, on) => {
+  world(on, { disk: { [`${SOUNDS_DIR}/mine.wav`]: '', [`${SOUNDS_DIR}/README.txt`]: 'x' } })
+  await start($)
+  expect(await chime($, '')).toContain('Sounds: mine, Windows Notify Messaging')
+})
+
+test('a folder that cannot be made does not stop the session', async ($, on) => {
+  const w = world(on, { disk: {}, writeFails: true })
+  await start($)
+  expect(w.writes).toEqual({})
+  expect(await chime($, '')).toContain('Sounds: Windows Notify Messaging')
+})
+
+test('a Mac whose home is not under /Users still plays its system sounds through afplay', async ($, on) => {
+  const w = world(on, { os: 'mac', home: '/Volumes/X/me', store: ON })
+  await start($)
+  await chime($, 'test')
+  expect(w.played).toEqual([['afplay', '/System/Library/Sounds/Glass.aiff']])
 })
 
 // ── The SETTINGS rows ────────────────────────────────────────────────────

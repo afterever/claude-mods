@@ -225,9 +225,13 @@ export function paneRows(
     (sum, s) => sum + sectionLines(own[s], offFor(off, s, projectKey), editing === s),
     0,
   )
-  const lines = 2 + settingsLines(tools, chime) + launch + sections + 1
+  // the header's 2, the settings, the launch rows, the sections, the note and the version row
+  const lines = 2 + settingsLines(tools, chime) + launch + sections + 1 + 1
   return Math.max(MIN_PANE_ROWS, lines + PANE_SLACK)
 }
+
+/** The pane's last row: the mod, its version and the day that version was released. */
+export const versionLine = (version: string, released: string) => `arsenal v${version} · ${released}`
 
 // ── Words ────────────────────────────────────────────────────────────────
 

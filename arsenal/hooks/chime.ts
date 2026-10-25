@@ -19,11 +19,14 @@ export const NO_CHIME: ArsenalChime = { isOn: false, sound: '', sent: '' }
 
 export const CHIME_STORE_KEY = 'chime'
 
-/** `Windows_NT` is Windows; a home under `/Users/` is a Mac; anything else is Linux. */
-export function osFrom(windowsEnv: string | undefined, home: string): Os {
+/** `Windows_NT` is Windows; Apple's sound folder or a home under `/Users/` is a Mac; anything else is Linux. */
+export function osFrom(windowsEnv: string | undefined, home: string, hasMacSounds = false): Os {
   if (windowsEnv === 'Windows_NT') return 'windows'
-  return home.startsWith('/Users/') ? 'mac' : 'linux'
+  return hasMacSounds || home.startsWith('/Users/') ? 'mac' : 'linux'
 }
+
+/** The folder every Mac has Apple's own alert sounds in. */
+export const MAC_SOUNDS_FOLDER = '/System/Library/Sounds'
 
 export const soundsFolder = (home: string) => `${home}/.claude/arsenal/sounds`
 
@@ -37,18 +40,43 @@ export function systemCandidates(os: Os): Sound[] {
   return []
 }
 
-const WAV = /\.wav$/i
 const MP3 = /\.mp3$/i
 
-/** The `.wav` and `.mp3` files of the person's folder, by name without the extension; a wav and an mp3 of one name are one sound, the wav. */
-export function personalSounds(fileNames: readonly string[], folder: string): Sound[] {
-  const byName = new Map<string, Sound>()
+/** The file types of the person's folder, best first: where one name has several, the first listed here is the sound. A Mac's `afplay` plays more than the Windows players do. */
+const FORMATS: Record<Os, readonly string[]> = {
+  windows: ['wav', 'mp3'],
+  linux: ['wav', 'mp3'],
+  mac: ['wav', 'mp3', 'm4a', 'aiff', 'caf'],
+}
+
+/** The README.txt written into a sounds folder arsenal has just made: what goes in it, in plain text. */
+export const soundsReadme = (os: Os) =>
+  [
+    'Arsenal sound notifications: your own sounds',
+    '',
+    `Put sound files here (${FORMATS[os].map(f => `.${f}`).join(', ')}). Each file name, without the extension, becomes a choice`,
+    'for both sounds in the Arsenal menu (Sound notifications) and for /chime sound and /chime sent.',
+    'The folder is read again every time the menu opens, so a file you add shows up without a restart.',
+    '',
+    'Keep them short: a sound is cut off after 15 seconds.',
+    'If one name has several formats, the first format in the list above is the one used.',
+    'Other files, this README.txt included, are ignored.',
+    '',
+  ].join('\n')
+
+/** The files of the person's folder this system plays, by name without the extension; one name in several formats is one sound, in the best format. */
+export function personalSounds(fileNames: readonly string[], folder: string, os: Os): Sound[] {
+  const formats = FORMATS[os]
+  const byName = new Map<string, { sound: Sound; rank: number }>()
   for (const file of fileNames) {
-    if (!WAV.test(file) && !MP3.test(file)) continue
-    const name = file.slice(0, -4)
-    if (!byName.has(name) || WAV.test(file)) byName.set(name, { name, path: `${folder}/${file}` })
+    const dot = file.lastIndexOf('.')
+    const rank = dot < 0 ? -1 : formats.indexOf(file.slice(dot + 1).toLowerCase())
+    if (rank < 0) continue
+    const name = file.slice(0, dot)
+    const held = byName.get(name)
+    if (!held || rank < held.rank) byName.set(name, { sound: { name, path: `${folder}/${file}` }, rank })
   }
-  return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name))
+  return [...byName.values()].map(x => x.sound).sort((a, b) => a.name.localeCompare(b.name))
 }
 
 export const listOf = (s: Sounds): Sound[] => [...s.personal, ...s.system]

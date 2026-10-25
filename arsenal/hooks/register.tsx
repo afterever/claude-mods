@@ -5,6 +5,7 @@ import type { ArsenalChime, ArsenalOff, ArsenalOwn, ArsenalTools } from '../type
 import {
   CHIME_HELP,
   CHIME_STORE_KEY,
+  MAC_SOUNDS_FOLDER,
   NO_CHIME,
   chimeFromStore,
   chimeToStore,
@@ -20,6 +21,7 @@ import {
   sentChoice,
   shouldPlaySent,
   soundsFolder,
+  soundsReadme,
   systemCandidates,
 } from './chime'
 import type { Os, Sound, Sounds } from './chime'
@@ -47,9 +49,11 @@ import {
   shownRows,
   toolsFrom,
   unfilledNote,
+  versionLine,
   withOff,
 } from './menu'
 import type { LaunchItem, Section } from './menu'
+import { RELEASED, VERSION } from './version'
 import { STORE_KEY, confirmed, offFromStore, offToStore, projectPlace, readCandidate, sameFolder, withoutUser } from './own'
 import type { Candidate, Found, GitAnswers } from './own'
 
@@ -204,14 +208,25 @@ async function loadOff($: EngineInterface) {
 
 // ── Sound notifications ──────────────────────────────────────────────────
 
+/** Windows by its environment; a Mac by Apple's sound folder or its home. The folder is asked only off Windows. */
+async function osOf($: EngineInterface, home: string): Promise<Os> {
+  const windowsEnv = await $.env.get('OS')
+  if (windowsEnv === 'Windows_NT') return 'windows'
+  try {
+    return osFrom(windowsEnv, home, await $.fs.exists(MAC_SOUNDS_FOLDER))
+  } catch {
+    return osFrom(windowsEnv, home)
+  }
+}
+
 /**
- * The sounds there are now: the `.wav` files of the person's folder and the
+ * The sounds there are now: the sound files of the person's folder and the
  * system's own that exist on disk. Read each time it is needed, so a file
  * dropped in mid-session is found.
  */
 async function soundsOf($: EngineInterface): Promise<{ sounds: Sounds; os: Os }> {
   const home = (await $.env.get('USERPROFILE')) || (await $.env.get('HOME')) || ''
-  const os = osFrom(await $.env.get('OS'), home)
+  const os = await osOf($, home)
   const folder = soundsFolder(home)
   const fileNames = home ? (await entriesOf($, folder)).filter(f => f.kind === 'file' || f.isLink).map(f => f.name) : []
   const found = await Promise.all(
@@ -223,7 +238,24 @@ async function soundsOf($: EngineInterface): Promise<{ sounds: Sounds; os: Os }>
       }
     }),
   )
-  return { sounds: { personal: personalSounds(fileNames, folder), system: found.filter((s): s is Sound => s !== null) }, os }
+  return { sounds: { personal: personalSounds(fileNames, folder, os), system: found.filter((s): s is Sound => s !== null) }, os }
+}
+
+/**
+ * Makes the person's sounds folder when it is missing, with a README.txt in it
+ * (a write creates the folders above it). A folder that is there is left as it
+ * is, empty or not. A failure leaves no folder; the sounds still work without.
+ */
+async function ensureSoundsFolder($: EngineInterface) {
+  try {
+    const home = (await $.env.get('USERPROFILE')) || (await $.env.get('HOME')) || ''
+    if (!home) return
+    const folder = soundsFolder(home)
+    if (await $.fs.exists(folder)) return
+    await $.fs.write(`${folder}/README.txt`, soundsReadme(await osOf($, home)))
+  } catch {
+    // no folder, and no harm
+  }
 }
 
 /** What was chosen, from the last session on this machine. */
@@ -549,6 +581,7 @@ function drawMenu($: EngineInterface, e: Parameters<typeof $.ui.resolve>[0], bod
       {ownSection('user', 'USER')}
       {ownSection('project', 'PROJECT')}
       <Text dimColor>{view.note || ' '}</Text>
+      <Text color="inactive" dimColor>{versionLine(VERSION, RELEASED)}</Text>
     </Box>
   )
 }
@@ -588,6 +621,7 @@ export const register: Register = on => {
     await refreshTools($)
     await loadOff($)
     await loadChime($)
+    await ensureSoundsFolder($)
     await scan($)
     try {
       const model = await $.session.model()
