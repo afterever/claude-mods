@@ -5,27 +5,38 @@ A Claude Code mod that puts the tool mods in this repo, and your own skills and 
 > **Credit.** The idea comes from a YouTube video by Tristen O'Brien ([tristenobrien.ai](https://tristenobrien.ai/)), who also gave us the idea for prompt-upgrade. In it, a "Tristen's Tools ▼" button in the footer opens a menu of settings and shortcuts. arsenal is that menu for the tools in this repo, under a name that is not a person's. The sound notifications are an idea from [angomedia/claude-mods](https://github.com/angomedia/claude-mods) (their done-chime, MIT); the code here is written fresh for Windows. Why it is built the way it is: [DESIGN.md](./DESIGN.md).
 
 ```
-  (the other mods' bands)                       ┌ Arsenal ─────────────────────────┐
-                                                │ ◆ A R S E N A L  Opus 5.5 · High │
- ────────────────────────────────────────────   │ ──────────────────────────────── │
- > your prompt                                  │ ── S E T T I N G S               │
- ────────────────────────────────────────────   │ ○ Prompt Upgrade        ○ Off    │
- [ ◆ Arsenal ▴ ] ◎ plan 44% · ~2m               │   upgrade every prompt first     │
-                                                │ ● Sound notifications   ● On     │
-                                                │ ♪ Claude      Windows Notify ▸   │
-                                                │ ↗ You                     none ▸ │
-                                                │ ── L A U N C H                   │
-                                                │ u: ✦ Upgrade a prompt            │
-                                                │ h: ◷ Prompt history              │
-                                                │ t: ▤ Today's report              │
-                                                │ w: ▥ This week's report          │
-                                                │ s: ⚙ Report settings             │
-                                                │ ── U S E R              ✎ edit   │
-                                                │ /handoff  Use when the u…   …    │
-                                                │ /standup  Yesterday's work       │
-                                                │ ── P R O J E C T        ✎ edit   │
-                                                │ /seed-db  Reset the local d…     │
-                                                └──────────────────────────────────┘
+  (the other mods' bands)
+
+ ────────────────────────────────────────────
+ > your prompt
+ ────────────────────────────────────────────
+ [ ◆ Arsenal ▴ ] ◎ plan 44% · ~2m
+```
+
+Pressing the button opens the pane, docked on the right:
+
+```
+┌ Arsenal ─────────────────────────────
+│ ◆ A R S E N A L  Opus 5.5 · High
+│ ────────────────────────────────────
+│ ── S E T T I N G S
+│ ○ Prompt Upgrade        ○ Off
+│   upgrade every prompt first
+│ ● Sound notifications   ● On
+│ ♪ Claude      Windows Notify ▸
+│ ↗ You                     none ▸
+│ ── L A U N C H
+│ u: ✦ Upgrade a prompt
+│ h: ◷ Prompt history
+│ t: ▤ Today's report
+│ w: ▥ This week's report
+│ s: ⚙ Report settings
+│ ── U S E R              ✎ edit
+│ /handoff  Use when the u…   …
+│ /standup  Yesterday's work
+│ ── P R O J E C T        ✎ edit
+│ /seed-db  Reset the local d…
+└──────────────────────────────────────
 ```
 
 ## Use it
