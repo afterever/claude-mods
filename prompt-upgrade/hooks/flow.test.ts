@@ -2,6 +2,7 @@ import { test, expect, mock } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { strWidth } from './layout'
+import { VERSION } from './version'
 
 const PANE = 'prompt-upgrade'
 
@@ -139,6 +140,16 @@ function rowWidths(n: any, out: number[] = []): number[] {
   else out.push(strWidth(strings(n)))
   return out
 }
+
+test('the last row of the pane is the version, on the compose and the history screens', async ($, on) => {
+  const w = world(on)
+  const lastText = async (ui: any) => (await ui.findAll({ type: 'Text' })).slice(-1).map((t: any) => t.text)
+  const ui = await mountPane($)
+  expect(await lastText(ui)).toEqual([`prompt-upgrade v${VERSION}`])
+  await $.command.run(cmd('history'))
+  await w.clock.settle()
+  expect(await lastText(ui)).toEqual([`prompt-upgrade v${VERSION}`])
+})
 
 test('automatic mode holds a rough prompt and lets everything else straight through', async ($, on) => {
   const w = world(on)

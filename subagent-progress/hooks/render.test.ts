@@ -3,6 +3,7 @@ import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import type { AgentRun, Flow, Panel } from '../types'
+import { VERSION } from './version'
 
 const flow: Flow = {
   title: 'Ship it',
@@ -99,6 +100,14 @@ for (const cols of [40, 60, 100]) {
     expect(line!.indexOf('≈$0.42') + '≈$0.42'.length).toBeLessThanOrEqual(cols)
   })
 }
+
+test('the last row of the pane is the version, on the terminal and on the desktop', async ($, on) => {
+  await world($, on, seed())
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ plugin: 'subagent-progress', surface, component: 'Pane', requestId: 'subagents', props: paneProps(60) })
+    expect((await texts(ui)).slice(-1)).toEqual([`subagent-progress v${VERSION}`])
+  }
+})
 
 test('the pane totals lead with the time', async ($, on) => {
   await world($, on, seed())

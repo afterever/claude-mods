@@ -1,6 +1,6 @@
 {
   "name": "prompt-upgrade",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Turns a rough prompt into a great one before it is sent: /prompt-upgrade opens a pane that asks up to three quick questions, rewrites the prompt and shows both side by side. Nothing runs until you press Run.",
   "author": {
     "name": "afterever"

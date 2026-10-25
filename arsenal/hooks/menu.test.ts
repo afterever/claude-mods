@@ -251,8 +251,8 @@ test('edit mode counts the rows that are off, and a section that is all off coun
   expect(closed).toBe(2 + 4 + 6 + 2 + 1 + 1 + 2)
 })
 
-test('the version row says the mod, its version and the day it was released', () => {
-  expect(versionLine('0.4.5', '2026-10-24')).toBe('arsenal v0.4.5 · 2026-10-24')
+test('the version row says the mod and its version', () => {
+  expect(versionLine('0.4.6')).toBe('arsenal v0.4.6')
 })
 
 test('the draft note names the command', () => {

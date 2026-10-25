@@ -53,7 +53,7 @@ import {
   withOff,
 } from './menu'
 import type { LaunchItem, Section } from './menu'
-import { RELEASED, VERSION } from './version'
+import { VERSION } from './version'
 import { STORE_KEY, confirmed, offFromStore, offToStore, projectPlace, readCandidate, sameFolder, withoutUser } from './own'
 import type { Candidate, Found, GitAnswers } from './own'
 
@@ -581,7 +581,7 @@ function drawMenu($: EngineInterface, e: Parameters<typeof $.ui.resolve>[0], bod
       {ownSection('user', 'USER')}
       {ownSection('project', 'PROJECT')}
       <Text dimColor>{view.note || ' '}</Text>
-      <Text color="inactive" dimColor>{versionLine(VERSION, RELEASED)}</Text>
+      <Text color="inactive" dimColor>{versionLine(VERSION)}</Text>
     </Box>
   )
 }

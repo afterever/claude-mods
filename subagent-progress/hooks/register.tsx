@@ -7,6 +7,7 @@ import { COSTUME_COLOR, bareType, costumeOf, plannedCostume, plannedProfile } fr
 import type { Costume } from './crew'
 import { paletteOf, resolveLook, shadeOf, shimmerOf } from './palette'
 import type { Look } from './palette'
+import { VERSION } from './version'
 
 const flow = atom({ plugin: 'subagent-progress', key: 'flow' } as const, null)
 const agents = atom({ plugin: 'subagent-progress', key: 'agents' } as const, [])
@@ -957,6 +958,11 @@ export const register: Register = (on, options) => {
       />
     )
     const isEmpty = list.length === 0 && planned.length === 0
+    const versionRow = (
+      <Text key="version" color="inactive" dimColor>
+        {`subagent-progress v${VERSION}`}
+      </Text>
+    )
     const summary = `≈${fmtCost(t.cost)}, ${fmtTokens(t.tokens)} ${s.tokensWord}, ${fmtTime(t.time)}`
 
     if (e.surface === 'desktop' && 'Svg' in ui) {
@@ -973,6 +979,7 @@ export const register: Register = (on, options) => {
           <Box flexDirection="column" gap={1}>
             <Svg source={compactSvg(W, list, planned, t)} alt={`${list.length} ${s.agentsCount}, ${summary}`} width={W} height={32} />
             {toggleCompact}
+            {versionRow}
           </Box>
         )
       }
@@ -994,6 +1001,7 @@ export const register: Register = (on, options) => {
           {planned.map(pl => (
             <Svg key={`plan-${pl.n}`} source={plannedSvg(W, pl)} alt={`${pl.n}. ${pl.title}: ${s.isPlanned}`} width={W} height={46} />
           ))}
+          {versionRow}
         </Box>
       )
     }
@@ -1164,6 +1172,7 @@ export const register: Register = (on, options) => {
             })}
           </Box>
         )}
+        {versionRow}
       </Box>
     )
   })

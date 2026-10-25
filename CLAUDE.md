@@ -16,6 +16,15 @@
   new code afterwards in a fresh Claude session, so there is no need to hold the merge for a live
   check; a problem found there becomes the next version.
 
+## Version rows
+
+- **Every mod with a pane ends it with a dim row, `<mod> v<version>`**, read from `VERSION` in
+  `hooks/version.ts` (`version.mjs` for waypoints). A hooks module cannot read its own
+  `plugin.json`, so that constant is a copy: bump both on every release. CI's
+  `.github/scripts/check-versions.mjs` fails a pull request where they differ, and runs by hand
+  with `node .github/scripts/check-versions.mjs`. There is no release date in the row.
+- **A new mod with a pane gets the same row and a `version.ts`**, or the check skips it.
+
 ## Mods that draw in the band
 
 - **A band (`AbovePrompt`) hook draws its own rows first and `await next(e)` after them**

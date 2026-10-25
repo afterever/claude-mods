@@ -2,6 +2,7 @@ import { test, expect, mock } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { strWidth } from './layout'
+import { VERSION } from './version'
 
 const PLUGIN = 'work-report'
 // Tuesday 13 October 2026, half past two in the afternoon, local time
@@ -265,6 +266,18 @@ test('/work-report answers at once and opens the pane in the background', async 
   await w.clock.settle()
   expect(w.opened).toHaveLength(1)
 })
+
+for (const [what, stored] of [['no work yet', {}], ['some work', SAMPLE]] as const) {
+  test(`the last row of the pane is the version, with ${what}, on both surfaces`, async ($, on) => {
+    const w = world(on, { stored })
+    await start($)
+    for (const surface of ['terminal', 'desktop'] as const) {
+      const ui = await mountPane($, 100, surface)
+      expect((await ui.findAll({ type: 'Text' })).slice(-1).map(t => t.text)).toEqual([`work-report v${VERSION}`])
+    }
+    await w.clock.settle()
+  })
+}
 
 test('/work-report week opens the pane on that tab', async ($, on) => {
   const w = world(on, { stored: SAMPLE })
