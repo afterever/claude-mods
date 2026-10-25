@@ -10,6 +10,7 @@ import { rolesOf } from './palette.mjs'
 import { routeSvg, routeAlt, svgWidth } from './svg.mjs'
 // @ts-ignore
 import { routeCells } from './route.mjs'
+import { VERSION } from './version.mjs'
 
 const T0 = 1_000_000
 const MIN = 60000
@@ -249,6 +250,11 @@ test('the pane\'s stats line holds the numbers, elapsed time, the ETA, growth an
   expect(statsLine(g, { doneN: 5, n: 5, pct: 100 }, T0 + 4 * MIN)).toBe('done ✓ in 3m')
 })
 
+test('the last row of the pane is the version, with a goal and without', () => {
+  expect(lines(drawPane(el, paneView(midway()))).at(-1)).toBe(`waypoints v${VERSION}`)
+  expect(lines(drawPane(el, paneView(null))).at(-1)).toBe(`waypoints v${VERSION}`)
+})
+
 test('the trail lists every task with its node, a connector between them and its time', async () => {
   const g = midway()
   const l = lines(drawPane(el, paneView(g)))
@@ -310,16 +316,16 @@ test('other chats get a mini route and their own tail; this chat is not listed t
 
 test('the pane ends with auto\'s state, the commands and where the look is set', async () => {
   const on = lines(drawPane(el, paneView(midway(), { settings: { auto: true } })))
-  expect(on.slice(-1)[0]).toBe('auto: on · /waypoints hide|show · clear (stop the goal) · look & pane: /config → Waypoints')
+  expect(on.slice(-2)[0]).toBe('auto: on · /waypoints hide|show · clear (stop the goal) · look & pane: /config → Waypoints')
   const off = lines(drawPane(el, paneView(midway(), { settings: { auto: false } })))
-  expect(off.slice(-1)[0]).toBe('auto: off · /waypoints hide|show · clear (stop the goal) · look & pane: /config → Waypoints')
+  expect(off.slice(-2)[0]).toBe('auto: off · /waypoints hide|show · clear (stop the goal) · look & pane: /config → Waypoints')
   expect(lines(drawPane(el, paneView(null))).join('\n')).toContain('No goal in this chat')
 })
 
 test('past 100 files the pane names the folder and how to prune it', async () => {
   const dir = 'C:\\Users\\bats\\.claude\\mods-data\\waypoints\\'
   const many = lines(drawPane(el, paneView(midway(), { files: { count: 101, dir } })))
-  expect(many.slice(-2)[0]).toBe(`101 old files in ${dir} · /waypoints prune, or delete them while no plan is running`)
+  expect(many.slice(-3)[0]).toBe(`101 old files in ${dir} · /waypoints prune, or delete them while no plan is running`)
   const few = lines(drawPane(el, paneView(midway(), { files: { count: 100, dir } })))
   expect(few.join('\n')).not.toContain('old files in')
 })

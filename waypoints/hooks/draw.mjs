@@ -21,6 +21,7 @@ import { progress, eta, live, weight } from './plan.mjs'
 import { routeCells, miniRoute, runs, FLAG, FLAG_DONE, PARKED, RUNNING } from './route.mjs'
 import { routeSvg, routeAlt, svgWidth } from './svg.mjs'
 import { NOTE_AT } from './prune.mjs'
+import { VERSION } from './version.mjs'
 
 export const FULL_MS = 8000 // a finished band keeps all its rows this long
 export const SPIN = { frames: ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'], ms: 80 }
@@ -403,5 +404,6 @@ export function drawPane(el, v) {
   const f = v.files
   if (f && f.count > NOTE_AT) rows.push(Text({ dimColor: true, children: [`${f.count} old files in ${f.dir} · /${c} prune, or delete them while no plan is running`] }))
   rows.push(Text({ dimColor: true, children: [`auto: ${s.auto ? 'on' : 'off'} · /${c} hide|show · clear (stop the goal) · look & pane: /config → Waypoints`] }))
+  rows.push(Text({ dimColor: true, children: [`waypoints v${VERSION}`] }))
   return Box({ flexDirection: 'column', children: rows })
 }

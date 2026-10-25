@@ -18,14 +18,14 @@ Paste this into Claude Code on the new computer:
 | Mod | Source | Tested | What it is |
 | --- | --- | --- | --- |
 | `ctx` | `afterever/claude-mods` (this repo) | 0.8.6 | Context window pane and band, compacting on your terms, the plan's pace, its look |
-| `subagent-progress` | `afterever/claude-mods` (this repo) | 2.2.0 | Progress bar and live panel for subagent work |
-| `prompt-upgrade` | `afterever/claude-mods` (this repo) | 0.2.0 | `/prompt-upgrade` turns a rough prompt into a great one before it is sent |
-| `work-report` | `afterever/claude-mods` (this repo) | 0.4.0 | `/work-report` shows what Claude has done for you: tasks, hours saved, what that is worth |
-| `waypoints` | `afterever/claude-mods` (this repo) | 2.2.0 | Task plan shown as a route above the prompt for a `/goal` or any multi-step work, with a pane that opens by itself; replaces `goal-meter` |
+| `subagent-progress` | `afterever/claude-mods` (this repo) | 2.2.1 | Progress bar and live panel for subagent work |
+| `prompt-upgrade` | `afterever/claude-mods` (this repo) | 0.2.1 | `/prompt-upgrade` turns a rough prompt into a great one before it is sent |
+| `work-report` | `afterever/claude-mods` (this repo) | 0.4.1 | `/work-report` shows what Claude has done for you: tasks, hours saved, what that is worth |
+| `waypoints` | `afterever/claude-mods` (this repo) | 2.2.1 | Task plan shown as a route above the prompt for a `/goal` or any multi-step work, with a pane that opens by itself; replaces `goal-meter` |
 | `skins` | `hellosverre/claude-skins` | 0.5.13 | Colour scheme and words for the transcript |
 | `superpowers` | `obra/superpowers` | 7.0.0 | Skills library: brainstorming, planning, test-driven development, debugging and review workflows |
 | `agent-pulse` | `afterever/claude-mods` (this repo) | 1.1.0 | Box above the prompt naming the step Claude is on, in color and motion, with a step history |
-| `arsenal` | `afterever/claude-mods` (this repo) | 0.4.5 | Button in the footer under the prompt that opens a docked menu: Prompt Upgrade switch, Sound notifications switch with a sound for your Enter and one for Claude, shortcuts to `/prompt-upgrade` and `/work-report`, and your own skills and commands (USER and PROJECT), each of which you can turn off |
+| `arsenal` | `afterever/claude-mods` (this repo) | 0.4.6 | Button in the footer under the prompt that opens a docked menu: Prompt Upgrade switch, Sound notifications switch with a sound for your Enter and one for Claude, shortcuts to `/prompt-upgrade` and `/work-report`, and your own skills and commands (USER and PROJECT), each of which you can turn off |
 
 ## Install
 
@@ -260,8 +260,8 @@ a `[ ◆ Arsenal ▾ ]` button in Claude's orange, in the footer on the first ro
 right, with a Prompt Upgrade on/off switch, a Sound notifications switch with a sound for your Enter and one for Claude, one-press shortcuts to
 `/prompt-upgrade` and `/work-report`, and two sections for your own commands: **USER**
 (`~/.claude/skills` and `~/.claude/commands`) and **PROJECT** (the same two folders in the current
-repo). `/arsenal` toggles it from the keyboard. Written against 0.4.5. Nothing to configure. The last
-line of the pane says the version and the day it was released.
+repo). `/arsenal` toggles it from the keyboard. Written against 0.4.6. Nothing to configure. The last
+line of the pane says the version.
 
 - **The menu always shows.** The sound notifications need no other mod. It lists the session's
   commands and keeps only the tools' rows whose command exists. Restart Claude Code after

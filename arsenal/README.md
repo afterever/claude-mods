@@ -52,7 +52,7 @@ A Claude Code mod that puts the tool mods in this repo, and your own skills and 
 
 Click a row, or focus the pane and press its letter.
 
-The last line of the pane is dim and reads `arsenal v0.4.5 · 2026-10-24`: the version running and the day it was released.
+The last line of the pane is dim and reads `arsenal v0.4.6`: the version running.
 
 - **A Launch row** closes the Arsenal pane, then runs its command, so the tool's own pane takes its place. During a turn, the engine runs the command once Claude is idle.
 - **The switch** leaves the pane open so you can watch the pill change. The line at the bottom says `sent: /prompt-upgrade on`, then `ran: /prompt-upgrade on`.

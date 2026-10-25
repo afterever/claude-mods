@@ -23,6 +23,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - run: node .github/scripts/check-versions.mjs
       - run: npm install -g @anthropic-ai/claude-code@${{ env.CLAUDE_CODE_VERSION }}
       - run: claude plugin validate . --strict
 

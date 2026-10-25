@@ -14,6 +14,7 @@ import { clip, COLORS, cutText, statsPlan, stacksCards, TITLE, trackerRow } from
 import type { Line } from './layout'
 import { ago, answeredPairs, countWords } from './logic'
 import { statsSvg } from './svg'
+import { VERSION } from './version'
 
 type El = Elements['terminal']
 type Press = (e: UiPressArgument) => void
@@ -490,7 +491,7 @@ function historyScreen(el: El, m: Model, a: Actions) {
 }
 
 /** The pane's whole body for the model. `el` is the terminal's table. */
-export function drawPane(el: El, m: Model, a: Actions) {
+function screen(el: El, m: Model, a: Actions) {
   if (m.view === 'history') return historyScreen(el, m, a)
   const flow = m.flow
   if (flow === null) return composeScreen(el, m, a)
@@ -510,4 +511,15 @@ export function drawPane(el: El, m: Model, a: Actions) {
     case 'error':
       return errorScreen(el, m, a, flow)
   }
+}
+
+/** Whichever screen the state calls for, and under it the mod's version. */
+export function drawPane(el: El, m: Model, a: Actions) {
+  const { Box } = el
+  return (
+    <Box flexDirection="column" width="100%">
+      {screen(el, m, a)}
+      {lineRow(el, [{ t: `prompt-upgrade v${VERSION}`, tone: 'muted' }])}
+    </Box>
+  )
 }

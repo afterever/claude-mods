@@ -1291,3 +1291,18 @@ system sounds) and the survey's "no run on a real Mac exists" above. The README'
   menu sits right above the button that opened it, and that is where the band is.
 - **Other names:** quiver, grimoire, atelier, switchboard. `dock`, `bridge` and `codex` were
   avoided because Claude Code (or another vendor) already uses those words.
+
+## 0.4.6: the version row loses its date, and CI checks it
+
+**Status: asked for 2026-10-25, after 0.4.5's row (`arsenal v0.4.5 · 2026-10-24`) was judged.**
+
+- **No release date.** The version already names the release, and `RELEASED` was a second
+  hand-kept constant that nothing checked. The row reads `arsenal v0.4.6`; `versionLine` takes the
+  version only.
+- **The drift check is in CI, not in a test.** A test file runs in the hooks sandbox: no
+  `node:fs`, no dynamic `import()`, and a `.json` import is refused (tried in 0.4.6). So
+  `.github/scripts/check-versions.mjs` runs in the `validate manifests` job and compares each
+  mod's `hooks/version.(ts|mjs)` with its `plugin.json`. It covers every mod with a `version.ts`,
+  ctx included.
+- **The same row in every mod with a pane:** prompt-upgrade, subagent-progress, waypoints and
+  work-report, each `<mod> v<version>`. agent-pulse has a band and no pane, so no row.

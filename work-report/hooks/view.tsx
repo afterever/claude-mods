@@ -14,6 +14,7 @@ import { barRow, chartPlan, clip, COLORS, fit, KIND_TONE, padStart, strWidth, ti
 import type { Line, Tone } from './layout'
 import { chartFor, estimate, hoursText, shownKinds, summaryFor, totalsFor, withCommas } from './report'
 import { barsSvg, chartSvg, drawingWidth, tilesSvg } from './svg'
+import { VERSION } from './version'
 
 type El = Elements['terminal']
 type SvgEl = Elements['desktop']['Svg']
@@ -287,6 +288,7 @@ export function drawPane(el: El, m: Model, a: Actions) {
   // one cell is kept back: a row the surface lays out narrower than it reported is clipped, not wrapped
   const width = Math.max(20, m.width - 1)
 
+  const versionRow = lineRow(el, [{ t: `work-report v${VERSION}`, tone: 'muted' }])
   const days = daysFor(m.tab, m.now)
   const totals = totalsFor(m.days, days.map(keyOf))
   const header = (
@@ -313,6 +315,8 @@ export function drawPane(el: El, m: Model, a: Actions) {
             {`Nothing finished yet ${sinceWords(m.tab)}. Your first finished task shows up here.`}
           </Text>
         </Box>
+        {blank(el)}
+        {versionRow}
       </Box>
     )
   }
@@ -355,6 +359,8 @@ export function drawPane(el: El, m: Model, a: Actions) {
       {chart}
       {blank(el)}
       {lineRow(el, [{ t: fit(width, [summary.text, summary.short]), tone: summary.isGood ? 'green' : 'muted' }])}
+      {blank(el)}
+      {versionRow}
     </Box>
   )
 }

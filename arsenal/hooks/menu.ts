@@ -230,8 +230,8 @@ export function paneRows(
   return Math.max(MIN_PANE_ROWS, lines + PANE_SLACK)
 }
 
-/** The pane's last row: the mod, its version and the day that version was released. */
-export const versionLine = (version: string, released: string) => `arsenal v${version} · ${released}`
+/** The pane's last row: the mod and its version. */
+export const versionLine = (version: string) => `arsenal v${version}`
 
 // ── Words ────────────────────────────────────────────────────────────────
 
