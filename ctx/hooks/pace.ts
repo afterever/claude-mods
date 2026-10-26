@@ -101,9 +101,10 @@ export function paceLine(windows: readonly PaceWindow[], step: PaceStep): PacePi
 }
 
 // How much of the pace the band has room for. The desktop passes the band no
-// width (it would read as 80) and has the room
+// width (it would read as 80), so its width is the viewport's, worked out by the caller; where
+// that was not measured either, it is taken to have the room
 export function paceStep(cols: number | undefined, surface: string): PaceStep {
-  if (surface === 'desktop') return 'full'
+  if (surface === 'desktop' && cols === undefined) return 'full'
   const c = cols ?? 80
   return c >= 130 ? 'full' : c >= 100 ? 'short' : c >= 80 ? 'delta' : 'none'
 }

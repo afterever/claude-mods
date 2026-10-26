@@ -5,6 +5,8 @@ import { categoryTints } from './palette'
 import {
   ago,
   bandBarWidth,
+  bandColumns,
+  DESKTOP_BAND_MARGIN,
   bandCells,
   breatheAt,
   growthSpan,
@@ -344,6 +346,17 @@ test('bandBarWidth: the bar grows with the band, so a near-empty window overstat
   expect([160, 199].map(c => bandBarWidth(c, false))).toEqual([48, 48])
   expect([200, 239].map(c => bandBarWidth(c, false))).toEqual([64, 64])
   expect([240, 400].map(c => bandBarWidth(c, false))).toEqual([96, 96])
+})
+
+test('bandColumns: the terminal says, Desktop is the viewport less its frame, unmeasured is unknown', () => {
+  expect(bandColumns(120, undefined, 'terminal')).toBe(120)
+  expect(bandColumns(120, 300, 'terminal')).toBe(120)
+  expect(bandColumns(undefined, 300, 'terminal')).toBeUndefined()
+  expect(bandColumns(undefined, 100, 'desktop')).toBe(100 - DESKTOP_BAND_MARGIN)
+  expect(bandColumns(undefined, 5, 'desktop')).toBe(0)
+  expect(bandColumns(undefined, undefined, 'desktop')).toBeUndefined()
+  // a body width, were Desktop to send one, is trusted over the viewport
+  expect(bandColumns(90, 300, 'desktop')).toBe(90)
 })
 
 test('bandBarWidth: a standing warning keeps the bar at 16 until the band is wide enough for the badge too', () => {

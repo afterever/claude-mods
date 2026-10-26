@@ -667,6 +667,34 @@ test('the pace shrinks with the band: no countdown, the deltas alone, then nothi
   expect(none).not.toContain('-2%')
 })
 
+// Seen live on Desktop, 0.8.6: in a narrow Code tab the band drew as if 80 columns were 200, and
+// its trailing pieces ran over the pace. Desktop sends no bodyColumns, so the band reads the viewport
+test('the Desktop band narrows with its viewport, like the terminal band', async ($, on) => {
+  const clock = world(on, [], [], [], [], {}, [], undefined, subscription())
+  await $.session.start({ cwd: 'C:/bats', surface: 'desktop', isInteractive: true })
+  await clock.settle()
+  const at = async (columns?: number) => {
+    const band = await $.ui.mount({
+      plugin: 'ctx',
+      surface: 'desktop',
+      component: 'AbovePrompt',
+      props: bandAt('desktop', 120) as any,
+      ...(columns ? { viewport: { columns, rows: 40 } } : {}),
+    })
+    return texts(band)
+  }
+  // a wide tab: the countdown; a narrow one: the deltas alone; a very narrow one: no pace
+  expect(await at(150)).toContain(' (3h 40m/')
+  const narrow = await at(97)
+  expect(narrow.some(t => t.includes('3h 40m'))).toBe(false)
+  expect(narrow).toContain('-2%')
+  expect(narrow).not.toContain('25%')
+  const tiny = await at(60)
+  expect(tiny).not.toContain('🐾 ')
+  // unmeasured: the old behaviour, the full pace
+  expect(await at()).toContain(' (3h 40m/')
+})
+
 test('the windows move with each response and the countdown with each minute', async ($, on) => {
   const clock = world(on, [], [], [], [])
   const band = await $.ui.mount({ plugin: 'ctx', surface: 'terminal', component: 'AbovePrompt', props: bandProps(160) })

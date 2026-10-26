@@ -91,7 +91,7 @@ test('each piece has its own tone: the paw, the brackets and the dots stay dim',
   expect(parts.filter(p => p.tone === 'dim').map(p => p.text).join('')).toBe('🐾  (2h/)')
 })
 
-test('the step follows the band\'s width, and desktop always has room', () => {
+test('the step follows the band\'s width, and desktop has room where no width was measured', () => {
   expect(paceStep(160, 'terminal')).toBe('full')
   expect(paceStep(130, 'terminal')).toBe('full')
   expect(paceStep(129, 'terminal')).toBe('short')
@@ -99,9 +99,13 @@ test('the step follows the band\'s width, and desktop always has room', () => {
   expect(paceStep(99, 'terminal')).toBe('delta')
   expect(paceStep(80, 'terminal')).toBe('delta')
   expect(paceStep(79, 'terminal')).toBe('none')
-  // the band is told no width on desktop, which would read as 80
+  // the band is told no width on desktop, which would read as 80: unmeasured, it has the room
   expect(paceStep(undefined, 'desktop')).toBe('full')
-  expect(paceStep(60, 'desktop')).toBe('full')
+  // measured (the viewport's, less the frame), it shrinks like the terminal's
+  expect(paceStep(140, 'desktop')).toBe('full')
+  expect(paceStep(110, 'desktop')).toBe('short')
+  expect(paceStep(87, 'desktop')).toBe('delta')
+  expect(paceStep(60, 'desktop')).toBe('none')
   expect(paceStep(undefined, 'terminal')).toBe('delta')
 })
 
