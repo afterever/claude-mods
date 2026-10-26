@@ -38,6 +38,7 @@ import {
 import {
   ago,
   bandBarWidth,
+  bandColumns,
   bandCells,
   barRuns,
   breatheAt,
@@ -969,12 +970,14 @@ export const register: Register = (on, options) => {
     const show = await read($, isVisible)
     const old = await read($, stale)
     const past = await read($, history)
-    const wide = (e.props.bodyColumns ?? 80) >= 70
+    // Desktop passes no bodyColumns: its width is the viewport's, less the band's frame
+    const measured = bandColumns(e.props.bodyColumns, e.viewport?.columns, e.surface)
+    const cols = measured ?? 80
+    const wide = cols >= 70
     const step = trend(past).delta
     const marks = await read($, compacted)
     const w = await warning($)
-    // Desktop passes no bodyColumns, so its pill stays at the 80-column step
-    const barWidth = bandBarWidth(e.props.bodyColumns ?? 80, w.level !== 'none')
+    const barWidth = bandBarWidth(cols, w.level !== 'none')
     const hot = w.level === 'imminent' ? 'error' : 'warning'
     // the bar: whole cells in the look's colours; a Tide client while anything moves
     const nowMs = await $.clock.now()
@@ -988,7 +991,6 @@ export const register: Register = (on, options) => {
     const Svg = e.surface !== 'terminal' && 'Svg' in el ? (el as { Svg: any }).Svg : undefined
     const svgBar = s && Svg ? pill(s, barWidth, await read($, fx), nowMs, w.level) : undefined
     // the warning badge takes the sparkline's place on a band under 100 columns
-    const cols = e.props.bodyColumns ?? 80
     const roomy = wide && (w.level === 'none' || cols >= 100)
     // the last turn's dollars, from the ledger; nothing where there is none
     const sp = await read($, spend)
@@ -1001,7 +1003,7 @@ export const register: Register = (on, options) => {
       limits: await read($, limits),
       usd: sp.ledger,
       costOn: await read($, costOn),
-      step: paceStep(e.props.bodyColumns, e.surface),
+      step: paceStep(measured, e.surface),
       now: await $.clock.now(),
     })
     return (

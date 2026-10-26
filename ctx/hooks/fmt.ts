@@ -160,6 +160,18 @@ export function bandBarWidth(columns: number, warning: boolean): number {
   return columns < 240 ? 64 : 96
 }
 
+// Desktop's frame around the band (the margins, the close mark and the chart button at its right
+// edge) takes about this many columns of the viewport
+export const DESKTOP_BAND_MARGIN = 10
+
+// The columns the band has to draw in. The terminal says (`bodyColumns`); Desktop passes none, so
+// its width is the viewport's less the frame, and `undefined` where nothing was measured
+export function bandColumns(bodyColumns: number | undefined, viewportColumns: number | undefined, surface: string): number | undefined {
+  if (bodyColumns) return bodyColumns
+  if (surface === 'desktop' && viewportColumns && viewportColumns > 0) return Math.max(0, viewportColumns - DESKTOP_BAND_MARGIN)
+  return undefined
+}
+
 /** One cell of the band's bar; `scope` is the category it draws, for hover. */
 export type Cell ={ ch: string; color: string; bg?: string; dim?: boolean; scope: string }
 
