@@ -21,7 +21,7 @@ Paste this into Claude Code on the new computer:
 | `subagent-progress` | `afterever/claude-mods` (this repo) | 2.2.1 | Progress bar and live panel for subagent work |
 | `prompt-upgrade` | `afterever/claude-mods` (this repo) | 0.2.1 | `/prompt-upgrade` turns a rough prompt into a great one before it is sent |
 | `work-report` | `afterever/claude-mods` (this repo) | 0.4.1 | `/work-report` shows what Claude has done for you: tasks, hours saved, what that is worth |
-| `waypoints` | `afterever/claude-mods` (this repo) | 2.2.1 | Task plan shown as a route above the prompt for a `/goal` or any multi-step work, with a pane that opens by itself; replaces `goal-meter` |
+| `waypoints` | `afterever/claude-mods` (this repo) | 2.3.0 | Task plan shown as a route above the prompt for a `/goal` or any multi-step work, with a pane that opens by itself; replaces `goal-meter` |
 | `skins` | `hellosverre/claude-skins` | 0.5.13 | Colour scheme and words for the transcript |
 | `superpowers` | `obra/superpowers` | 7.0.0 | Skills library: brainstorming, planning, test-driven development, debugging and review workflows |
 | `agent-pulse` | `afterever/claude-mods` (this repo) | 1.1.0 | Box above the prompt naming the step Claude is on, in color and motion, with a step history |
@@ -122,6 +122,8 @@ for a plan on its own. `/waypoints auto off` removes the line.
   tasks.
 - **A last step that waits on someone else** (2.2.0): Claude parks it with a note naming the blocker;
   the plan finishes green and the summary row keeps `1 parked: <blocker>`.
+- **Background work** (2.3.0): while a turn has ended with a subagent, a background command or a monitor
+  still running, the band says `◆ waiting on <name>` in dim, not `⏸ paused, waiting on you`.
 - **Where it does not run:** the standing line is a `prompt.compose` hook, which the engine passes
   over in plugins you install where an organization manages Claude Code. A `/goal` still asks for a
   plan there.

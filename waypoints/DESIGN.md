@@ -55,7 +55,8 @@ Row by row, top to bottom:
 4. **Next.** `next ○ <size>  <title>` for the first pending task, dim. Left out when nothing is pending.
 5. **Notable (only when it applies).** One row, the first that holds, in this order:
    goal check not met (`warning` colour, `Goal check: not met yet: <reason>`), `interrupted`,
-   `⏸ paused, waiting on you`. Otherwise no row.
+   `⏸ paused, waiting on you` (2.3.0: with background work still running, the dim
+   `◆ waiting on <what>` instead, see "2.3.0"). Otherwise no row.
 
 `plan grew` becomes the dim `+k` after the route (k = live tasks − `firstPlan`). Agents running show as the `◆`
 marks on the now rows; the 1.1 "n agents running" text is dropped from the band. Goal-check count moves to the pane.
@@ -440,3 +441,44 @@ twinkled in the band and the pane, the spinner stayed in the now row, and `⚐` 
 after #3 showed in the pane's stats, under the task and in the list. The parked last task read
 `4 of 4 · 100% · 1 parked` with `⏸ parked: <blocker>` and no "waiting on you", and the summary row kept it. With a
 last step Claude was unsure of, it asked with options and a recommendation instead of stopping at "paused".
+
+## 2.3.0: waiting on background work, not on you
+
+**The problem.** The host ends the main turn right after it launches background work (a subagent, a shell run
+with `run_in_background`, a monitor), so the band drew `⏸ paused, waiting on you` while nothing waited on the
+person. `isPaused()` only asks whether the turn ended mid-plan, never who the session is waiting for.
+
+**Seen live** (Windows Terminal, 2026-10-26, 2.2.1): a background haiku agent that slept 90 s, and a background
+`sleep 90` in Bash. Both turns ended with the plan open, `lastTurnEnd` was set about 30 s in, and the band drew
+the ⏸ row until the work ended. The finished command then started a new turn by itself, with no input from the
+person. (On Claude Desktop the band is not drawn at all between turns, so this could not be seen there.)
+
+**The signal.** The classic `Stop` hook's input carries `background_tasks`, the engine's own answer to "is the
+session done or paused for background work": one entry per task in flight, with `type` (`shell`, `subagent`,
+`monitor`, `workflow`), `status`, `description` and, for a shell, `command`. A headless `claude -p` probe with a
+`Stop` hook that dumped its input showed a running shell as `{"type":"shell","status":"running","description":
+"Sleep 40 seconds in background","command":"sleep 40"}` and a running agent as `{"type":"subagent","status":
+"running","description":"Run sleep 40 and reply ok"}`; the `Stop` of the turn the finished task woke carried `[]`.
+So the list is replaced at every turn end, and there is nothing to track by hand.
+
+**What it draws.** `register.mjs` keeps the names from the last `Stop` (`description`, else `command`, else
+`type`, clipped to 32) and clears them at `turn.start`. In the notable row, a pause with something waiting draws
+the dim `◆ waiting on <name>` (one task) or `◆ waiting on n background tasks`, not in the attention colour,
+because nothing needs the person. With nothing waiting, the text is unchanged. The name goes through the privacy
+mask, because a command line can hold what Recording Mode hides. `Stop` and the end of the turn can arrive in
+either order, so `Stop` asks for a redraw itself.
+
+**Tried and dropped.** A set of running agents kept from `agent.spawn` and `turn.complete`, reconciled with
+`$.agent.list()` as Agent-Pulse does. It covered agents only, it was lost when the mod reloaded, and it needed a
+backstop for an agent that dies without a `turn.complete`. `Stop` covers shells and monitors as well, from one
+source.
+
+**Known gaps.**
+- The list is a snapshot from the turn's end. A task killed by hand from `/tasks` ends no turn, so the row stays
+  until the next one. A finished task does not have this problem: it wakes the session.
+- `session_crons` (`/loop`, `ScheduleWakeup`) sit next to `background_tasks` in the same input and would make a
+  fair "waiting on a scheduled wake-up" row. Not done.
+- A question that Claude asks the person with `AskUserQuestion` keeps the turn open, so the band looks busy
+  there. Not a pause, and not changed.
+
+Version **2.3.0**; tests in `draw.test.ts` (the row) and `surface.test.ts` (`Stop` through the engine).

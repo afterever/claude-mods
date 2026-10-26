@@ -50,6 +50,76 @@ test('on the terminal the route is text, and the running node is a Client', asyn
   await ui.unmount()
 })
 
+const DONE = { answer: 'x', durationMs: 1, isAborted: false, reason: 'answer' } as const
+const STOP = { hook_event_name: 'Stop', session_id: 's', transcript_path: 'C:/bats/t.jsonl', cwd: 'C:/bats', stop_hook_active: false } as const
+const SHELL = { id: 'b1', type: 'shell', status: 'running', description: 'Sleep 40 seconds in background', command: 'sleep 40' }
+const AGENT = { id: 'a1', type: 'subagent', status: 'running', description: 'Review the diff', agent_type: 'general-purpose' }
+
+// A turn ends mid-plan, the engine's Stop listing what it left running (either order: both fire at its end)
+async function ended($: any, on: On, background: object[], order: 'stop first' | 'complete first' = 'stop first') {
+  world(on)
+  on('turn.complete', async () => ({ text: '' }) as any)
+  on('classic.Stop', async () => ({}) as any)
+  await planned($, 'terminal')
+  const stop = () => $.classic.Stop({ ...STOP, background_tasks: background } as any)
+  const complete = () => $.turn.complete({ ...DONE, turnId: 'turn-1' } as any)
+  if (order === 'stop first') {
+    await stop()
+    await complete()
+  } else {
+    await complete()
+    await stop()
+  }
+  const ui = await band($, 'terminal')
+  const text = ((await ui.findAll({ type: 'Text' })) as any[]).map((t) => t.text).join('\n')
+  await ui.unmount()
+  return text
+}
+
+test('a turn that ends with a background shell running says it waits on the shell, not on the person', async ($, on) => {
+  const text = await ended($, on, [SHELL])
+  expect(text).toContain('◆ waiting on Sleep 40 seconds in background')
+  expect(text).not.toContain('waiting on you')
+})
+
+test('a background agent reads the same when the Stop comes before the end of the turn', async ($, on) => {
+  const text = await ended($, on, [AGENT], 'stop first')
+  expect(text).toContain('◆ waiting on Review the diff')
+  expect(text).not.toContain('waiting on you')
+})
+
+test('a background agent reads the same when its Stop comes after the end of the turn', async ($, on) => {
+  const text = await ended($, on, [AGENT], 'complete first')
+  expect(text).toContain('◆ waiting on Review the diff')
+  expect(text).not.toContain('waiting on you')
+})
+
+test('several background tasks are counted', async ($, on) => {
+  expect(await ended($, on, [SHELL, AGENT])).toContain('◆ waiting on 2 background tasks')
+})
+
+test('with nothing left running the pause waits on the person again', async ($, on) => {
+  const text = await ended($, on, [])
+  expect(text).toContain('⏸ paused, waiting on you')
+  expect(text).not.toContain('◆ waiting on')
+})
+
+test('a new turn forgets what the last one waited on', async ($, on) => {
+  world(on)
+  on('turn.complete', async () => ({ text: '' }) as any)
+  on('classic.Stop', async () => ({}) as any)
+  on('turn.start', async () => ({ turnId: 't2' }) as any)
+  await planned($, 'terminal')
+  await $.classic.Stop({ ...STOP, background_tasks: [SHELL] } as any)
+  await $.turn.complete({ ...DONE, turnId: 'turn-1' } as any)
+  await $.turn.start({ text: 'carry on', turnId: 't2' } as any)
+  await $.turn.complete({ ...DONE, turnId: 't2' } as any)
+  const ui = await band($, 'terminal')
+  const text = ((await ui.findAll({ type: 'Text' })) as any[]).map((t) => t.text).join('\n')
+  await ui.unmount()
+  expect(text).toContain('⏸ paused, waiting on you')
+})
+
 test('on Desktop the route is one Svg and no Client', async ($, on) => {
   world(on)
   await planned($, 'desktop')
