@@ -145,6 +145,30 @@ test('the notable row shows the goal check first, then interrupted, then paused'
   expect(note(g)).toBe('Goal check: not met yet: tests are missing')
 })
 
+test('a pause with background work still running says it waits on that, dim, not on the person', async () => {
+  const g = midway()
+  g.lastTurnEnd = T0 + 2 * MIN
+  g.active = false
+  const last = (o: any) => {
+    const tree = drawBand(el, view(g, o))
+    return tree.children[tree.children.length - 1]
+  }
+  expect(flat(last({ waiting: [] }))).toBe('⏸ paused, waiting on you')
+  expect(flat(last({ waiting: ['reviewer'] }))).toBe('◆ waiting on reviewer')
+  expect(flat(last({ waiting: ['reviewer', 'scout'] }))).toBe('◆ waiting on 2 background tasks')
+  const dim = last({ waiting: ['reviewer'] })
+  expect(dim.dimColor).toBe(true)
+  expect(dim.color).toBeUndefined()
+  // a name is the person's words, so the privacy mask reaches it
+  expect(flat(last({ waiting: ['reviewer'], mask: () => '***' }))).toBe('◆ waiting on ***')
+  // background work only softens a pause: a turn that runs draws no such row, and the goal check still comes first
+  g.active = true
+  expect(flat(last({ waiting: ['reviewer'] }))).not.toContain('waiting on reviewer')
+  g.active = false
+  g.interrupted = true
+  expect(flat(last({ waiting: ['reviewer'] }))).toBe('interrupted')
+})
+
 test('a plan that grew shows how many tasks it gained after the route', async () => {
   const g = midway()
   expect(flat(drawBand(el, view(g)).children[1])).not.toMatch(/\+\d/)

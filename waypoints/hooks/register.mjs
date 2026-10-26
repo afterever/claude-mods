@@ -56,7 +56,7 @@ let others = []
 let fileCount = 0 // the data folder's .json files, this chat's included
 let transcriptPath = ''
 const agentNames = new Map()
-const runningAgents = new Set()
+let waiting = [] // what the last turn left running in the background, named, from the Stop hook
 let rec = { on: false, strict: false }
 let mask = (s) => s
 
@@ -446,6 +446,7 @@ export function register(on, opts) {
       G.endedAt = 0
       G.finishedBy = ''
     }
+    waiting = []
     if (G && G.status === 'running') {
       G.active = true
       G.interrupted = false
@@ -453,9 +454,13 @@ export function register(on, opts) {
     return next(e)
   })
 
-  // The settings hooks' events carry the log's real path
+  // The settings hooks' events carry the log's real path, and the background work the
+  // turn left running: shells, monitors, subagents. A finished one wakes the session, and
+  // the next turn's Stop replaces the list, so it only goes stale if one is killed by hand
   on('classic.Stop', async ($, e, next) => {
     if (e && typeof e.transcript_path === 'string' && e.transcript_path) transcriptPath = e.transcript_path
+    waiting = Array.isArray(e && e.background_tasks) ? e.background_tasks.map((t) => clip(t.description || t.command || t.type || 'task', 32)) : []
+    if (G && G.status === 'running') $.ui.invalidate('ui.render')
     return next(e)
   })
 
@@ -482,7 +487,6 @@ export function register(on, opts) {
     const r = await next(e)
     if (r && r.agentId) {
       agentNames.set(r.agentId, clip(e.name || e.description || e.subagentType || 'agent', 32))
-      runningAgents.add(r.agentId)
       if (G && G.status === 'running') $.ui.invalidate('ui.render')
     }
     return r
@@ -506,7 +510,6 @@ export function register(on, opts) {
     const r = await next(e)
     now = await $.clock.now()
     if (e.agentId) {
-      runningAgents.delete(e.agentId)
       if (G && G.status === 'running') $.ui.invalidate('ui.render')
       return r
     }
@@ -584,6 +587,7 @@ export function register(on, opts) {
     const view = {
       g: G,
       now,
+      waiting,
       mask,
       roles,
       level: look.level,

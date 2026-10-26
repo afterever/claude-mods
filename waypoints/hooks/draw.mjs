@@ -175,7 +175,16 @@ function notableRow(el, v) {
   if (g.interrupted) return el.Text({ color: roles.attention, children: ['interrupted'] })
   // parked tasks are left out of n, so only an open task of this chat's own waits on the person
   const p = progress(g)
-  if (isPaused(g) && p.doneN < p.n) return el.Text({ color: roles.attention, children: ['⏸ paused, waiting on you'] })
+  if (isPaused(g) && p.doneN < p.n) {
+    // the turn ended but background work it started still runs (an agent, a shell, a
+    // monitor), and its end wakes the session: nothing waits on the person
+    const waiting = v.waiting || []
+    if (waiting.length) {
+      const what = waiting.length === 1 ? mask(waiting[0]) : `${waiting.length} background tasks`
+      return el.Text({ dimColor: true, wrap: 'truncate-end', children: [`◆ waiting on ${what}`] })
+    }
+    return el.Text({ color: roles.attention, children: ['⏸ paused, waiting on you'] })
+  }
   // someone outside the chat has the ball: worth a glance, not the person's attention
   if (p.parked.length) {
     const more = p.parked.length > 1 ? `  +${p.parked.length - 1}` : ''
