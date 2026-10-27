@@ -481,4 +481,12 @@ source.
 - A question that Claude asks the person with `AskUserQuestion` keeps the turn open, so the band looks busy
   there. Not a pause, and not changed.
 
+**Seen live** (Windows Terminal, 2026-10-26, 2.3.0; [TEST-RUN-2.3.0.md](./test-runs/TEST-RUN-2.3.0.md)): the
+interactive `Stop` carries the same `background_tasks` as the headless probe, and the row follows it. A background
+`sleep 60` drew a dim `◆ waiting on Sleep 60 probe`, an agent drew `◆ waiting on Read hooks`, an agent and a shell
+together drew `◆ waiting on 2 background tasks`, and with nothing running the bright `⏸ paused, waiting on you`
+stayed. The row belongs to a plan that is still running: a finished plan shows the done band and no waiting row.
+One miss, in a session with two tasks running at once, is not explained (the row may have been trimmed for
+height); it did not come back in fresh sessions.
+
 Version **2.3.0**; tests in `draw.test.ts` (the row) and `surface.test.ts` (`Stop` through the engine).
