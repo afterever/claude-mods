@@ -1,6 +1,6 @@
 # Waypoints 2.3.1: test run, 2026-10-26
 
-What this run checked: the 2.3.1 fix that makes a finished (or stopped) plan leave the screen 30 seconds after it
+What this run checked (a finished plan, a stopped plan, the auto-opened pane, and a hidden band): the 2.3.1 fix that makes a finished (or stopped) plan leave the screen 30 seconds after it
 ends, band and footer label together, with nothing else to trigger a redraw. The unit tests (133 pass) used a mock
 clock, so this run drove real plans in the Windows Terminal and looked at the screen. The earlier run is
 [TEST-RUN-2.3.0.md](./TEST-RUN-2.3.0.md).
@@ -34,13 +34,26 @@ touched no key during each check; the times below are from their reading, not a 
   at about 30 s with no keypress (the `stopGoal` path).
 - Result: passes, exactly as described.
 
+### 4. The pane that Waypoints opened (C3)
+
+- [x] **Do:** with `/waypoints` not typed in the session, a 2-task plan titled `pane test`, both tasks done, no keypress.
+- **See:** the pane opens by itself when the plan starts and closes at about 30 s after the finish.
+- Result: passes. The pane opened, and closed at about 30 s.
+
+### 5. A hidden band (C4)
+
+- [x] **Do:** a 2-task plan with task 1 running, then `/waypoints hide`, then both tasks done, no keypress.
+- **See:** no band and no summary row at any point; the footer label `◎ plan done ✓` shows and goes at about 30 s.
+- Result: passes. The band stayed hidden, the footer showed, and went at about 30 s.
+- **A first attempt was a bad test, not a bug.** `/waypoints hide` and then a *new* plan showed the band, the footer and
+  the pane, all three, and they went at 30 s. A new goal or plan sets `hidden = false` on purpose (`startGoal` and
+  `serveTool` in `register.mjs`; the README says "A new goal or plan shows it again"). The person prefers it that
+  way: calling Waypoints again is a reason to show it. Hiding is tested only on a plan that is already running.
+
 ---
 
 ## Not covered
 
-- **The pane (C3)** closing at about 30 s when Waypoints opened it, and staying open when the person opened it.
-  Covered by the unit test in `auto.test.ts` only.
-- **A hidden band (C4):** `/waypoints hide`, then a finished plan, where the footer label alone should go at 30 s.
-  Covered by the unit test only.
+- **A pane the person opened** staying open at 30 s (`auto.test.ts` only).
 - **The exact second.** "About 30 s" is what was seen by eye, not a measured gap to the 0.2 s margin.
 - **Claude Desktop.** The band is drawn there only while a turn runs, so the 30-second exit is not visible there.

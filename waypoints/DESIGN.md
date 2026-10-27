@@ -489,6 +489,8 @@ stayed. The row belongs to a plan that is still running: a finished plan shows t
 One miss, in a session with two tasks running at once, is not explained (the row may have been trimmed for
 height); it did not come back in fresh sessions.
 
+Version **2.3.0**; tests in `draw.test.ts` (the row) and `surface.test.ts` (`Stop` through the engine).
+
 ## 2.3.1: a finished plan leaves after 30 seconds, and really leaves
 
 **The ask.** The band stayed 3 minutes after a plan finished, and the footer label `◎ plan done ✓` did not go
@@ -507,6 +509,9 @@ other redraw", mounts the band and the footer and checks both at 25 s and 35 s.
 **Seen live** (Windows Terminal, 2026-10-26, 2.3.1; [TEST-RUN-2.3.1.md](./test-runs/TEST-RUN-2.3.1.md)): a
 finished plan and a stopped plan (`/waypoints clear`) each lost the summary row and the footer label together at
 about 30 s, with no keypress. So `$.clock.after` fires in the real engine and `ui.render` does redraw the footer
-at idle. The pane closing and the hidden-band case were checked only in the unit tests.
+at idle. The pane that Waypoints opened by itself closed at about 30 s, and with the band hidden mid-plan
+(`/waypoints hide`) only the footer label showed and it went at about 30 s. A *new* plan after `hide` shows band,
+footer and pane again, because `startGoal` and `serveTool` set `hidden = false`; that is wanted, not a bug. Not
+run live: a pane the person opened staying open (unit test only).
 
-Version **2.3.0**; tests in `draw.test.ts` (the row) and `surface.test.ts` (`Stop` through the engine).
+Version **2.3.1**; tests in `surface.test.ts` (band and footer at 25 s and 35 s) and `auto.test.ts` (the pane).
