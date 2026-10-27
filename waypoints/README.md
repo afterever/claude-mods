@@ -20,7 +20,7 @@ Claude plans the work as tasks sized S, M or L with the mod's own tool, `mcp__wa
   next ○ S  README, version bump, marketplace.json
 ```
 
-The ETA appears after two tasks are done. When a goal finishes the full band stays for 8 seconds, then collapses to one row; three minutes after the finish the band goes, and a pane that Waypoints opened closes with it, within about 15 seconds (a pane you opened yourself stays). The mod makes no model calls of its own.
+The ETA appears after two tasks are done. When a goal finishes the full band stays for 8 seconds, then collapses to one row; 30 seconds after the finish the band goes, and a pane that Waypoints opened closes with it (a pane you opened yourself stays). The mod makes no model calls of its own.
 
 ## Settings
 
@@ -61,12 +61,17 @@ The standing line is the one thing the global `CLAUDE.md` bullet used to do. If 
 | `/waypoints` | Opens the pane (so does any word it does not know). Where the surface draws none, it prints the plan as text. |
 | `/waypoints hide`, `show` | Hides or shows the band, and says so in a toast. The footer stays. A new goal or plan shows it again. |
 | `/waypoints auto on`, `off` | Turns the standing line on or off. On by default; the choice is kept between sessions. The pane's last row shows which it is. |
-| `/waypoints clear` | Marks this chat's running goal as stopped; the band keeps showing `stopped` for three minutes. A finished goal is left as it is. |
+| `/waypoints clear` | Marks this chat's running goal as stopped; the band keeps showing `stopped` for 30 seconds. A finished goal is left as it is. |
 | `/waypoints prune` | Deletes old files in `~/.claude/mods-data/waypoints/`: other chats' goals that finished over an hour ago, and files untouched for a day. Never this chat's file, never a running goal's. It deletes them straight away, with no dialog: typing the command is the confirmation. Past 100 files the pane names the folder and reminds you. |
 
 For `auto`, anything but `off` turns it on. `/goal clear` (or `stop`, `off`, `cancel`, `end`, `none`, `reset`) stops the goal in the same way. If Claude Code will not give the mod the name `/waypoints`, it registers `/waypoints-mod` instead.
 
 In the band, the **all tasks** button (or `g`) opens the pane. `g` is a button in the band, so it only works while the band shows; `/waypoints` always does.
+
+## What changed in 2.3.1
+
+- **A finished plan leaves after 30 seconds, not three minutes,** band and footer label (`◎ plan done ✓`) together.
+- **The band and the footer label now really go.** The 15-second timer used to check whether the band was still due after moving its own clock, so the tick that ended the stay skipped the redraw, and `plan done ✓` stayed until something else redrew. A finish or a stop now schedules its own redraw just after the 30 seconds.
 
 ## What changed in 2.3.0
 
@@ -105,7 +110,7 @@ Only how it looks and when the pane opens; what Claude is told and the tool it p
 - The pane shows every task as a trail with duration bars, instead of a window of six rows with `+n more`.
 - The pane opens when a plan starts (`Pane` setting) and closes with the band.
 - Fixed hex palettes copied from Agent-Pulse replace the theme keys 1.1 drew in (`cyan`, `green`), which a skin can remap, so the colours no longer depend on your theme unless you pick `claude` or `mono`.
-- The band stays three minutes after a finish instead of ten.
+- The band stays three minutes after a finish instead of ten (30 seconds since 2.3.1).
 
 ## What changed from goal-meter
 
