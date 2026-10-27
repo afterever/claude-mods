@@ -9,7 +9,7 @@ const TOOL = 'mcp__waypoints__tasks'
 const NOW = new Date(2026, 9, 17, 14, 30).getTime()
 
 function world(on: On) {
-  mock.clock(on, { now: NOW })
+  const clock = mock.clock(on, { now: NOW })
   mock.store(on, {})
   mock.env(on, { USERPROFILE: 'C:/Users/bats' })
   on('session.start', async () => ({ cwd: 'C:/bats' }))
@@ -24,6 +24,7 @@ function world(on: On) {
   on('ui.toast', async () => ({ value: undefined }) as any)
   on('prompt.compose', async () => ({ sections: [{ id: 'intro', text: 'You are Claude Code.', scope: 'shared' }] }))
   on('ui.render', { component: 'AbovePrompt' }, async ($, e) => h($.ui.resolve(e).Box, {}) as any)
+  return clock
 }
 
 async function planned($: any, surface: 'terminal' | 'desktop') {
@@ -118,6 +119,42 @@ test('a new turn forgets what the last one waited on', async ($, on) => {
   const text = ((await ui.findAll({ type: 'Text' })) as any[]).map((t) => t.text).join('\n')
   await ui.unmount()
   expect(text).toContain('⏸ paused, waiting on you')
+})
+
+// A finished plan keeps its band and the footer's `◎ plan done ✓` for RECENT_MS (30 s). Nothing else
+// redraws an idle session, so the mod has to ask for the redraw that drops them.
+const MIN30 = 30000
+
+const footer = ($: any) =>
+  $.ui.mount({ plugin: 'waypoints', surface: 'terminal', component: 'SessionMode', props: { modes: [] } })
+
+async function finished($: any, on: On) {
+  const clock = world(on)
+  on('turn.complete', async () => ({ text: '' }) as any)
+  on('ui.render', { component: 'SessionMode' }, async ($, e) => $.ui.resolve(e).Text({ children: [(e.props?.modes ?? []).join(' ')] }) as any)
+  await $.session.start({ cwd: 'C:/bats', surface: 'terminal', isInteractive: true })
+  const call = (o: object, n: number) => $.tool.call({ tool: TOOL, tool_use_id: `t${n}`, ...o })
+  await call({ action: 'plan', tasks: [{ title: 'one', size: 'S' }] }, 1)
+  await call({ action: 'start', id: 1 }, 2)
+  await call({ action: 'done', id: 1 }, 3)
+  await $.turn.complete({ ...DONE, turnId: 'turn-1' } as any)
+  return clock
+}
+
+test('a finished plan is still on screen just before 30 s and gone just after, with no other redraw', async ($, on) => {
+  const clock = await finished($, on)
+  const ui = await band($, 'terminal')
+  const label = await footer($)
+  const shown = async (u: any) => ((await u.findAll({ type: 'Text' })) as any[]).map((t) => t.text).join('\n')
+  expect(await shown(ui)).toContain('done')
+  expect(JSON.stringify(await label.findAll({ type: 'Text' }))).toContain('plan done')
+  await clock.advance(MIN30 - 5000)
+  expect(await shown(ui)).toContain('done')
+  await clock.advance(10000)
+  expect(await shown(ui)).not.toContain('done')
+  expect(JSON.stringify(await label.findAll({ type: 'Text' }))).not.toContain('plan done')
+  await ui.unmount()
+  await label.unmount()
 })
 
 test('on Desktop the route is one Svg and no Client', async ($, on) => {

@@ -76,7 +76,7 @@ When the goal finishes (`finishGoal`):
   palette's `sparkle` colours along the route from start to end and leaves a `✦` on the last node.
 - **`subtle` / `off`:** the route draws all solid in the `done` colour with `✦` on the last node, no motion.
 - Either way the full band stays **8 s** after the finish, then collapses to one row for the rest of the
-  `RECENT_MS`, which 2.0 shortens from 10 minutes to 3 (the person's call) **(builder's call: the 8 s)**:
+  `RECENT_MS`, which 2.0 shortens from 10 minutes to 3 (the person's call) and 2.3.1 to 30 seconds **(builder's call: the 8 s)**:
 
 ```
 ✓ Plan: Add band to Settings type…                 6 tasks · done in 14m   all tasks g
@@ -343,7 +343,7 @@ looks; the builder lists what to look at:
 5. With Agent-Pulse installed: change its palette in `/config`; Waypoints recolours (within 15 s at worst).
    Set Waypoints' own palette explicitly; it stops following. Disable Agent-Pulse: `follow` falls back to `ember`.
 6. Animation `off` / `subtle` / `full`: nothing moves / pulse only / pulse + breathing + finish sweep.
-7. Finish a plan: sweep (full), 8 s, then the single summary row; the auto-opened pane closes 3 minutes after the finish.
+7. Finish a plan: sweep (full), 8 s, then the single summary row; the auto-opened pane closes 30 seconds after the finish (3 minutes before 2.3.1).
 8. Desktop app: the SVG route, its pulse, no restart of the animation every 15 s, the finish sweep once.
 9. Recording Mode on: titles masked everywhere, the SVG `alt` included.
 10. A plan of 20+ tasks in an 80-column window: dense route, no wrap.
@@ -488,5 +488,20 @@ together drew `◆ waiting on 2 background tasks`, and with nothing running the 
 stayed. The row belongs to a plan that is still running: a finished plan shows the done band and no waiting row.
 One miss, in a session with two tasks running at once, is not explained (the row may have been trimmed for
 height); it did not come back in fresh sessions.
+
+## 2.3.1: a finished plan leaves after 30 seconds, and really leaves
+
+**The ask.** The band stayed 3 minutes after a plan finished, and the footer label `◎ plan done ✓` did not go
+at all until something else redrew. `RECENT_MS` is now 30 seconds.
+
+**The bug.** The 15 s tick moved `now` first and then asked `isRecent(G)` whether to redraw. On the tick that
+crosses `RECENT_MS` the answer is already no, so the one redraw that drops the band and the label was skipped,
+and an idle session has no other trigger. The pane did close, because `maybeAutoClose` runs after `now` moves.
+Now the tick asks before it moves `now` (`wasUp`), and `finishGoal` and `stopGoal` call `expireAfter`, a
+`$.clock.after(RECENT_MS + 200)` that refreshes `now`, closes an auto-opened pane and redraws, so the band does
+not wait for the next tick. `finishGoal` already did the same for the 8 s collapse.
+
+Test: `surface.test.ts`, "a finished plan is still on screen just before 30 s and gone just after, with no
+other redraw", mounts the band and the footer and checks both at 25 s and 35 s.
 
 Version **2.3.0**; tests in `draw.test.ts` (the row) and `surface.test.ts` (`Stop` through the engine).

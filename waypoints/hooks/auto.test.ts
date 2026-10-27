@@ -141,9 +141,9 @@ test('a pane the mod opened leaves with the band, a pane the person opened stays
   await start($)
   await plan($)
   await $.command.run({ command: 'waypoints', args: 'clear' })
-  await auto.clock.advance(2 * MIN)
+  await auto.clock.advance(20000)
   expect(auto.closed).toEqual([])
-  await auto.clock.advance(2 * MIN) // past the 3 minutes the band stays
+  await auto.clock.advance(20000) // past the 30 seconds the band stays
   expect(auto.closed).toEqual([PANE])
 })
 

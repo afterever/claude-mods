@@ -28,7 +28,7 @@ import { OTHERS_MS, shownPath, pickPrunable, deleteArgv } from './prune.mjs'
 
 const DIR = '/.claude/mods-data/waypoints'
 const PANE = 'waypoints'
-const RECENT_MS = 3 * 60000 // a finished goal stays on screen this long
+const RECENT_MS = 30000 // a finished goal stays on screen this long
 const REOPEN_MS = 5 * 60000 // a goal closed on its tasks reopens if Claude carries on this soon
 const NUDGE_AFTER = 4 // tool calls into a goal with no plan before the reminder
 const WRITERS = new Set(['Edit', 'Write', 'NotebookEdit', 'MultiEdit'])
@@ -245,6 +245,16 @@ async function startGoal($, condition) {
   $.ui.invalidate('ui.render')
 }
 
+// The band and the footer's `done ✓` go when RECENT_MS is up. Nothing else redraws an idle
+// session, so draw again just after rather than on the next 15 s tick
+function expireAfter($) {
+  $.clock.after(RECENT_MS + 200, async () => {
+    now = await $.clock.now()
+    await maybeAutoClose($)
+    $.ui.invalidate('ui.render')
+  })
+}
+
 async function stopGoal($, status) {
   if (!G || G.status !== 'running') return
   G.status = status
@@ -252,6 +262,7 @@ async function stopGoal($, status) {
   G.active = false
   await save($)
   $.ui.invalidate('ui.render')
+  expireAfter($)
 }
 
 async function finishGoal($, how) {
@@ -269,6 +280,7 @@ async function finishGoal($, how) {
     now = await $.clock.now()
     $.ui.invalidate('ui.render')
   })
+  expireAfter($)
 }
 
 async function serveTool($, e) {
@@ -379,13 +391,15 @@ export function register(on, opts) {
     await refreshLook($)
     await refreshPanes($)
     $.clock.every(15000, async () => {
+      // asked before `now` moves: the tick that ends a finished goal's stay must still redraw
+      const wasUp = !!G && (G.status === 'running' || isRecent(G))
       now = await $.clock.now()
       // the fallback for a /config change of Agent-Pulse's that never reached config.set
       await refreshLook($)
       await refreshPanes($)
       if (paneUp) await loadOthers($)
       await maybeAutoClose($)
-      if (paneUp || (G && (G.status === 'running' || isRecent(G)))) $.ui.invalidate('ui.render')
+      if (paneUp || wasUp || (G && (G.status === 'running' || isRecent(G)))) $.ui.invalidate('ui.render')
     })
     $.clock.every(10000, () => readRecording($).catch(() => {}))
     return next(e)
