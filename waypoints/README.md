@@ -1,6 +1,6 @@
 # Waypoints
 
-**A progress bar for what Claude is working through: the task plan as a bar, with elapsed time and an ETA.**
+**A progress bar for a `/goal` and any multi-step work Claude takes on: the task plan as a bar, with elapsed time and an ETA.**
 
 Waypoints is a fork of Nate Herk's [goal-meter](https://github.com/nateherkai/claude-code-mods/tree/main/goal-meter) 1.0.0 (MIT, see [LICENSE](./LICENSE)), imported with its history, so the original commit keeps its author. Everything that makes the meter work is Nate's: the task tool Claude plans with, the band and footer, the ETA at the goal's own pace, the goal check's "not met yet" reason, and the pane with every chat's goal. This fork renames it and builds the plan request into the mod, so nothing has to be added to your global `CLAUDE.md`.
 
