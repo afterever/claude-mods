@@ -28,7 +28,9 @@ import { OTHERS_MS, shownPath, pickPrunable, deleteArgv } from './prune.mjs'
 
 const DIR = '/.claude/mods-data/waypoints'
 const PANE = 'waypoints'
-const RECENT_MS = 30000 // a finished goal stays on screen this long
+const LINGER = { '30 seconds': 30000, '1 minute': 60000, '3 minutes': 180000, '10 minutes': 600000 } // the `linger` setting
+const LINGER_DEFAULT = '1 minute'
+let RECENT_MS = LINGER[LINGER_DEFAULT] // a finished goal stays on screen this long
 const REOPEN_MS = 5 * 60000 // a goal closed on its tasks reopens if Claude carries on this soon
 const NUDGE_AFTER = 4 // tool calls into a goal with no plan before the reminder
 const WRITERS = new Set(['Edit', 'Write', 'NotebookEdit', 'MultiEdit'])
@@ -49,7 +51,7 @@ let callsWithoutPlan = 0
 let pendingGoal = null
 let paneUp = false // the pane is open (placed or waiting), from $.ui.panes() and ui.close
 const autoPane = createAutoPane() // when the pane opens and closes by itself
-let options = { palette: 'follow', animation: 'follow', pane: 'auto' }
+let options = { palette: 'follow', animation: 'follow', pane: 'auto', linger: LINGER_DEFAULT }
 let look = { palette: 'ember', level: 'subtle' }
 let roles = rolesOf('ember')
 let others = []
@@ -364,7 +366,8 @@ async function onCheck($, message, at, attempt = 0) {
 }
 
 export function register(on, opts) {
-  options = { palette: 'follow', animation: 'follow', pane: 'auto', ...(opts || {}) }
+  options = { palette: 'follow', animation: 'follow', pane: 'auto', linger: LINGER_DEFAULT, ...(opts || {}) }
+  RECENT_MS = LINGER[options.linger] ?? LINGER[LINGER_DEFAULT]
   look = resolveLook(options, [])
   roles = rolesOf(look.palette)
 

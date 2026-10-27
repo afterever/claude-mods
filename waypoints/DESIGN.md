@@ -76,7 +76,7 @@ When the goal finishes (`finishGoal`):
   palette's `sparkle` colours along the route from start to end and leaves a `✦` on the last node.
 - **`subtle` / `off`:** the route draws all solid in the `done` colour with `✦` on the last node, no motion.
 - Either way the full band stays **8 s** after the finish, then collapses to one row for the rest of the
-  `RECENT_MS`, which 2.0 shortens from 10 minutes to 3 (the person's call) and 2.3.1 to 30 seconds **(builder's call: the 8 s)**:
+  `RECENT_MS`, which 2.0 shortens from 10 minutes to 3 (the person's call) and 2.3.1 to 30 seconds; since 2.4.0 it is the `linger` setting, 1 minute by default **(builder's call: the 8 s)**:
 
 ```
 ✓ Plan: Add band to Settings type…                 6 tasks · done in 14m   all tasks g
@@ -242,6 +242,7 @@ and `session.start` runs again on a reload, as Arsenal relies on, so `restore()`
 | `palette` | Palette | `follow`, `ember`, `claude`, `neon`, `mono` | `follow` |
 | `animation` | Animation | `follow`, `off`, `subtle`, `full` | `follow` |
 | `pane` | Pane | `auto`, `off` | `auto` |
+| `linger` | Finished plan stays | `30 seconds`, `1 minute`, `3 minutes`, `10 minutes` | `1 minute` |
 
 `register(on)` becomes `register(on, options)`. The existing `/waypoints auto|hide|show|clear` commands and the
 `$.store` setting behind `auto` are unchanged: they change behaviour, not the look. A `/goal` refuses file edits
@@ -343,7 +344,7 @@ looks; the builder lists what to look at:
 5. With Agent-Pulse installed: change its palette in `/config`; Waypoints recolours (within 15 s at worst).
    Set Waypoints' own palette explicitly; it stops following. Disable Agent-Pulse: `follow` falls back to `ember`.
 6. Animation `off` / `subtle` / `full`: nothing moves / pulse only / pulse + breathing + finish sweep.
-7. Finish a plan: sweep (full), 8 s, then the single summary row; the auto-opened pane closes 30 seconds after the finish (3 minutes before 2.3.1).
+7. Finish a plan: sweep (full), 8 s, then the single summary row; the auto-opened pane closes `linger` after the finish (1 minute by default; 30 seconds in 2.3.1, 3 minutes before).
 8. Desktop app: the SVG route, its pulse, no restart of the animation every 15 s, the finish sweep once.
 9. Recording Mode on: titles masked everywhere, the SVG `alt` included.
 10. A plan of 20+ tasks in an 80-column window: dense route, no wrap.
@@ -515,3 +516,18 @@ footer and pane again, because `startGoal` and `serveTool` set `hidden = false`;
 run live: a pane the person opened staying open (unit test only).
 
 Version **2.3.1**; tests in `surface.test.ts` (band and footer at 25 s and 35 s) and `auto.test.ts` (the pane).
+
+## 2.4.0: how long a finished plan stays is a setting
+
+**The ask.** 30 seconds was too short for everyone, so `RECENT_MS` follows a new `linger` setting (`/config` →
+Waypoints → Finished plan stays), default **1 minute** (the person's call).
+
+**How.** The setting is a string with a fixed list of options, like the others, so there is nothing to parse or
+validate. `register(on, options)` looks the string up in `LINGER` (label to milliseconds) and sets `RECENT_MS`,
+now a `let`. A value the table does not list falls back to the default. Nothing else changed: `isRecent`,
+`expireAfter` and the tick's `wasUp` check (2.3.1) already read `RECENT_MS`, and a `/config` change reloads the
+module, so the new value applies from the next finish with no listener of its own. `FULL_MS`, the 8 s the *full* band
+stays, is not part of it.
+
+Version **2.4.0**; tests in `surface.test.ts` (default at 55 s and 65 s, `30 seconds`, `10 minutes`, an unlisted value)
+and `auto.test.ts` (the pane at the default).

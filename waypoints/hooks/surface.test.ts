@@ -121,9 +121,10 @@ test('a new turn forgets what the last one waited on', async ($, on) => {
   expect(text).toContain('⏸ paused, waiting on you')
 })
 
-// A finished plan keeps its band and the footer's `◎ plan done ✓` for RECENT_MS (30 s). Nothing else
-// redraws an idle session, so the mod has to ask for the redraw that drops them.
-const MIN30 = 30000
+// A finished plan keeps its band and the footer's `◎ plan done ✓` for RECENT_MS, the `linger` setting
+// (1 minute by default). Nothing else redraws an idle session, so the mod has to ask for the redraw
+// that drops them.
+const SEC = 1000
 
 const footer = ($: any) =>
   $.ui.mount({ plugin: 'waypoints', surface: 'terminal', component: 'SessionMode', props: { modes: [] } })
@@ -141,20 +142,40 @@ async function finished($: any, on: On) {
   return clock
 }
 
-test('a finished plan is still on screen just before 30 s and gone just after, with no other redraw', async ($, on) => {
+// The band and the footer label on screen at `before` seconds after the finish and at `after`, with no redraw between
+async function lingers($: any, on: On, before: number, after: number) {
   const clock = await finished($, on)
   const ui = await band($, 'terminal')
   const label = await footer($)
   const shown = async (u: any) => ((await u.findAll({ type: 'Text' })) as any[]).map((t) => t.text).join('\n')
-  expect(await shown(ui)).toContain('done')
-  expect(JSON.stringify(await label.findAll({ type: 'Text' }))).toContain('plan done')
-  await clock.advance(MIN30 - 5000)
-  expect(await shown(ui)).toContain('done')
-  await clock.advance(10000)
-  expect(await shown(ui)).not.toContain('done')
-  expect(JSON.stringify(await label.findAll({ type: 'Text' }))).not.toContain('plan done')
+  const state = async () => ({ band: (await shown(ui)).includes('done'), label: JSON.stringify(await label.findAll({ type: 'Text' })).includes('plan done') })
+  const first = await state()
+  await clock.advance(before * SEC)
+  const early = await state()
+  await clock.advance((after - before) * SEC)
+  const late = await state()
   await ui.unmount()
   await label.unmount()
+  return { first, early, late }
+}
+
+const SHOWN = { band: true, label: true }
+const GONE = { band: false, label: false }
+
+test('by default a finished plan is still on screen just before 1 minute and gone just after, with no other redraw', async ($, on) => {
+  expect(await lingers($, on, 55, 65)).toEqual({ first: SHOWN, early: SHOWN, late: GONE })
+})
+
+test('linger 30 seconds: the band and the footer label go at 30 s', { options: { linger: '30 seconds' } }, async ($, on) => {
+  expect(await lingers($, on, 25, 35)).toEqual({ first: SHOWN, early: SHOWN, late: GONE })
+})
+
+test('linger 10 minutes: still on screen at 9 minutes, gone at 11', { options: { linger: '10 minutes' } }, async ($, on) => {
+  expect(await lingers($, on, 9 * 60, 11 * 60)).toEqual({ first: SHOWN, early: SHOWN, late: GONE })
+})
+
+test('a value the setting does not list falls back to 1 minute', { options: { linger: 'forever' } }, async ($, on) => {
+  expect(await lingers($, on, 55, 65)).toEqual({ first: SHOWN, early: SHOWN, late: GONE })
 })
 
 test('on Desktop the route is one Svg and no Client', async ($, on) => {

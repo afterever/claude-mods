@@ -20,7 +20,7 @@ Claude plans the work as tasks sized S, M or L with the mod's own tool, `mcp__wa
   next ○ S  README, version bump, marketplace.json
 ```
 
-The ETA appears after two tasks are done. When a goal finishes the full band stays for 8 seconds, then collapses to one row; 30 seconds after the finish the band goes, and a pane that Waypoints opened closes with it (a pane you opened yourself stays). The mod makes no model calls of its own.
+The ETA appears after two tasks are done. When a goal finishes the full band stays for 8 seconds, then collapses to one row; a minute after the finish (your choice in `/config`, see Settings) the band goes, and a pane that Waypoints opened closes with it (a pane you opened yourself stays). The mod makes no model calls of its own.
 
 ## Settings
 
@@ -31,8 +31,9 @@ In `/config`, under Waypoints:
 | Palette | `follow`, `ember`, `claude`, `neon`, `mono` | `follow` |
 | Animation | `follow`, `off`, `subtle`, `full` | `follow` |
 | Pane | `auto`, `off` | `auto` |
+| Finished plan stays | `30 seconds`, `1 minute`, `3 minutes`, `10 minutes` | `1 minute` |
 
-`follow` takes [Agent-Pulse](../agent-pulse)'s own palette or animation, so the two bands never disagree, and falls back to `ember` / `subtle` when Agent-Pulse is not installed. Pick a value to stop following. Colour and shape show at every animation level; `off` keeps everything still, `subtle` pulses the running task, `full` also breathes the node and sweeps the route when the plan finishes. `Pane: off` opens the pane only when you ask (`/waypoints` or `g`). A window narrower than 144 columns leaves an unasked pane waiting until it widens; `g` and `/waypoints` open it at any width.
+`follow` takes [Agent-Pulse](../agent-pulse)'s own palette or animation, so the two bands never disagree, and falls back to `ember` / `subtle` when Agent-Pulse is not installed. Pick a value to stop following. Colour and shape show at every animation level; `off` keeps everything still, `subtle` pulses the running task, `full` also breathes the node and sweeps the route when the plan finishes. `Finished plan stays` is how long the band and the footer's `done ✓` stay after a plan finishes or is stopped, and when a pane Waypoints opened closes. `Pane: off` opens the pane only when you ask (`/waypoints` or `g`). A window narrower than 144 columns leaves an unasked pane waiting until it widens; `g` and `/waypoints` open it at any width.
 
 ## When the last step is not Claude's to finish
 
@@ -61,12 +62,16 @@ The standing line is the one thing the global `CLAUDE.md` bullet used to do. If 
 | `/waypoints` | Opens the pane (so does any word it does not know). Where the surface draws none, it prints the plan as text. |
 | `/waypoints hide`, `show` | Hides or shows the band, and says so in a toast. The footer stays. A new goal or plan shows it again. |
 | `/waypoints auto on`, `off` | Turns the standing line on or off. On by default; the choice is kept between sessions. The pane's last row shows which it is. |
-| `/waypoints clear` | Marks this chat's running goal as stopped; the band keeps showing `stopped` for 30 seconds. A finished goal is left as it is. |
+| `/waypoints clear` | Marks this chat's running goal as stopped; the band keeps showing `stopped` for the `Finished plan stays` time (a minute by default). A finished goal is left as it is. |
 | `/waypoints prune` | Deletes old files in `~/.claude/mods-data/waypoints/`: other chats' goals that finished over an hour ago, and files untouched for a day. Never this chat's file, never a running goal's. It deletes them straight away, with no dialog: typing the command is the confirmation. Past 100 files the pane names the folder and reminds you. |
 
 For `auto`, anything but `off` turns it on. `/goal clear` (or `stop`, `off`, `cancel`, `end`, `none`, `reset`) stops the goal in the same way. If Claude Code will not give the mod the name `/waypoints`, it registers `/waypoints-mod` instead.
 
 In the band, the **all tasks** button (or `g`) opens the pane. `g` is a button in the band, so it only works while the band shows; `/waypoints` always does.
+
+## What changed in 2.4.0
+
+- **How long a finished plan stays is a setting:** `/config` → Waypoints → `Finished plan stays`, `30 seconds`, `1 minute`, `3 minutes` or `10 minutes`. The default is a minute (30 seconds in 2.3.1). It sets how long the band and the footer's `done ✓` stay, and when an auto-opened pane closes.
 
 ## What changed in 2.3.1
 
