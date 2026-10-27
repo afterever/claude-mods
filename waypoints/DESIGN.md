@@ -504,4 +504,9 @@ not wait for the next tick. `finishGoal` already did the same for the 8 s collap
 Test: `surface.test.ts`, "a finished plan is still on screen just before 30 s and gone just after, with no
 other redraw", mounts the band and the footer and checks both at 25 s and 35 s.
 
+**Seen live** (Windows Terminal, 2026-10-26, 2.3.1; [TEST-RUN-2.3.1.md](./test-runs/TEST-RUN-2.3.1.md)): a
+finished plan and a stopped plan (`/waypoints clear`) each lost the summary row and the footer label together at
+about 30 s, with no keypress. So `$.clock.after` fires in the real engine and `ui.render` does redraw the footer
+at idle. The pane closing and the hidden-band case were checked only in the unit tests.
+
 Version **2.3.0**; tests in `draw.test.ts` (the row) and `surface.test.ts` (`Stop` through the engine).
