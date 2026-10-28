@@ -69,6 +69,10 @@ For `auto`, anything but `off` turns it on. `/goal clear` (or `stop`, `off`, `ca
 
 In the band, the **all tasks** button (or `g`) opens the pane. `g` is a button in the band, so it only works while the band shows; `/waypoints` always does.
 
+## What changed in 2.4.1
+
+- **This chat's finished goal leaves the pane after an hour,** the same cutoff other chats' goals already had. Until now it stayed in its own chat's pane until you cleared it or started a new goal. A goal still running is never aged out.
+
 ## What changed in 2.4.0
 
 - **How long a finished plan stays is a setting:** `/config` → Waypoints → `Finished plan stays`, `30 seconds`, `1 minute`, `3 minutes` or `10 minutes`. The default is a minute (30 seconds in 2.3.1). It sets how long the band and the footer's `done ✓` stay, and when an auto-opened pane closes.
