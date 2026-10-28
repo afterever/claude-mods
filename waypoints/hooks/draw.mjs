@@ -20,7 +20,7 @@ import { minutes, clock, clip, basename } from './fmt.mjs'
 import { progress, eta, live, weight } from './plan.mjs'
 import { routeCells, miniRoute, runs, FLAG, FLAG_DONE, PARKED, RUNNING } from './route.mjs'
 import { routeSvg, routeAlt, svgWidth } from './svg.mjs'
-import { NOTE_AT } from './prune.mjs'
+import { NOTE_AT, OTHERS_MS } from './prune.mjs'
 import { VERSION } from './version.mjs'
 
 export const FULL_MS = 8000 // a finished band keeps all its rows this long
@@ -372,7 +372,9 @@ function otherRow(el, v, g) {
 // view adds: others (the other chats' goals), sessionId, commandName, settings
 export function drawPane(el, v) {
   const { Box, Text } = el
-  const { g, mask, roles } = v
+  const { mask, roles } = v
+  // this chat's finished goal goes an hour after it ended, as another chat's does from the list
+  const g = v.g && v.g.status !== 'running' && v.g.endedAt && v.now - v.g.endedAt > OTHERS_MS ? null : v.g
   const rows = []
   if (g) {
     const p = progress(g)

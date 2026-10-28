@@ -531,3 +531,16 @@ stays, is not part of it.
 
 Version **2.4.0**; tests in `surface.test.ts` (default at 55 s and 65 s, `30 seconds`, `10 minutes`, an unlisted value)
 and `auto.test.ts` (the pane at the default).
+
+## 2.4.1: this chat's finished goal leaves the pane after an hour
+
+**The bug.** The pane lists other chats' goals for an hour (`OTHERS_MS`), applied in `loadOthers` and refreshed by the
+15 s tick while the pane is open. This chat's own goal, the top section, had no cutoff: `isRecent` ages the band, the
+footer label and an auto-opened pane, but `drawPane` drew `G` whatever its age, so a goal finished long ago stayed
+until `/waypoints clear` or a new goal. Seen when a second chat started a goal and the first chat's pane still showed its old one.
+
+**How.** `drawPane` treats `v.g` as no goal when it is not running, has an `endedAt`, and ended more than `OTHERS_MS`
+ago, so the pane reads "No goal in this chat." The data file is untouched (`restore()` and `prune` keep their own rules). A
+running goal never ages out. No new timer: the 15 s tick already redraws an open pane, so the goal goes within 15 s of the hour.
+
+Version **2.4.1**; test in `draw.test.ts` (59 and 61 minutes, met and stopped, a running goal at 5 hours).

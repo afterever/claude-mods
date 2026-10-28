@@ -338,6 +338,19 @@ test('other chats get a mini route and their own tail; this chat is not listed t
   expect(l.find((x: string) => x.includes('band setting'))).toMatch(/●━⚑ +done ✓$/)
 })
 
+test('this chat\'s own goal leaves the pane an hour after it ended, like another chat\'s, but a running one stays', async () => {
+  const H = 60 * MIN
+  const ended = (status: string, at: number) => ({ ...midway(), status, endedAt: at })
+  const text = (g: any, now: number) => lines(drawPane(el, paneView(g, { now }))).join('\n')
+  const met = ended('met', T0)
+  expect(text(met, T0 + H - MIN)).toContain('ship the band')
+  expect(text(met, T0 + H + MIN)).not.toContain('ship the band')
+  expect(text(met, T0 + H + MIN)).toContain('No goal in this chat.')
+  expect(text(ended('stopped', T0), T0 + H + MIN)).toContain('No goal in this chat.')
+  // a goal still running is never aged out, however long it has gone
+  expect(text(midway(), T0 + 5 * H)).toContain('ship the band')
+})
+
 test('the pane ends with auto\'s state, the commands and where the look is set', async () => {
   const on = lines(drawPane(el, paneView(midway(), { settings: { auto: true } })))
   expect(on.slice(-2)[0]).toBe('auto: on · /waypoints hide|show · clear (stop the goal) · look & pane: /config → Waypoints')
