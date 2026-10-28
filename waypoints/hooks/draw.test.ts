@@ -353,10 +353,17 @@ test('this chat\'s own goal leaves the pane an hour after it ended, like another
 
 test('the pane ends with auto\'s state, the commands and where the look is set', async () => {
   const on = lines(drawPane(el, paneView(midway(), { settings: { auto: true } })))
-  expect(on.slice(-2)[0]).toBe('auto: on · /waypoints hide|show · clear (stop the goal) · look & pane: /config → Waypoints')
+  expect(on.slice(-2)[0]).toBe('auto: on · /waypoints hide|show|clear · look: /config')
   const off = lines(drawPane(el, paneView(midway(), { settings: { auto: false } })))
-  expect(off.slice(-2)[0]).toBe('auto: off · /waypoints hide|show · clear (stop the goal) · look & pane: /config → Waypoints')
+  expect(off.slice(-2)[0]).toBe('auto: off · /waypoints hide|show|clear · look: /config')
   expect(lines(drawPane(el, paneView(null))).join('\n')).toContain('No goal in this chat')
+})
+
+test('the hint row fits one row of the pane\'s narrowest width, and is cut rather than wrapped below it', async () => {
+  const tree = drawPane(el, paneView(midway(), { width: 50, commandName: 'waypoints-mod' }))
+  const row = tree.children.find((c: any) => flat(c).startsWith('auto: '))
+  expect(row.wrap).toBe('truncate-end')
+  expect(flat(row).length).toBeLessThanOrEqual(60) // 57 with the longest command name; 2.4.1's row was 91
 })
 
 test('past 100 files the pane names the folder and how to prune it', async () => {
