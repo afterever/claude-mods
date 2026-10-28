@@ -414,7 +414,8 @@ export function drawPane(el, v) {
   const c = v.commandName || 'waypoints'
   const f = v.files
   if (f && f.count > NOTE_AT) rows.push(Text({ dimColor: true, children: [`${f.count} old files in ${f.dir} · /${c} prune, or delete them while no plan is running`] }))
-  rows.push(Text({ dimColor: true, children: [`auto: ${s.auto ? 'on' : 'off'} · /${c} hide|show · clear (stop the goal) · look & pane: /config → Waypoints`] }))
+  // one row at the pane's narrowest, and cut rather than wrapped where it is narrower still
+  rows.push(Text({ dimColor: true, wrap: 'truncate-end', children: [`auto: ${s.auto ? 'on' : 'off'} · /${c} hide|show|clear · look: /config`] }))
   rows.push(Text({ dimColor: true, children: [`waypoints v${VERSION}`] }))
   return Box({ flexDirection: 'column', children: rows })
 }

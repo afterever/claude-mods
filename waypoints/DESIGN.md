@@ -150,7 +150,7 @@ Other chats (2)
   agent-pulse: palette work     ●━●━◉┄○┄◎   60% · ~5m
   work-report: band setting     ●━●━●━●━✦   done ✓
 
-auto: on · /waypoints hide|show · clear (stop the goal) · look & pane: /config → Waypoints
+auto: on · /waypoints hide|show|clear · look: /config
 ```
 
 - **Trail.** One row per task (replaced tasks hidden, dropped ones shown dim with `×`, struck through, and the
@@ -544,3 +544,13 @@ ago, so the pane reads "No goal in this chat." The data file is untouched (`rest
 running goal never ages out. No new timer: the 15 s tick already redraws an open pane, so the goal goes within 15 s of the hour.
 
 Version **2.4.1**; test in `draw.test.ts` (59 and 61 minutes, met and stopped, a running goal at 5 hours).
+
+## 2.4.2: the pane's hint row fits on one row
+
+The pane's second-to-last row (auto's state, the commands, where the look is set) was 91 characters and wrapped onto a second row in
+the pane. It is now 53 (`auto: on · /waypoints hide|show|clear · look: /config`): the `(stop the goal)` gloss,
+`& pane` and `→ Waypoints` went (`/config` opens the settings list; the person finds Waypoints in it), and `clear` joined the other commands (the README says what each does). The `Text` also takes `wrap: 'truncate-end'`, so a
+pane narrower than the row cuts it instead of wrapping. The pane's width floor is 50, so only a pane under 53 columns cuts the row,
+and 57 with `/waypoints-mod` as the name.
+
+Version **2.4.2**; test in `draw.test.ts` (the row's text, its wrap, and at most 60 characters).
