@@ -32,10 +32,30 @@ In `/config`, under Waypoints:
 | Animation | `follow`, `off`, `subtle`, `full` | `follow` |
 | Pane | `auto`, `off` | `auto` |
 | Finished plan stays | `30 seconds`, `1 minute`, `3 minutes`, `10 minutes` | `1 minute` |
+| Managed plan | `auto`, `on`, `off` | `auto` |
 
-`follow` takes [Agent-Pulse](../agent-pulse)'s own palette or animation, so the two bands never disagree, and falls back to `ember` / `subtle` when Agent-Pulse is not installed. Pick a value to stop following. Colour and shape show at every animation level; `off` keeps everything still, `subtle` pulses the running task, `full` also breathes the node and sweeps the route when the plan finishes. `Finished plan stays` is how long the band and the footer's `done ✓` stay after a plan finishes or is stopped, and when a pane Waypoints opened closes. `Pane: off` opens the pane only when you ask (`/waypoints` or `g`). A window narrower than 144 columns leaves an unasked pane waiting until it widens; `g` and `/waypoints` open it at any width.
+`follow` takes [Agent-Pulse](../agent-pulse)'s own palette or animation, so the two bands never disagree, and falls back to `ember` / `subtle` when Agent-Pulse is not installed. Pick a value to stop following. Colour and shape show at every animation level; `off` keeps everything still, `subtle` pulses the running task, `full` also breathes the node and sweeps the route when the plan finishes. `Finished plan stays` is how long the band and the footer's `done ✓` stay after a plan finishes or is stopped, and when a pane Waypoints opened closes. `Pane: off` opens the pane only when you ask (`/waypoints` or `g`). A window narrower than 144 columns leaves an unasked pane waiting until it widens; `g` and `/waypoints` open it at any width. `Managed plan` is for Team and Enterprise plans; see [On a Team or Enterprise plan](#on-a-team-or-enterprise-plan).
 
-## When the last step is not Claude's to finish
+## On a Team or Enterprise plan
+
+On these plans Claude Code runs a built-in guard, `cc-plugin-sec-default`, before every mod you install. It sends three of the events Waypoints listens to on past every mod: the system prompt, the end-of-turn `Stop`, and the goal check's attachment row. Those hooks never run, and Claude Code says so at the start of every session:
+
+```
+waypoints: its prompt.compose hook was skipped. "cc-plugin-sec-default" runs first and sent the event on past it.
+```
+
+With `Managed plan: auto` (the default), Waypoints spots this the first time a turn ends with neither the system prompt nor its `Stop` reaching it. It then sets the row to `on` by itself and tells you in a toast. The row is saved in your settings, so it holds across new chats, restarts and reboots, on that computer. You see the lines once, in the first session after the update; from its second turn on, Waypoints is already in managed mode.
+
+With `on`, Waypoints leaves those three hooks out, so nothing is skipped and there are no lines. It does their work another way:
+
+| Left out | Instead |
+| --- | --- |
+| The standing line in the system prompt | The same words go beside the first prompt you type in a session, as context Claude reads and you never see. A long chat's compaction can drop them; a `/goal` still asks for a plan each time. |
+| The goal check's attachment row | When a turn of a `/goal` ends, Waypoints reads the check's verdict from the end of the chat's log, trying again for up to a minute while the check runs. |
+| `Stop` | Nothing: the `◆ waiting on …` row for background work does not show. |
+
+`off` never switches, for a plan whose guard you know does not skip these. If your organization stops using the guard, set the row back to `auto`.
+ is not Claude's to finish
 
 Sometimes everything this chat can do is done and the last task waits on someone else: another team's reply, a release window, a person who is away. Claude **parks** that task with a note naming the blocker. A parked task stays on the route as a dashed leg with a `⏸`, but leaves the header's numbers, so the plan reads `6 of 6 · 100% · 1 parked` and finishes green; the summary row keeps `1 parked: <blocker>`, so green is not read as "all of it is done". `paused, waiting on you` now shows only when an open task really waits on you.
 
@@ -53,7 +73,7 @@ The standing line tells subagents never to call `plan`, because it replaces the 
 
 The standing line is the one thing the global `CLAUDE.md` bullet used to do. If you still have that bullet from goal-meter, delete it.
 
-> **Needs function hooks, which are early access.** Where an organization manages Claude Code, the engine passes over `prompt.compose` in plugins you install, so the standing line does not run there; a `/goal` still asks for a plan.
+> **Needs function hooks, which are early access.** On a Team or Enterprise plan the standing line goes beside your first prompt instead; see [On a Team or Enterprise plan](#on-a-team-or-enterprise-plan).
 
 ## Use it
 
@@ -68,6 +88,10 @@ The standing line is the one thing the global `CLAUDE.md` bullet used to do. If 
 For `auto`, anything but `off` turns it on. `/goal clear` (or `stop`, `off`, `cancel`, `end`, `none`, `reset`) stops the goal in the same way. If Claude Code will not give the mod the name `/waypoints`, it registers `/waypoints-mod` instead.
 
 In the band, the **all tasks** button (or `g`) opens the pane. `g` is a button in the band, so it only works while the band shows; `/waypoints` always does.
+
+## What changed in 2.5.0
+
+- **No more "hook was skipped" lines on Team and Enterprise plans.** A new `Managed plan` row in `/config` (`auto`, `on`, `off`) leaves out the three hooks those plans' built-in guard skips, and switches itself on the first time it sees the guard. The standing line rides beside your first prompt, and the goal check is read from the log when a turn ends, so both work on these plans again; the background-work row does not. See [On a Team or Enterprise plan](#on-a-team-or-enterprise-plan).
 
 ## What changed in 2.4.2
 
