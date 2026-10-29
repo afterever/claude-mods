@@ -28,6 +28,10 @@ const TAB_WORDS: readonly Tab[] = ['today', 'week', 'month', 'year']
 let armed: string[] = []
 let active: { turnId: string; uses: ToolUse[] } | null = null
 const MAX_USES = 500
+// The session id begin() last ran for, and a begin() in flight
+let begunFor: string | null = null
+let beginning: Promise<void> | null = null
+const CLEAR_CHECK_MS = 5000
 
 const plain = (err: unknown) => (err instanceof Error && err.message ? err.message : 'something went wrong')
 
@@ -154,6 +158,11 @@ async function begin($: EngineInterface): Promise<void> {
   armed = []
   active = null
   try {
+    begunFor = String(await $.session.id())
+  } catch {
+    begunFor = null
+  }
+  try {
     await $.command.register({
       name: 'work-report',
       description: 'Show what Claude has done for you: tasks finished, hours saved and what that is worth',
@@ -170,23 +179,40 @@ async function begin($: EngineInterface): Promise<void> {
   }
 }
 
+/**
+ * /clear goes on under a new session id and raises no session.start, so the
+ * command, which is declared per session, and the days read into $.state would
+ * be gone. A new id is the clear: begin() again. Not the settings hook's own
+ * SessionStart, which a Team or Enterprise plan's guard skips for every mod.
+ */
+async function beginIfCleared($: EngineInterface): Promise<void> {
+  if (beginning) return beginning
+  let id: string
+  try {
+    id = String(await $.session.id())
+  } catch {
+    return
+  }
+  if (id === begunFor) return
+  beginning = begin($).finally(() => {
+    beginning = null
+  })
+  return beginning
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await begin($)
+    // so /work-report is back within seconds of a /clear, before anything is typed
+    $.clock.every(CLEAR_CHECK_MS, () => beginIfCleared($).catch(() => undefined))
     return next(e)
   })
 
-  // /clear goes on under a new session id and raises no session.start, so the
-  // command, which is declared per session, would be gone. The settings hook's
-  // own SessionStart does carry the clear.
-  on('classic.SessionStart', async ($, e, next) => {
-    if (e.source === 'clear') await begin($)
-    return next(e)
-  }).catch(($, e, next) => next(e))
-
   // A typed prompt is armed here and claimed when its turn starts. Anything
-  // that fails in this hook lets the prompt through untouched.
+  // that fails in this hook lets the prompt through untouched. The first prompt
+  // after a /clear sets the session up first, so its task is counted.
   on('prompt.submit', async ($, e, next) => {
+    await beginIfCleared($)
     const origin = e.origin as { kind: string; asUser?: boolean }
     const typed = isTypedPrompt(e.text, { kind: origin.kind, asUser: origin.asUser })
     if (typed) armed = arm(armed, e.text)
