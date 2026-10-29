@@ -28,6 +28,7 @@ function world(on: On, o: Opts = {}) {
   const toasts: string[] = []
   const opened: string[] = []
   const declared: string[] = []
+  const session = { id: 'sess-1' } // a /clear goes on under another
   let order = 0
 
   on('store.get', async (_$, e) => ({ value: stored[e.key] }) as any)
@@ -38,6 +39,7 @@ function world(on: On, o: Opts = {}) {
   })
   on('store.keys', async () => ({ value: Object.keys(stored) }) as any)
   on('session.start', async () => ({ cwd: 'C:/bats' }))
+  on('session.id', async () => ({ value: session.id }) as any)
   on('classic.SessionStart', async () => ({}) as any)
   on('command.register', async (_$, e) => {
     declared.push(e.name)
@@ -58,7 +60,7 @@ function world(on: On, o: Opts = {}) {
     return { value: undefined } as any
   })
   on('ui.render', { component: 'AbovePrompt' }, async ($, e) => h($.ui.resolve(e).Box, {}) as any)
-  return { clock, stored, writes, toasts, opened, declared }
+  return { clock, stored, writes, toasts, opened, declared, session }
 }
 
 let turns = 0
@@ -237,7 +239,8 @@ test('counts are added to what the day already holds, and the day rolls over at 
   expect(dayOf(w.stored)).toEqual({ kinds: { emails: 5 }, models: { 'Sonnet 5.5': 5 } })
 
   // the next calendar day gets its own record
-  await w.clock.set(new Date(2026, 9, 14, 9, 0).getTime())
+  // just past midnight: a jump much longer runs past what the test clock fires of the 5 s check
+  await w.clock.set(new Date(2026, 9, 14, 0, 30).getTime())
   await finish($, { text: 'good morning' })
   expect(w.stored['day:2026-10-14']).toEqual({ kinds: { other: 1 }, models: { 'Sonnet 5.5': 1 } })
   expect(dayOf(w.stored)!.kinds).toEqual({ emails: 5 })
@@ -689,17 +692,36 @@ test('the saved days are read back when a session starts', async ($, on) => {
   expect(dayOf(w.stored)!.kinds).toEqual({ emails: 1, research: 1, other: 2 })
 })
 
-test('a /clear starts no session, so the command is declared again and the days are read back', async ($, on) => {
+test('a /clear starts no session, so the command is declared again and the days are read back within seconds', async ($, on) => {
   const w = world(on, { stored: SAMPLE })
   await start($)
   expect(w.declared).toEqual(['work-report'])
-  // the state a clear leaves behind: nothing read
+  // the same session: nothing to do
+  await w.clock.advance(5000)
+  expect(w.declared).toHaveLength(1)
+  // a /clear: the process goes on under a new id
   w.stored['day:2026-10-14'] = { kinds: { code: 3 }, models: { 'Sonnet 5.5': 3 } }
-  await $.classic.SessionStart({ source: 'clear' })
+  w.session.id = 'sess-2'
+  await w.clock.advance(5000)
   expect(w.declared).toEqual(['work-report', 'work-report'])
   const ui = await mountPane($, 100)
   expect((await ui.findAll({ type: 'Text' })).some(t => t.text === 'tasks done')).toBe(true)
-  // the other starts of a session are left alone
-  await $.classic.SessionStart({ source: 'compact' })
+  await w.clock.advance(10000)
   expect(w.declared).toHaveLength(2)
+})
+
+test('the first prompt after a /clear sets the session up before it is counted', async ($, on) => {
+  const w = world(on)
+  await start($)
+  w.session.id = 'sess-2'
+  await finish($, { text: 'draft the reply to Ana' })
+  expect(w.declared).toHaveLength(2)
+  expect(dayOf(w.stored)!.kinds).toEqual({ other: 1 })
+})
+
+test('the settings hook\'s SessionStart, which a managed plan skips, is not needed: it changes nothing', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await $.classic.SessionStart({ source: 'clear' })
+  expect(w.declared).toHaveLength(1)
 })
