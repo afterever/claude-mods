@@ -1,7 +1,7 @@
 {
   "name": "waypoints",
   "displayName": "Waypoints",
-  "version": "2.4.2",
+  "version": "2.5.0",
   "description": "A route for /goal and any multi-step work, built from Claude's own task plan: the plan drawn as a line of nodes and legs above the prompt, an ETA at the goal's own pace, a pane that opens by itself with the whole task trail, and every chat's goal in /waypoints. Follows Agent-Pulse's palette and animation. Claude is asked to plan by the mod itself. Fork of Nate Herk's goal-meter 1.0.0.",
   "author": {
     "name": "afterever"
@@ -55,6 +55,17 @@
         "1 minute",
         "3 minutes",
         "10 minutes"
+      ]
+    },
+    "managed": {
+      "type": "string",
+      "title": "Managed plan",
+      "description": "For Team and Enterprise plans, whose built-in guard skips some of waypoints' hooks and posts a \"hook was skipped\" line for each. auto switches this to on by itself the first time it sees that; on leaves those hooks out (no notices), asks Claude to plan beside your first prompt and reads the goal check when each turn ends, with no row for background work; off never switches",
+      "default": "auto",
+      "options": [
+        "auto",
+        "on",
+        "off"
       ]
     }
   },

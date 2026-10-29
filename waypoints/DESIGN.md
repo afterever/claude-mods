@@ -554,3 +554,47 @@ pane narrower than the row cuts it instead of wrapping. The pane's width floor i
 and 57 with `/waypoints-mod` as the name.
 
 Version **2.4.2**; test in `draw.test.ts` (the row's text, its wrap, and at most 60 characters).
+
+## 2.5.0: managed mode, for a plan whose guard skips the mod's hooks
+
+**The problem.** On Team and Enterprise plans `cc-plugin-sec-default@builtin` is seated outermost (the `prepend`
+tier) and continues past the whole user tier (`next.to`) on `classic.*`, `prompt.compose` and `session.append`'s
+attachment rows (claude-code#102351, hellosverre/claude-skins#94). Waypoints hooks all three, so each never ran there,
+and the engine posts `<mod>: its <event> hook was skipped. "cc-plugin-sec-default" runs first and sent the event on
+past it.` once per session for each. The standing line, the goal check's verdict and the waiting row were all silently gone.
+
+**Why a /config row.** The obvious fix, not registering those hooks where they cannot run, cannot be decided where it
+has to be: `register(on, options)` gets no `$`, so it can read no store, file or setting, and a `Registration` has
+only `.catch`, so a hook cannot be taken back later. The one thing `register` reads is `options`. So the decision
+is a `userConfig` row, `managed` (`auto`, `on`, `off`), which the mod may set itself with
+`$.config.set({ key: 'waypoints.managed', value: 'on' })`. That writes the row to settings (`pluginConfigs`), so it
+holds across sessions and restarts, and the change reloads the module, so `register` runs again in managed mode in
+the same session.
+
+**Spotting the guard (`auto`).** `judge()` watches one main turn at a time (`seen`), from its `turn.start` to its
+`turn.complete`. The `prompt.compose` and `classic.Stop` hooks each mark it. A turn that ended with an answer, not
+interrupted, with neither mark is the guard. Both have to be missing: the engine says `prompt.compose` "fires when it
+renders a system prompt", not that it does so every turn, while `Stop` fires at the end of every answered turn. `Stop`
+can come after `turn.complete`, so the judgement waits 5 s, or until the next main `turn.start` if that comes first.
+A turn not seen from its start (the module reloaded mid-turn) is never judged, nor a subagent's. One switch per load
+(`switched`); a refused `config.set` gives one toast asking the person to set the row.
+
+**Managed mode (`on`).** `register` leaves out `prompt.compose`, `classic.Stop` and `session.append`:
+- *The standing line* goes as `prompt.submit` context beside the first prompt the person types in the session (not
+  a slash command, not an `isMeta` delivery, not under `-p`, not with `/waypoints auto off`). `prompt.submit` is not
+  held, and Waypoints already hooks it. Unlike a system-prompt section, compaction can drop it; `session.compact` is
+  held too, so the mod cannot re-add it. A module reload (a `/config` change) sends it once more.
+- *The goal check's verdict.* With no row to wake on, the main `turn.complete` of a running `/goal` calls
+  `onCheck($, null, now, LATE_WAITS)`: the same log-tail read, retried at 1.5, 4, 10, 20 and 40 s while the check
+  runs. A `null` message also treats the goal's own sentinel record as "not there yet" rather than the end. The
+  read runs beside the hook, which does not wait on a process.
+- *The waiting row* has no other source: `background_tasks` is on the classic `Stop` input alone. It does not show.
+  The log's path stays the one `session.start` works out.
+
+`off` registers everything and never judges. Nothing is keyed on the guard's name, so a renamed or second guard
+that does the same is caught the same way. The mod cannot see the guard leave: in managed mode the hooks that would
+show it are not there. The README says to set the row back to `auto`.
+
+Version **2.5.0**; tests in `managed.test.ts` (the switch and its toast, the next turn judging first, Stop late, a
+compose seen, aborted/failed/unseen and subagent turns, a refused switch, `off`, no section under `on`, the first-prompt
+ask and its exclusions, a met verdict at turn end, a verdict found on a later try past the sentinel, an older check's verdict).

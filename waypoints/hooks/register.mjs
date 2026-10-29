@@ -15,6 +15,8 @@
 // - The look (userConfig palette, animation) follows Agent-Pulse's by default.
 // - A standing line in the system prompt asks Claude to plan any multi-step work,
 //   not only a /goal; /waypoints auto off removes it.
+// - Managed mode (userConfig managed: auto|on|off) leaves out the hooks a Team or
+//   Enterprise plan's guard skips, and switches itself on when it sees the guard.
 // - Each chat writes ~/.claude/mods-data/waypoints/<session>.json for /waypoints.
 //   The mod sends no model requests of its own.
 
@@ -51,7 +53,11 @@ let callsWithoutPlan = 0
 let pendingGoal = null
 let paneUp = false // the pane is open (placed or waiting), from $.ui.panes() and ui.close
 const autoPane = createAutoPane() // when the pane opens and closes by itself
-let options = { palette: 'follow', animation: 'follow', pane: 'auto', linger: LINGER_DEFAULT }
+let options = { palette: 'follow', animation: 'follow', pane: 'auto', linger: LINGER_DEFAULT, managed: 'auto' }
+let interactive = true // session.start's isInteractive: false under -p, where no one watches the bar
+let asked = false // managed mode: the standing ask went out with a prompt this session
+let seen = null // the main turn watched for a managed plan's guard: { compose, stop, done }
+let switched = false // this load already asked to switch to managed mode
 let look = { palette: 'ember', level: 'subtle' }
 let roles = rolesOf('ember')
 let others = []
@@ -340,20 +346,25 @@ async function lastGoalStatus($, since) {
 }
 
 // The log is written a moment after the row reaches the hook: read it now, and
-// again after 1.5 and 4 seconds when the verdict isn't there yet
-async function onCheck($, message, at, attempt = 0) {
+// again after 1.5 and 4 seconds when the verdict isn't there yet. Managed mode has
+// no row to wake on (message null): it reads from the end of the turn, while the
+// check may still be running, so it waits longer.
+const WAITS = [1500, 4000]
+const LATE_WAITS = [1500, 4000, 10000, 20000, 40000]
+async function onCheck($, message, at, waits = WAITS) {
   if (!G || G.kind !== 'goal' || G.status !== 'running') return
   let verdict = await lastGoalStatus($, at)
-  if (!verdict) {
+  if (!verdict && message) {
     // a build that renders the verdict into the row itself
     const blocks = Array.isArray(message.content) ? message.content : []
     const c = parseCheck(blocks.filter((b) => b && b.type === 'text' && typeof b.text === 'string').map((b) => b.text).join('\n'))
     verdict = c.met ? { met: true } : c.notMet ? { met: false, reason: c.reason } : null
   }
-  if (!verdict && attempt < 2) {
-    $.clock.after(attempt ? 4000 : 1500, async () => {
+  // with no row to wake on, the newest record can still be the one the goal wrote
+  if ((!verdict || (!message && verdict.sentinel)) && waits.length) {
+    $.clock.after(waits[0], async () => {
       now = await $.clock.now()
-      await onCheck($, message, at, attempt + 1).catch(() => {})
+      await onCheck($, message, at, waits.slice(1)).catch(() => {})
     })
     return
   }
@@ -365,14 +376,42 @@ async function onCheck($, message, at, attempt = 0) {
   $.ui.invalidate('ui.render')
 }
 
+// On Team and Enterprise plans a built-in guard (cc-plugin-sec-default) runs before
+// every mod and sends some events on past them: the system prompt, the classic
+// settings-hook events, the attachment rows. Those hooks never run, and the engine
+// posts a "hook was skipped" line for each, every session. A main turn seen whole
+// with neither the system prompt nor its Stop reaching the mod is that guard: the
+// mod sets its own /config row to managed, which reloads it without those hooks.
+// Both must be missing: the engine does not promise a system prompt every turn.
+async function judge($) {
+  const s = seen
+  if (!s || !s.done) return
+  seen = null
+  if (s.compose || s.stop || switched) return
+  switched = true
+  let r
+  try {
+    r = await $.config.set({ key: 'waypoints.managed', value: 'on' })
+  } catch (err) {
+    r = { deny: String(err && err.message ? err.message : err) }
+  }
+  if (r && !r.deny) $.ui.toast('Waypoints: a Team or Enterprise guard skips some of its hooks, so it switched to managed mode (/config, Managed plan)')
+  else $.ui.toast('Waypoints: a Team or Enterprise guard skips some of its hooks. Set Managed plan to on in /config to stop the notices')
+}
+
 export function register(on, opts) {
-  options = { palette: 'follow', animation: 'follow', pane: 'auto', linger: LINGER_DEFAULT, ...(opts || {}) }
+  options = { palette: 'follow', animation: 'follow', pane: 'auto', linger: LINGER_DEFAULT, managed: 'auto', ...(opts || {}) }
+  // on: leave out the hooks a managed plan's guard skips; auto: watch for it; off: neither
+  const managed = options.managed === 'on'
+  const watching = options.managed !== 'on' && options.managed !== 'off'
   RECENT_MS = LINGER[options.linger] ?? LINGER[LINGER_DEFAULT]
   look = resolveLook(options, [])
   roles = rolesOf(look.palette)
 
   on('session.start', async ($, e, next) => {
     now = await $.clock.now()
+    interactive = e.isInteractive !== false
+    asked = false
     home = (await $.env.get('USERPROFILE')) || (await $.env.get('HOME')) || ''
     win = (await $.env.get('OS')) === 'Windows_NT'
     sessionId = await $.session.id()
@@ -412,13 +451,17 @@ export function register(on, opts) {
   // needs no line for it. A session section: it sits after the cache boundary and
   // reads the same every request. Left out where no one watches the bar (-p, the
   // bare prompt), for teammates (they must not replace the lead's plan), and when
-  // the tool did not register or /waypoints auto off.
-  on('prompt.compose', async ($, e, next) => {
-    const r = await next(e)
-    const traits = e.traits || []
-    if (!settings.auto || toolFailed || traits.some((t) => t === 'bare' || t === 'print' || t === 'teammate')) return r
-    return { sections: [...r.sections, { id: 'waypoints:plan', text: standing(toolName), scope: 'session' }] }
-  })
+  // the tool did not register or /waypoints auto off. In managed mode the ask rides
+  // on the first prompt instead (prompt.submit).
+  if (!managed) {
+    on('prompt.compose', async ($, e, next) => {
+      if (seen) seen.compose = true
+      const r = await next(e)
+      const traits = e.traits || []
+      if (!settings.auto || toolFailed || traits.some((t) => t === 'bare' || t === 'print' || t === 'teammate')) return r
+      return { sections: [...r.sections, { id: 'waypoints:plan', text: standing(toolName), scope: 'session' }] }
+    })
+  }
 
   // /goal <condition> starts the meter and asks Claude to plan. The ask rides as
   // the command's hidden note, so the cached prefix is untouched.
@@ -439,14 +482,24 @@ export function register(on, opts) {
 
   // Fallback when /goal reaches the session without a command.run: remember it
   // here and start at turn.start, asking for the plan with an appended note.
+  // Managed mode: the standing ask goes beside the first prompt typed this session,
+  // context the model reads and the person never sees.
   on('prompt.submit', async ($, e, next) => {
     const m = String(e.text || '').match(/^\s*\/goal\s+([\s\S]+)$/)
     if (m && !isStopWord(m[1])) pendingGoal = { args: m[1].trim(), at: await $.clock.now() }
+    if (managed && !asked && interactive && !e.command && !e.isMeta && settings.auto && !toolFailed) {
+      asked = true
+      return next({ ...e, context: [...(e.context || []), standing(toolName)] })
+    }
     return next(e)
   })
 
   on('turn.start', async ($, e, next) => {
     now = await $.clock.now()
+    if (watching && !e.agentId) {
+      if (seen && seen.done) await judge($)
+      seen = switched ? null : { compose: false, stop: false, done: false }
+    }
     if (pendingGoal && (!G || G.startedAt < pendingGoal.at)) {
       const args = pendingGoal.args
       await startGoal($, args)
@@ -473,13 +526,18 @@ export function register(on, opts) {
 
   // The settings hooks' events carry the log's real path, and the background work the
   // turn left running: shells, monitors, subagents. A finished one wakes the session, and
-  // the next turn's Stop replaces the list, so it only goes stale if one is killed by hand
-  on('classic.Stop', async ($, e, next) => {
-    if (e && typeof e.transcript_path === 'string' && e.transcript_path) transcriptPath = e.transcript_path
-    waiting = Array.isArray(e && e.background_tasks) ? e.background_tasks.map((t) => clip(t.description || t.command || t.type || 'task', 32)) : []
-    if (G && G.status === 'running') $.ui.invalidate('ui.render')
-    return next(e)
-  })
+  // the next turn's Stop replaces the list, so it only goes stale if one is killed by hand.
+  // Managed mode has no Stop: the log's path stays the one worked out at session.start,
+  // and no background work is shown.
+  if (!managed) {
+    on('classic.Stop', async ($, e, next) => {
+      if (seen) seen.stop = true
+      if (e && typeof e.transcript_path === 'string' && e.transcript_path) transcriptPath = e.transcript_path
+      waiting = Array.isArray(e && e.background_tasks) ? e.background_tasks.map((t) => clip(t.description || t.command || t.type || 'task', 32)) : []
+      if (G && G.status === 'running') $.ui.invalidate('ui.render')
+      return next(e)
+    })
+  }
 
   on('tool.call', async ($, e, next) => {
     if (e.tool === toolName) return serveTool($, e)
@@ -509,19 +567,22 @@ export function register(on, opts) {
     return r
   })
 
-  // The goal check writes its verdict as an attachment row
-  on('session.append', { door: 'attachment' }, async ($, e, next) => {
-    const r = await next(e)
-    if (!e.agentId && e.message && e.message.name === 'goal_status') {
-      now = await $.clock.now()
-      try {
-        await onCheck($, e.message, now)
-      } catch {
-        // the row is stored whatever the parser makes of it
+  // The goal check writes its verdict as an attachment row. Managed mode reads the
+  // verdict from the log when the turn ends instead (turn.complete).
+  if (!managed) {
+    on('session.append', { door: 'attachment' }, async ($, e, next) => {
+      const r = await next(e)
+      if (!e.agentId && e.message && e.message.name === 'goal_status') {
+        now = await $.clock.now()
+        try {
+          await onCheck($, e.message, now)
+        } catch {
+          // the row is stored whatever the parser makes of it
+        }
       }
-    }
-    return r
-  })
+      return r
+    })
+  }
 
   on('turn.complete', async ($, e, next) => {
     const r = await next(e)
@@ -529,6 +590,13 @@ export function register(on, opts) {
     if (e.agentId) {
       if (G && G.status === 'running') $.ui.invalidate('ui.render')
       return r
+    }
+    if (seen) {
+      // Stop can come a moment after the end of the turn: judge then, or at the next turn's start
+      if (e.reason === 'answer' && !e.isAborted) {
+        seen.done = true
+        $.clock.after(5000, () => judge($).catch(() => {}))
+      } else seen = null
     }
     if (G && G.status === 'running') {
       G.active = false
@@ -539,6 +607,8 @@ export function register(on, opts) {
       // verdict, read from the log, usually closed it a moment earlier)
       if (e.reason === 'answer' && !e.isAborted && p.n > 0 && p.doneN === p.n) await finishGoal($, 'tasks')
       else await save($)
+      // managed mode: no attachment row says the check ran, so look for its verdict now
+      if (managed && G.status === 'running' && G.kind === 'goal' && !e.isAborted) onCheck($, null, now, LATE_WAITS).catch(() => {})
       $.ui.invalidate('ui.render')
     }
     return r
