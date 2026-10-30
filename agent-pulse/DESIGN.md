@@ -88,6 +88,10 @@ In 1.1.0 a palette gives each phase a second color, `glow`, beside its `hex`. `e
 
 Each phase in `ember` and `neon` has a color of its own (the tests check it), and both palettes are fixed hex: they look the same under any skin. A palette that follows the theme cannot shade, since a theme key cannot be mixed. The history's reply and compact marks take the palette's `writing` and `compacting` colors, where they used to take fixed theme keys.
 
+## Team and Enterprise plans (1.1.1)
+
+On these plans Claude Code seats a built-in guard, `cc-plugin-sec-default`, before every installed mod. It sends every `classic.*` event past them, and the engine posts `agent-pulse: its classic.<Event> hook was skipped` once per session for each skipped hook. 1.1.1 drops `classic.SubagentStop`: `turn.complete` with an `agentId` already ends a subagent with its outcome (`finish()` runs once per agent), and `agent.list`'s sweep catches one that ends without it. Three classic hooks remain and do nothing on these plans: `PermissionRequest` (the "Waiting for your approval" label) and `PreCompact`/`PostCompact` (the compacting phase). `session.compact` would replace the compaction pair if the guard lets mods run there, which is still to be checked on such a plan. No unskipped event says a permission prompt is up: `tool.check`'s `ask` is often settled by auto mode with no prompt shown.
+
 ## Alternatives turned down
 
 - **The whole box in one `Client`.** It would animate the border without the hook redrawing, but the label could no longer truncate to the window, the tests could no longer read the box's text, and the toggle would need a round trip through `ui.message`. The border breathes by a hook redraw at 8 fps instead, and only while Claude waits on the person.
