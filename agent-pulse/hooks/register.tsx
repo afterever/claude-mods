@@ -352,12 +352,6 @@ export const register: Register = (on, options) => {
     return result
   })
 
-  on('classic.SubagentStop', async ($, e, next) => {
-    await finish($, live, e.agent_id, 'ok')
-
-    return next(e)
-  })
-
   on('classic.PreCompact', async ($, e, next) => {
     await enter($, live, 'compacting')
     await publish($, live)
@@ -376,6 +370,8 @@ export const register: Register = (on, options) => {
   })
 
   on('turn.complete', async ($, e, next) => {
+    // A subagent's end, with its outcome. Not the classic SubagentStop as well:
+    // a Team or Enterprise plan's guard skips classic hooks for every mod.
     if (e.agentId !== undefined) {
       await finish($, live, e.agentId, outcomeOf(e.reason))
 
