@@ -14,6 +14,8 @@ type Opts = {
   /** What config.set answers: a deny, as a guard or the engine would refuse the row. */
   deny?: string
   interactive?: boolean
+  /** Where the session draws, as `$.session.surfaces()` answers: empty in a plain -p run. */
+  surfaces?: string[]
 }
 
 function world(on: On, o: Opts = {}) {
@@ -26,6 +28,7 @@ function world(on: On, o: Opts = {}) {
   const log = { tail: '' } // what the end of the chat's log reads
   on('session.start', async () => ({ cwd: 'C:/bats' }))
   on('session.surface', async () => ({ value: 'terminal' }) as any)
+  on('session.surfaces', async () => ({ value: o.surfaces ?? ['terminal'] }) as any)
   on('ui.log', async () => ({ value: undefined }) as any)
   on('session.id', async () => ({ value: 'sess-1' }) as any)
   on('session.cwd', async () => ({ value: 'C:/bats' }) as any)
@@ -180,11 +183,21 @@ test('on: the standing ask rides beside the first prompt typed, and only that on
   expect(ctx[3]).toEqual([])
 })
 
-test('on: no ask under -p, nor with /waypoints auto off', MANAGED, async ($, on) => {
-  const w = world(on)
+test('on: no ask under -p, where nothing draws, nor with /waypoints auto off', MANAGED, async ($, on) => {
+  const w = world(on, { surfaces: [] })
   await start($, false)
   await submit($, 'fix the band')
   expect(w.submitted[0].context ?? []).toEqual([])
+})
+
+test('on: the Desktop app drives Claude Code as an SDK host, not interactive, yet draws: it still gets the ask', MANAGED, async ($, on) => {
+  const w = world(on, { surfaces: ['desktop'] })
+  await start($, false)
+  await submit($, 'fix the band', { origin: { kind: 'sdk' } })
+  await submit($, 'and the footer', { origin: { kind: 'sdk' } })
+  expect(w.submitted[0].context).toHaveLength(1)
+  expect(w.submitted[0].context[0]).toContain(TOOL)
+  expect(w.submitted[1].context ?? []).toEqual([])
 })
 
 test('on: /waypoints auto off leaves the first prompt alone', MANAGED, async ($, on) => {
