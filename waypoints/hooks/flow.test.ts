@@ -68,8 +68,8 @@ function world(on: On, o: Opts = {}) {
 
 const start = ($: any) => $.session.start({ cwd: 'C:/bats', surface: 'terminal', isInteractive: true })
 // The engine always hands a hook the whole input; a test has to say it all
-const compose = ($: any, traits: string[] = []) =>
-  $.prompt.compose({ model: 'claude-sonnet-5-5', promptModel: 'claude-sonnet-5-5', surfaces: ['terminal'], tools: [], outputStyle: null, traits })
+const compose = ($: any, traits: string[] = [], surfaces: string[] = ['terminal']) =>
+  $.prompt.compose({ model: 'claude-sonnet-5-5', promptModel: 'claude-sonnet-5-5', surfaces, tools: [], outputStyle: null, traits })
 const ids = (r: any) => r.sections.map((s: any) => s.id)
 const mine = (r: any) => r.sections.find((s: any) => s.id === 'waypoints:plan')
 let n = 0
@@ -97,10 +97,20 @@ test('the system prompt asks Claude to plan multi-step work, after the engine\'s
 test('it asks nothing where no one watches the bar or a teammate must not replace the plan', async ($, on) => {
   world(on)
   await start($)
-  for (const trait of ['print', 'bare', 'teammate'] as const) {
+  for (const trait of ['bare', 'teammate'] as const) {
     const r = await compose($, [trait])
     expect(ids(r)).toEqual(['intro'])
   }
+  // a -p run draws nowhere
+  expect(ids(await compose($, ['print'], []))).toEqual(['intro'])
+})
+
+test('the Desktop app is an SDK host (the print trait) that draws, so it gets the ask', async ($, on) => {
+  world(on)
+  await start($)
+  expect(ids(await compose($, ['print'], ['desktop']))).toEqual(['intro', 'waypoints:plan'])
+  // a teammate there still must not replace the lead's plan
+  expect(ids(await compose($, ['print', 'teammate'], ['desktop']))).toEqual(['intro'])
 })
 
 test('/waypoints auto off removes the ask and auto on brings it back, kept between sessions', async ($, on) => {

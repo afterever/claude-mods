@@ -69,7 +69,7 @@ Claude is also asked two things in the same words that ask it to plan: when a ta
 | Any other work of 3 or more steps | A standing line in the system prompt (new in 1.1.0). A plan made this way shows the same, named after the one-line `goal` Claude gives it (its first task if it gives none) and labelled *Plan* where a goal is labelled *Goal*. |
 | A small, single-step request | Nothing: the line tells Claude to skip it. |
 
-The standing line tells subagents never to call `plan`, because it replaces the main agent's pending tasks; they can `start` and `done` tasks. It is a request, not a rule: the tool does not refuse a subagent's `plan`. The line is also left out of bare, print and teammate sessions, and while `/waypoints auto` is off.
+The standing line tells subagents never to call `plan`, because it replaces the main agent's pending tasks; they can `start` and `done` tasks. It is a request, not a rule: the tool does not refuse a subagent's `plan`. The line is also left out of bare and teammate sessions, of a `claude -p` run (nothing draws), and while `/waypoints auto` is off. The Claude desktop app, which runs Claude Code as an SDK host, does get it.
 
 The standing line is the one thing the global `CLAUDE.md` bullet used to do. If you still have that bullet from goal-meter, delete it.
 
@@ -88,6 +88,10 @@ The standing line is the one thing the global `CLAUDE.md` bullet used to do. If 
 For `auto`, anything but `off` turns it on. `/goal clear` (or `stop`, `off`, `cancel`, `end`, `none`, `reset`) stops the goal in the same way. If Claude Code will not give the mod the name `/waypoints`, it registers `/waypoints-mod` instead.
 
 In the band, the **all tasks** button (or `g`) opens the pane. `g` is a button in the band, so it only works while the band shows; `/waypoints` always does.
+
+## What changed in 2.5.2
+
+- **The Claude desktop app is asked to plan on plans without the guard too.** 2.5.1 fixed this only in managed mode. Elsewhere the ask rides in the system prompt, which Waypoints left out of every "print" session (`claude -p` and the SDK), so the desktop app, an SDK host, never got it and Claude executed multi-step work one step at a time with no plan. Only a print session that draws nowhere is left out now. Terminals are unchanged.
 
 ## What changed in 2.5.1
 

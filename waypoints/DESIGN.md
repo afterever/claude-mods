@@ -622,3 +622,21 @@ engine's types and the app's spawn flags, not seen in a running session. If the 
 gets no ask, the `ui.log` line (`claude --debug`) names which side was empty.
 
 Version **2.5.1**; tests in `managed.test.ts` (an SDK host that draws is asked once; one that draws nowhere is not).
+
+## 2.5.2: the system-prompt ask reaches an SDK host that draws
+
+**The problem.** 2.5.1 widened only the managed-mode gate. Where no guard skips the hooks, the standing ask is a section
+added by `prompt.compose`, and that hook left the section out for the `print` trait. The engine defines `print` as "a
+session with no terminal behind it (`-p`, the SDK)", and the Claude desktop app is an SDK host, so on a plan without the
+guard the desktop app was never asked either: a multi-step prompt there ran one step at a time with no plan.
+2.5.1 had left this alone because nothing reported it; a test on the desktop app of a personal plan did.
+
+**The fix.** The same test as 2.5.1's, read from the input: `print` leaves the section out only when `e.surfaces` is
+empty (`PromptComposeInput.surfaces`: "where the session draws at this render; empty where nothing draws"). `bare` and
+`teammate` still leave it out whatever draws. When it is left out for `print`, a `ui.log` line says so (`claude --debug`).
+
+**Not observed.** That the desktop app's compose input carries a non-empty `surfaces` is read from the engine's types,
+not seen. A terminal has no `print` trait and is unchanged.
+
+Version **2.5.2**; test in `flow.test.ts` (a print session that draws is asked, one that draws nowhere is not, a teammate
+on a surface still is not).
