@@ -31,6 +31,7 @@ const LARGE_INPUT_CHARS = 1024
 const MAX_SEGMENTS = 200
 const STREAM_THROTTLE_MS = 250
 const TICK_MS = 1000
+const UNLISTED_AGENT_MS = 60_000
 const BREATH_TICK_MS = 125
 const FLASH_MS = 380
 const FULL_REPLY_WORDS = 800
@@ -742,6 +743,7 @@ async function sweep($: EngineInterface, live: Live): Promise<void> {
 
 async function sweepListed($: EngineInterface, live: Live, listed: readonly AgentInfo[]): Promise<void> {
   const statuses = new Map(listed.map(info => [info.id, info.status]))
+  const nowMs = await $.clock.now()
   let isRenamed = false
 
   for (const [agentId, agent] of [...live.agents.entries()]) {
@@ -762,6 +764,13 @@ async function sweepListed($: EngineInterface, live: Live, listed: readonly Agen
         agent.name = name
         isRenamed = true
       }
+    }
+
+    // An agent the engine does not list, taken up from a call after a reload,
+    // has no stop to wait for. Silent for a minute, it goes; its next call
+    // takes it up again.
+    if (status === undefined && nowMs - agent.activeMs >= UNLISTED_AGENT_MS) {
+      await finish($, live, agentId, 'interrupted')
     }
 
     if (status !== undefined && status !== 'running') {

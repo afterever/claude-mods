@@ -92,6 +92,10 @@ Each phase in `ember` and `neon` has a color of its own (the tests check it), an
 
 On these plans Claude Code seats a built-in guard, `cc-plugin-sec-default`, before every installed mod. It sends every `classic.*` event past them, and the engine posts `agent-pulse: its classic.<Event> hook was skipped` once per session for each skipped hook. 1.1.1 drops `classic.SubagentStop`: `turn.complete` with an `agentId` already ends a subagent with its outcome (`finish()` runs once per agent), and `agent.list`'s sweep catches one that ends without it. Three classic hooks remain and do nothing on these plans: `PermissionRequest` (the "Waiting for your approval" label) and `PreCompact`/`PostCompact` (the compacting phase). `session.compact` would replace the compaction pair if the guard lets mods run there, which is still to be checked on such a plan. No unskipped event says a permission prompt is up: `tool.check`'s `ask` is often settled by auto mode with no prompt shown.
 
+## Agents the engine does not list (1.1.2)
+
+A call that carries an `agentId` the box never saw spawn takes that agent up as a placeholder (`Agent › Getting started`, then its last call), so an agent whose spawn came before a reload still shows. The sweep let such an agent go only when `agent.list` named it with a status other than `running`; one the engine never listed had no stop to wait for, and its row and timer ran for the rest of the session. 1.1.2 lets an unlisted agent go, as interrupted, once it has made no call for a minute (`UNLISTED_AGENT_MS`). A listed agent is never let go on silence, since a running one may think a long time between calls, and an agent let go in error is taken up again by its next call.
+
 ## Alternatives turned down
 
 - **The whole box in one `Client`.** It would animate the border without the hook redrawing, but the label could no longer truncate to the window, the tests could no longer read the box's text, and the toggle would need a round trip through `ui.message`. The border breathes by a hook redraw at 8 fps instead, and only while Claude waits on the person.

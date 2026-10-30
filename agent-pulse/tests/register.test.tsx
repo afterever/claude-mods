@@ -370,4 +370,43 @@ describe('register', () => {
 
     expect(await box.read()).toContain('Tour the source › Reading app.ts')
   })
+
+  test('an agent the engine never lists is let go once it has been silent a minute', async ($, on) => {
+    const { box, clock } = seat(on, [])
+
+    on('agent.list', () => ({ value: [] }))
+
+    const ui = await mount($, box)
+
+    // A call tagged with an id that no spawn or list ever announced, as after a reload.
+    await $.tool.call({ tool: 'Bash', command: 'echo', agentId: 'ghost' } as Parameters<Engine['tool']['call']>[0])
+    await clock.advance(30_000)
+
+    expect(await box.read()).toContain('Agent › Running echo')
+
+    await clock.advance(31_000)
+
+    expect(await box.read()).toContain('Idle')
+    expect(await ui.find({ key: 'agents' })).toBeUndefined()
+
+    // Letting it go is no verdict on it: its next call takes it up again.
+    await $.tool.call({ tool: 'Read', file_path: 'src/app.ts', agentId: 'ghost' } as Parameters<Engine['tool']['call']>[0])
+    await clock.advance(1000)
+
+    expect(await box.read()).toContain('Agent › Reading app.ts')
+  })
+
+  test('an agent the engine lists as running stays however long it is silent', async ($, on) => {
+    const { box, clock } = seat(on, [])
+
+    on('agent.list', () => ({
+      value: [{ id: 'a1', description: 'Think it over', name: 'thinker', type: 'general-purpose', status: 'running' }],
+    }))
+
+    await mount($, box)
+    await $.tool.call({ tool: 'Read', file_path: 'src/app.ts', agentId: 'a1' } as Parameters<Engine['tool']['call']>[0])
+    await clock.advance(300_000)
+
+    expect(await box.read()).toContain('thinker › Reading app.ts')
+  })
 })
