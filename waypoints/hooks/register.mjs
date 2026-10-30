@@ -452,13 +452,17 @@ export function register(on, opts) {
   // reads the same every request. Left out where no one watches the bar (-p, the
   // bare prompt), for teammates (they must not replace the lead's plan), and when
   // the tool did not register or /waypoints auto off. In managed mode the ask rides
-  // on the first prompt instead (prompt.submit).
+  // on the first prompt instead (prompt.submit). `print` is a session with no terminal
+  // behind it: -p, or an SDK host like the Desktop app. Only one that draws nowhere
+  // has no one watching the bar.
   if (!managed) {
     on('prompt.compose', async ($, e, next) => {
       if (seen) seen.compose = true
       const r = await next(e)
       const traits = e.traits || []
-      if (!settings.auto || toolFailed || traits.some((t) => t === 'bare' || t === 'print' || t === 'teammate')) return r
+      const unwatched = traits.includes('print') && !(e.surfaces && e.surfaces.length)
+      if (unwatched) $.ui.log('waypoints: the system prompt got no standing ask (a print session that draws nowhere)')
+      if (!settings.auto || toolFailed || unwatched || traits.some((t) => t === 'bare' || t === 'teammate')) return r
       return { sections: [...r.sections, { id: 'waypoints:plan', text: standing(toolName), scope: 'session' }] }
     })
   }
