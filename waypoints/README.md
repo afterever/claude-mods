@@ -89,6 +89,10 @@ For `auto`, anything but `off` turns it on. `/goal clear` (or `stop`, `off`, `ca
 
 In the band, the **all tasks** button (or `g`) opens the pane. `g` is a button in the band, so it only works while the band shows; `/waypoints` always does.
 
+## What changed in 2.5.1
+
+- **On a Team or Enterprise plan, the Claude desktop app is asked to plan.** In managed mode the standing line went only to a session where a person types at a prompt, and the desktop app runs Claude Code as an SDK host, which does not count as one. So Claude there never heard of Waypoints and made its own task list with the built-in tools (the desktop app labels it "Plan from before your last message"). Managed mode now also asks any session that draws on a surface. Terminals and plans without the guard are unchanged.
+
 ## What changed in 2.5.0
 
 - **No more "hook was skipped" lines on Team and Enterprise plans.** A new `Managed plan` row in `/config` (`auto`, `on`, `off`) leaves out the three hooks those plans' built-in guard skips, and switches itself on the first time it sees the guard. The standing line rides beside your first prompt, and the goal check is read from the log when a turn ends, so both work on these plans again; the background-work row does not. See [On a Team or Enterprise plan](#on-a-team-or-enterprise-plan).

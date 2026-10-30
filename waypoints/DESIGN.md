@@ -598,3 +598,27 @@ show it are not there. The README says to set the row back to `auto`.
 Version **2.5.0**; tests in `managed.test.ts` (the switch and its toast, the next turn judging first, Stop late, a
 compose seen, aborted/failed/unseen and subagent turns, a refused switch, `off`, no section under `on`, the first-prompt
 ask and its exclusions, a met verdict at turn end, a verdict found on a later try past the sentinel, an older check's verdict).
+
+## 2.5.1: the first-prompt ask reaches an SDK host that draws
+
+**The problem.** Managed mode sent the standing ask on `prompt.submit` only when `session.start`'s `isInteractive` was
+true. The engine defines that as "true under the REPL, false for a `-p` run or the SDK", and the Claude desktop app
+starts Claude Code through the Agent SDK (`--input-format stream-json --output-format stream-json`), so on Enterprise
+Desktop it was always false and Claude never saw the ask. A fresh session asked to quote the line found nothing, and
+planned with its own `TodoWrite`/`TaskCreate`, which the desktop app labels "Plan from before your last message" (its task
+card reads only those built-in tools, never an MCP tool).
+
+**The fix.** The gate is "someone watches the bar": `interactive`, or `$.session.surfaces()` is not empty. It is read at
+`prompt.submit`, not `session.start`, because an SDK host's surface attaches after the session starts (`surface` is null
+in `session.start` there). A `-p` run draws nowhere, so it is still left out, with a `ui.log` line saying why.
+
+**What is deliberately not changed.** Only managed mode reads it. The system-prompt hook still skips the `print` trait
+(`-p` and the SDK alike), because no report shows the desktop app on a plan without the guard missing the ask, and a
+terminal is `isInteractive: true` in both. The standing line's wording is also unchanged: the cause was that it never
+arrived, not that Claude ignored it.
+
+**Not observed.** That the desktop app reports `isInteractive: false` and a non-empty `surfaces()` is read from the
+engine's types and the app's spawn flags, not seen in a running session. If the next Enterprise Desktop session still
+gets no ask, the `ui.log` line (`claude --debug`) names which side was empty.
+
+Version **2.5.1**; tests in `managed.test.ts` (an SDK host that draws is asked once; one that draws nowhere is not).

@@ -54,7 +54,7 @@ let pendingGoal = null
 let paneUp = false // the pane is open (placed or waiting), from $.ui.panes() and ui.close
 const autoPane = createAutoPane() // when the pane opens and closes by itself
 let options = { palette: 'follow', animation: 'follow', pane: 'auto', linger: LINGER_DEFAULT, managed: 'auto' }
-let interactive = true // session.start's isInteractive: false under -p, where no one watches the bar
+let interactive = true // session.start's isInteractive: false under -p and in an SDK host (the Desktop app); then only a drawing surface means someone watches the bar
 let asked = false // managed mode: the standing ask went out with a prompt this session
 let seen = null // the main turn watched for a managed plan's guard: { compose, stop, done }
 let switched = false // this load already asked to switch to managed mode
@@ -487,9 +487,17 @@ export function register(on, opts) {
   on('prompt.submit', async ($, e, next) => {
     const m = String(e.text || '').match(/^\s*\/goal\s+([\s\S]+)$/)
     if (m && !isStopWord(m[1])) pendingGoal = { args: m[1].trim(), at: await $.clock.now() }
-    if (managed && !asked && interactive && !e.command && !e.isMeta && settings.auto && !toolFailed) {
-      asked = true
-      return next({ ...e, context: [...(e.context || []), standing(toolName)] })
+    if (managed && !asked && !e.command && !e.isMeta && settings.auto && !toolFailed) {
+      // someone watches the bar at a terminal, or where the session draws: the Desktop
+      // app runs Claude Code as an SDK host, so isInteractive is false and a surface
+      // attaches after session.start; only a -p run draws nowhere. Only managed mode
+      // (a Team or Enterprise plan) reads this: elsewhere the system prompt carries the ask
+      const watched = interactive || ((await $.session.surfaces().catch(() => [])) || []).length > 0
+      if (!watched) $.ui.log(`waypoints: managed mode left out the standing ask (isInteractive ${interactive}, nothing draws)`)
+      else {
+        asked = true
+        return next({ ...e, context: [...(e.context || []), standing(toolName)] })
+      }
     }
     return next(e)
   })
